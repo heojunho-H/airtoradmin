@@ -617,6 +617,11 @@ export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
   const handleSaveEdit = () => {
     if (editedDeal) {
       if (isAddingNewDeal) {
+        // 필수 입력: 전화번호, 기업명
+        if (!editedDeal.phone.trim() || !editedDeal.company.trim()) {
+          alert('전화번호와 기업명은 필수 입력 항목입니다.');
+          return;
+        }
         // 새 거래 추가
         const newId = Math.max(...dealsData.map(d => d.id), 0) + 1;
         const newDeal = { ...editedDeal, id: newId };
@@ -655,6 +660,14 @@ export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
 
   const handleAddNewDeal = () => {
     const today = new Date().toISOString().split('T')[0];
+    const todayMonth = today.substring(0, 7); // "YYYY-MM"
+    // 기간 필터를 오늘 날짜가 포함되도록 자동 확장
+    if (todayMonth > endMonth) {
+      setEndMonth(todayMonth);
+    }
+    if (todayMonth < startMonth) {
+      setStartMonth(todayMonth);
+    }
     const newDeal: Deal = {
       id: 0, // 임시 ID, 저장 시 실제 ID로 변경됨
       registrationDate: today,
@@ -1832,14 +1845,14 @@ export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[13px] text-slate-500 mb-1">기업명</p>
+                    <p className="text-[13px] text-slate-500 mb-1">기업명 {isAddingNewDeal && <span className="text-red-500">*</span>}</p>
                     {isEditMode ? (
                       <input
                         type="text"
                         value={editedDeal?.company || ''}
                         onChange={(e) => handleFieldChange('company', e.target.value)}
                         placeholder="기업명을 입력하세요"
-                        className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.company?.trim() ? 'border-red-300' : 'border-slate-300'}`}
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.company}</p>
@@ -1886,7 +1899,7 @@ export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
                   </div>
                   <div>
                     <p className="text-[13px] text-slate-500 mb-1 flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> 전화번호
+                      <Phone className="w-3 h-3" /> 전화번호 {isAddingNewDeal && <span className="text-red-500">*</span>}
                     </p>
                     {isEditMode ? (
                       <input
@@ -1894,7 +1907,7 @@ export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
                         value={editedDeal?.phone || ''}
                         onChange={(e) => handleFieldChange('phone', e.target.value)}
                         placeholder="010-0000-0000"
-                        className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.phone?.trim() ? 'border-red-300' : 'border-slate-300'}`}
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.phone}</p>
