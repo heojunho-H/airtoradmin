@@ -59,7 +59,7 @@ interface Deal {
   managementMemo: string; // 관리 메모
 }
 
-const deals: Deal[] = [
+export const initialDeals: Deal[] = [
   {
     id: 1,
     registrationDate: '2024-02-01',
@@ -242,15 +242,18 @@ const customerJourneyStages = [
 
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
+  externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
 }
 
-export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, externalDealsState }: SalesPageProps = {}) {
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
-  const [dealsData, setDealsData] = useState<Deal[]>(deals);
+  const [internalDealsData, setInternalDealsData] = useState<Deal[]>(initialDeals);
+  const dealsData = externalDealsState ? externalDealsState[0] : internalDealsData;
+  const setDealsData = externalDealsState ? externalDealsState[1] : setInternalDealsData;
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedDeal, setEditedDeal] = useState<Deal | null>(null);
   const [startMonth, setStartMonth] = useState('2024-01');

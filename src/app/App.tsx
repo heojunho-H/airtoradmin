@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, ChevronDown, Package } from 'lucide-react';
-import { CustomersPage } from './components/CustomersPage';
-import { SalesPage } from './components/SalesPage';
-import { SupplyChainPage } from './components/SupplyChainPage';
+import { CustomersPage, initialCustomers } from './components/CustomersPage';
+import { SalesPage, initialDeals } from './components/SalesPage';
+import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
 
 // Deal 데이터를 Customer 형식으로 변환
 function convertDealToCustomer(deal: any) {
@@ -70,6 +70,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
+  const [deals, setDeals] = useState(initialDeals);
+  const [customers, setCustomers] = useState(initialCustomers);
+  const [managers, setManagers] = useState(initialCustomerManagers);
+  const [subcontractors, setSubcontractors] = useState(initialSubcontractors);
 
   // 영업에서 성공한 딜을 고객으로 변환
   const handleDealSuccess = (deal: any) => {
@@ -205,9 +209,9 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} />}
-          {currentPage === 'supplychain' && <SupplyChainPage />}
+          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} externalCustomersState={[customers, setCustomers]} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} />}
+          {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} />}
         </main>
       </div>
 

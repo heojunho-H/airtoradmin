@@ -91,7 +91,7 @@ interface Customer {
   memo: string; // 메모장
 }
 
-const customersData: Customer[] = [
+export const initialCustomers: Customer[] = [
   {
     id: 1,
     company: '삼성전자',
@@ -660,10 +660,13 @@ const customersData: Customer[] = [
 
 interface CustomersPageProps {
   newCustomerFromDeal?: Customer | null;
+  externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
 }
 
-export function CustomersPage({ newCustomerFromDeal }: CustomersPageProps = {}) {
-  const [customers, setCustomers] = useState<Customer[]>(customersData);
+export function CustomersPage({ newCustomerFromDeal, externalCustomersState }: CustomersPageProps = {}) {
+  const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
+  const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
+  const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);

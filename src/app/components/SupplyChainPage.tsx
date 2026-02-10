@@ -110,7 +110,7 @@ interface EvaluationRecord {
   memo?: string;
 }
 
-const customerManagersData: CustomerManager[] = [
+export const initialCustomerManagers: CustomerManager[] = [
   {
     id: 1,
     name: '김민수',
@@ -311,7 +311,7 @@ const customerManagersData: CustomerManager[] = [
   },
 ];
 
-const subcontractorManagersData: SubcontractorManager[] = [
+export const initialSubcontractors: SubcontractorManager[] = [
   {
     id: 1,
     name: '강태준',
@@ -638,7 +638,12 @@ const subcontractorManagersData: SubcontractorManager[] = [
   },
 ];
 
-export function SupplyChainPage() {
+interface SupplyChainPageProps {
+  externalManagersState?: [CustomerManager[], (m: CustomerManager[] | ((prev: CustomerManager[]) => CustomerManager[])) => void];
+  externalSubcontractorsState?: [SubcontractorManager[], (s: SubcontractorManager[] | ((prev: SubcontractorManager[]) => SubcontractorManager[])) => void];
+}
+
+export function SupplyChainPage({ externalManagersState, externalSubcontractorsState }: SupplyChainPageProps = {}) {
   const [activeTab, setActiveTab] = useState<'managers' | 'subcontractors'>('managers');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedManager, setSelectedManager] = useState<CustomerManager | null>(null);
@@ -656,8 +661,12 @@ export function SupplyChainPage() {
   }, []);
   const [editingAreaId, setEditingAreaId] = useState<number | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
-  const [managers, setManagers] = useState<CustomerManager[]>(customerManagersData);
-  const [subcontractors, setSubcontractors] = useState<SubcontractorManager[]>(subcontractorManagersData);
+  const [internalManagers, setInternalManagers] = useState<CustomerManager[]>(initialCustomerManagers);
+  const [internalSubcontractors, setInternalSubcontractors] = useState<SubcontractorManager[]>(initialSubcontractors);
+  const managers = externalManagersState ? externalManagersState[0] : internalManagers;
+  const setManagers = externalManagersState ? externalManagersState[1] : setInternalManagers;
+  const subcontractors = externalSubcontractorsState ? externalSubcontractorsState[0] : internalSubcontractors;
+  const setSubcontractors = externalSubcontractorsState ? externalSubcontractorsState[1] : setInternalSubcontractors;
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [evaluationItem1, setEvaluationItem1] = useState<1 | -1 | 0>(0);
   const [evaluationItem2, setEvaluationItem2] = useState<1 | -1 | 0>(0);
