@@ -240,7 +240,11 @@ const customerJourneyStages = [
   { id: 'confirmed', name: '수주확정', icon: CheckCircle, color: 'green' },
 ];
 
-export function SalesPage() {
+interface SalesPageProps {
+  onDealSuccess?: (deal: Deal) => void;
+}
+
+export function SalesPage({ onDealSuccess }: SalesPageProps = {}) {
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -543,26 +547,34 @@ export function SalesPage() {
   const handleStatusChange = (dealId: number, newStatus: Deal['status']) => {
     setDealsData((prevDeals) =>
       prevDeals.map((deal) =>
-        deal.id === dealId 
-          ? { 
-              ...deal, 
+        deal.id === dealId
+          ? {
+              ...deal,
               status: newStatus,
               // 수주확정으로 변경되면 성공여부를 자동으로 '성공'으로 변경
               successStatus: newStatus === 'confirmed' ? 'success' : deal.successStatus
-            } 
+            }
           : deal
       )
     );
     setEditingStatusId(null);
-    
+
     // Update selected deal if it's open
     if (selectedDeal && selectedDeal.id === dealId) {
-      setSelectedDeal((prev) => prev ? { 
-        ...prev, 
+      setSelectedDeal((prev) => prev ? {
+        ...prev,
         status: newStatus,
         // 수주확정으로 변경되면 성공여부를 자동으로 '성공'으로 변경
         successStatus: newStatus === 'confirmed' ? 'success' : prev.successStatus
       } : null);
+    }
+
+    // 수주확정 시 고객 관리 페이지에 자동 등록
+    if (newStatus === 'confirmed' && onDealSuccess) {
+      const deal = dealsData.find((d) => d.id === dealId);
+      if (deal) {
+        onDealSuccess({ ...deal, status: 'confirmed', successStatus: 'success' });
+      }
     }
   };
 
@@ -573,10 +585,18 @@ export function SalesPage() {
       )
     );
     setEditingSuccessStatusId(null);
-    
+
     // Update selected deal if it's open
     if (selectedDeal && selectedDeal.id === dealId) {
       setSelectedDeal((prev) => prev ? { ...prev, successStatus: newSuccessStatus } : null);
+    }
+
+    // 성공으로 변경 시 고객 관리 페이지에 자동 등록
+    if (newSuccessStatus === 'success' && onDealSuccess) {
+      const deal = dealsData.find((d) => d.id === dealId);
+      if (deal) {
+        onDealSuccess({ ...deal, successStatus: 'success' });
+      }
     }
   };
 

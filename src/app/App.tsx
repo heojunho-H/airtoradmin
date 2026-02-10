@@ -4,10 +4,79 @@ import { CustomersPage } from './components/CustomersPage';
 import { SalesPage } from './components/SalesPage';
 import { SupplyChainPage } from './components/SupplyChainPage';
 
+// Deal 데이터를 Customer 형식으로 변환
+function convertDealToCustomer(deal: any) {
+  const today = new Date().toISOString().split('T')[0];
+  const nextDate = new Date();
+  nextDate.setDate(nextDate.getDate() + 30);
+
+  // 견적금액 문자열을 숫자로 변환 (예: "₩12,500만" → 125000000)
+  const parseAmount = (str: string): number => {
+    const num = parseFloat(str.replace(/[^0-9.]/g, ''));
+    if (str.includes('억')) return num * 100000000;
+    if (str.includes('만')) return num * 10000;
+    return num || 0;
+  };
+
+  return {
+    id: Date.now(),
+    company: deal.company,
+    grade: 'B' as const,
+    customerStatus: '신규' as const,
+    contactName: deal.contactName,
+    contactPosition: deal.contactPosition,
+    deals: 1,
+    lastWorkDate: deal.confirmedWorkDate || today,
+    totalQuantity: deal.totalQuantity,
+    totalAmount: parseAmount(deal.quotationAmount),
+    managementCycle: 30,
+    nextManagementDate: nextDate.toISOString().split('T')[0],
+    reminderStatus: '미발송' as const,
+    accountManager: deal.salesManager,
+    phone: deal.phone,
+    email: deal.email,
+    address: deal.address,
+    detailedQuantity: deal.detailedQuantity
+      ? [{ item: deal.desiredService, quantity: deal.totalQuantity }]
+      : [],
+    workHistory: [{
+      inquiryDate: deal.registrationDate,
+      projectName: deal.desiredService,
+      totalQuantity: deal.totalQuantity,
+      detailedQuantity: deal.detailedQuantity || '',
+      quotationAmount: parseAmount(deal.quotationAmount),
+      accountManager: deal.salesManager,
+      workDate: deal.confirmedWorkDate || today,
+      subcontractorManager: '',
+      reportSent: false,
+      reminder1: false,
+      reminder2: false,
+      reminder3: false,
+    }],
+    fieldManager: '',
+    emailHistory: [],
+    internalNotes: [{
+      id: 1,
+      author: deal.salesManager,
+      date: today,
+      content: `영업관리에서 자동 등록됨. 요구사항: ${deal.requirements || '없음'}`,
+    }],
+    memo: deal.managementMemo || '',
+  };
+}
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain'>('sales');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
+
+  // 영업에서 성공한 딜을 고객으로 변환
+  const handleDealSuccess = (deal: any) => {
+    const customer = convertDealToCustomer(deal);
+    setNewCustomerFromDeal(customer);
+    // 고객 관리 페이지로 자동 이동은 하지 않음 (사용자가 직접 확인)
+  };
 
   // 모바일 화면 감지
   useEffect(() => {
@@ -136,8 +205,8 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage />}
-          {currentPage === 'sales' && <SalesPage />}
+          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} />}
           {currentPage === 'supplychain' && <SupplyChainPage />}
         </main>
       </div>

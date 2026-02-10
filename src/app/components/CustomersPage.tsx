@@ -658,7 +658,11 @@ const customersData: Customer[] = [
   },
 ];
 
-export function CustomersPage() {
+interface CustomersPageProps {
+  newCustomerFromDeal?: Customer | null;
+}
+
+export function CustomersPage({ newCustomerFromDeal }: CustomersPageProps = {}) {
   const [customers, setCustomers] = useState<Customer[]>(customersData);
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
@@ -675,6 +679,16 @@ export function CustomersPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // 영업 관리에서 성공한 딜이 넘어오면 고객 자동 등록
+  useEffect(() => {
+    if (!newCustomerFromDeal) return;
+    // 이미 같은 회사가 있으면 중복 추가하지 않음
+    const exists = customers.some((c) => c.company === newCustomerFromDeal.company);
+    if (!exists) {
+      setCustomers((prev) => [newCustomerFromDeal, ...prev]);
+    }
+  }, [newCustomerFromDeal]);
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
   const [newNote, setNewNote] = useState('');
   const [showAddWorkForm, setShowAddWorkForm] = useState(false);
