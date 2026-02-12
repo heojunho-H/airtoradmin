@@ -252,6 +252,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
+  const [editingSalesManagerId, setEditingSalesManagerId] = useState<number | null>(null);
   const [internalDealsData, setInternalDealsData] = useState<Deal[]>(initialDeals);
   const dealsData = externalDealsState ? externalDealsState[0] : internalDealsData;
   const setDealsData = externalDealsState ? externalDealsState[1] : setInternalDealsData;
@@ -601,6 +602,19 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       if (deal) {
         onDealSuccess({ ...deal, successStatus: 'success' });
       }
+    }
+  };
+
+  const handleSalesManagerInlineChange = (dealId: number, newManager: string) => {
+    setDealsData((prevDeals) =>
+      prevDeals.map((deal) =>
+        deal.id === dealId ? { ...deal, salesManager: newManager } : deal
+      )
+    );
+    setEditingSalesManagerId(null);
+
+    if (selectedDeal && selectedDeal.id === dealId) {
+      setSelectedDeal((prev) => prev ? { ...prev, salesManager: newManager } : null);
     }
   };
 
@@ -1576,14 +1590,36 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       <span className="text-sm font-semibold text-slate-900">₩{formatAmount(parseQuotationAmount(deal.quotationAmount))}</span>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-white text-xs font-medium">
-                            {deal.salesManager.charAt(0)}
-                          </span>
+                      {editingSalesManagerId === deal.id ? (
+                        <select
+                          value={deal.salesManager}
+                          onChange={(e) => handleSalesManagerInlineChange(deal.id, e.target.value)}
+                          onBlur={() => setEditingSalesManagerId(null)}
+                          autoFocus
+                          className="px-2 py-1 text-sm border border-slate-300 bg-white rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">선택하세요</option>
+                          {customerManagerNames.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div
+                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded-lg px-1 py-0.5 -mx-1 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingSalesManagerId(deal.id);
+                          }}
+                        >
+                          <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xs font-medium">
+                              {deal.salesManager.charAt(0)}
+                            </span>
+                          </div>
+                          <span className="text-sm text-slate-700">{deal.salesManager}</span>
                         </div>
-                        <span className="text-sm text-slate-700">{deal.salesManager}</span>
-                      </div>
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       <div className="relative">
