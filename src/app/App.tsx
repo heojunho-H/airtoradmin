@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock } from 'lucide-react';
 import { CustomersPage, initialCustomers } from './components/CustomersPage';
 import { SalesPage, initialDeals } from './components/SalesPage';
 import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
@@ -78,6 +78,60 @@ export default function App() {
   const [managers, setManagers] = useState(initialCustomerManagers);
   const [subcontractors, setSubcontractors] = useState(initialSubcontractors);
 
+  // 알림 시스템
+  type Notification = {
+    id: number;
+    type: 'deal_success' | 'customer_registered' | 'management_due';
+    message: string;
+    timestamp: Date;
+    read: boolean;
+  };
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  const addNotification = (type: Notification['type'], message: string) => {
+    setNotifications(prev => [{
+      id: Date.now() + Math.random(),
+      type,
+      message,
+      timestamp: new Date(),
+      read: false,
+    }, ...prev]);
+  };
+
+  const markAsRead = (id: number) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) {
+        setNotificationOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 관리 주기 도래 알림 (앱 로드 시 1회)
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    customers.forEach((customer: any) => {
+      if (customer.nextManagementDate && customer.nextManagementDate <= today) {
+        addNotification('management_due', `[${customer.company}] 관리 주기가 도래했습니다`);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('user_name');
     localStorage.removeItem('user_id');
@@ -88,7 +142,8 @@ export default function App() {
   const handleDealSuccess = (deal: any) => {
     const customer = convertDealToCustomer(deal);
     setNewCustomerFromDeal(customer);
-    // 고객 관리 페이지로 자동 이동은 하지 않음 (사용자가 직접 확인)
+    addNotification('deal_success', `[${deal.company}] 딜이 수주확정되었습니다`);
+    addNotification('customer_registered', `[${deal.company}] 고객이 자동 등록되었습니다`);
   };
 
   // 고객관리 작업이력 → 공급망관리 고객책임자 작업히스토리 동기화
@@ -297,10 +352,70 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 ml-2">
-            <button className="relative p-2 md:p-2.5 hover:bg-slate-50 rounded-xl transition-colors">
-              <Bell className="w-5 h-5 text-slate-600" />
-              <span className="absolute top-1.5 md:top-2 right-1.5 md:right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
-            </button>
+            {/* 알림 벨 */}
+            <div className="relative" ref={notificationRef}>
+              <button
+                onClick={() => setNotificationOpen(!notificationOpen)}
+                className="relative p-2 md:p-2.5 hover:bg-slate-50 rounded-xl transition-colors"
+              >
+                <Bell className="w-5 h-5 text-slate-600" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 md:top-1.5 right-1 md:right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white px-1">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* 알림 드롭다운 */}
+              {notificationOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 md:w-96 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <span className="text-sm font-semibold text-slate-800">알림</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllAsRead}
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        모두 읽음
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-slate-400">알림이 없습니다</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => markAsRead(n.id)}
+                          className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 ${
+                            !n.read ? 'bg-blue-50/50' : ''
+                          }`}
+                        >
+                          <div className={`mt-0.5 p-1.5 rounded-lg ${
+                            n.type === 'deal_success' ? 'bg-green-100 text-green-600' :
+                            n.type === 'customer_registered' ? 'bg-blue-100 text-blue-600' :
+                            'bg-amber-100 text-amber-600'
+                          }`}>
+                            {n.type === 'deal_success' ? <TrendingUp className="w-4 h-4" /> :
+                             n.type === 'customer_registered' ? <UserPlus className="w-4 h-4" /> :
+                             <CalendarClock className="w-4 h-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${!n.read ? 'font-medium text-slate-800' : 'text-slate-600'}`}>{n.message}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {n.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          {!n.read && <span className="mt-2 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></span>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <span className="hidden md:inline text-sm text-slate-600 font-medium">{userName}</span>
             <button
               onClick={handleLogout}
