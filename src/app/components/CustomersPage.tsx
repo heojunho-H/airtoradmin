@@ -662,6 +662,7 @@ interface CustomersPageProps {
   newCustomerFromDeal?: Customer | null;
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
   subcontractorNames?: string[];
+  customerManagerNames?: string[];
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -716,7 +717,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [] }: CustomersPageProps = {}) {
+export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [], customerManagerNames = [] }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -1606,14 +1607,21 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                     {editingCell?.customerId === customer.id && editingCell?.field === 'accountManager' ? (
                       <div className="flex items-center gap-1.5">
                         <User className="w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
+                        <select
                           className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           value={customer.accountManager}
-                          onChange={(e) => updateCustomerField(customer.id, 'accountManager', e.target.value)}
+                          onChange={(e) => {
+                            updateCustomerField(customer.id, 'accountManager', e.target.value);
+                            setEditingCell(null);
+                          }}
                           onBlur={() => setEditingCell(null)}
                           autoFocus
-                        />
+                        >
+                          <option value="">선택하세요</option>
+                          {customerManagerNames.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 cursor-pointer hover:bg-slate-50 rounded px-2 py-1 -mx-2 -my-1 transition-colors">
@@ -1938,13 +1946,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                         </div>
                         <div>
                           <label className="text-xs font-medium text-slate-700 block mb-1">고객책임자</label>
-                          <input
-                            type="text"
+                          <select
                             value={newWork.accountManager}
                             onChange={(e) => setNewWork({ ...newWork, accountManager: e.target.value })}
-                            placeholder="담당자명"
                             className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
-                          />
+                          >
+                            <option value="">선택하세요</option>
+                            {customerManagerNames.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="text-xs font-medium text-slate-700 block mb-1">작업일자</label>
@@ -2177,12 +2188,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                                 </td>
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
-                                    <input
-                                      type="text"
+                                    <select
                                       value={editedCustomer.workHistory[index]?.accountManager || work.accountManager}
                                       onChange={(e) => updateEditedWorkHistory(index, 'accountManager', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                    >
+                                      <option value="">선택하세요</option>
+                                      {customerManagerNames.map((name) => (
+                                        <option key={name} value={name}>{name}</option>
+                                      ))}
+                                    </select>
                                   ) : (
                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                       <User className="w-4 h-4 text-slate-400" />
@@ -2422,13 +2437,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         고객 책임자
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={newCustomer.accountManager || ''}
                         onChange={(e) => setNewCustomer({ ...newCustomer, accountManager: e.target.value })}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="담당자���을 입력하세요"
-                      />
+                      >
+                        <option value="">선택하세요</option>
+                        {customerManagerNames.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
