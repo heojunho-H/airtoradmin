@@ -35,6 +35,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
+import { AiCompanyInfoButton } from './AiCompanyInfo';
 
 interface Deal {
   id: number;
@@ -1944,7 +1945,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.company?.trim() ? 'border-red-300' : 'border-slate-300'}`}
                       />
                     ) : (
-                      <p className="text-[15px] font-medium text-slate-900">{selectedDeal.company}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[15px] font-medium text-slate-900">{selectedDeal.company}</p>
+                        <AiCompanyInfoButton companyName={selectedDeal.company} />
+                      </div>
                     )}
                   </div>
                   <div>

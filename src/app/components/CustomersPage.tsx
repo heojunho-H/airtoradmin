@@ -35,6 +35,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
+import { AiCompanyInfoButton } from './AiCompanyInfo';
 
 interface WorkHistory {
   inquiryDate: string; // 문의 등록일
@@ -1719,7 +1720,10 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                             className="mt-1 text-sm font-semibold text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         ) : (
-                          <p className="mt-1 text-sm font-semibold text-slate-900">{selectedCustomer.company}</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-900">{selectedCustomer.company}</p>
+                            <AiCompanyInfoButton companyName={selectedCustomer.company} />
+                          </div>
                         )}
                       </div>
                       <div>
