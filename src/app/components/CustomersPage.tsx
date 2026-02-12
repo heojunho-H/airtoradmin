@@ -661,9 +661,10 @@ export const initialCustomers: Customer[] = [
 interface CustomersPageProps {
   newCustomerFromDeal?: Customer | null;
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
+  subcontractorNames?: string[];
 }
 
-export function CustomersPage({ newCustomerFromDeal, externalCustomersState }: CustomersPageProps = {}) {
+export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [] }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -1904,13 +1905,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState }: C
                         </div>
                         <div>
                           <label className="text-xs font-medium text-slate-700 block mb-1">작업팀장(하청)</label>
-                          <input
-                            type="text"
+                          <select
                             value={newWork.subcontractorManager}
                             onChange={(e) => setNewWork({ ...newWork, subcontractorManager: e.target.value })}
-                            placeholder="팀장명"
                             className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
-                          />
+                          >
+                            <option value="">선택하세요</option>
+                            {subcontractorNames.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
                         </div>
                         <div className="col-span-4 flex items-center gap-4 pt-2">
                           <label className="flex items-center gap-2 cursor-pointer">
@@ -2156,12 +2160,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState }: C
                                 </td>
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
-                                    <input
-                                      type="text"
+                                    <select
                                       value={editedCustomer.workHistory[index]?.subcontractorManager || work.subcontractorManager}
                                       onChange={(e) => updateEditedWorkHistory(index, 'subcontractorManager', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                    >
+                                      <option value="">선택하세요</option>
+                                      {subcontractorNames.map((name) => (
+                                        <option key={name} value={name}>{name}</option>
+                                      ))}
+                                    </select>
                                   ) : (
                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                       <User className="w-4 h-4 text-slate-400" />
