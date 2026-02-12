@@ -123,10 +123,18 @@ export default function App() {
 
   // 관리 주기 도래 알림 (앱 로드 시 1회)
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const oneMonthLater = new Date(today);
+    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+    const oneMonthLaterStr = oneMonthLater.toISOString().split('T')[0];
+
     customers.forEach((customer: any) => {
-      if (customer.nextManagementDate && customer.nextManagementDate <= today) {
-        addNotification('management_due', `[${customer.company}] 관리 주기가 도래했습니다`);
+      if (!customer.nextManagementDate) return;
+      if (customer.nextManagementDate === todayStr) {
+        addNotification('management_due', `[${customer.company}] 오늘 관리 주기 도래일입니다`);
+      } else if (customer.nextManagementDate > todayStr && customer.nextManagementDate <= oneMonthLaterStr) {
+        addNotification('management_due', `[${customer.company}] 관리 주기가 1개월 이내 도래 예정입니다 (${customer.nextManagementDate})`);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
