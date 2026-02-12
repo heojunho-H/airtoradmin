@@ -243,9 +243,10 @@ const customerJourneyStages = [
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
+  customerManagerNames?: string[];
 }
 
-export function SalesPage({ onDealSuccess, externalDealsState }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNames = [] }: SalesPageProps = {}) {
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -2072,13 +2073,16 @@ export function SalesPage({ onDealSuccess, externalDealsState }: SalesPageProps 
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">고객책임자</p>
                   {isEditMode ? (
-                    <input
-                      type="text"
+                    <select
                       value={editedDeal?.salesManager || ''}
                       onChange={(e) => handleFieldChange('salesManager', e.target.value)}
-                      placeholder="담당자명"
                       className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
-                    />
+                    >
+                      <option value="">선택하세요</option>
+                      {customerManagerNames.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
                   ) : (
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
