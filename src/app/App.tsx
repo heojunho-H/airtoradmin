@@ -111,6 +111,65 @@ export default function App() {
     );
   }, [customers]);
 
+  // 고객관리 작업이력 → 공급망관리 작업팀장(하청) 작업히스토리 동기화
+  useEffect(() => {
+    setSubcontractors((prevSubs) =>
+      prevSubs.map((sub) => {
+        // 기존 평가 데이터를 키로 보존 (projectName + customerCompany + workDate)
+        const existingEvalMap = new Map<string, any>();
+        sub.recentActivities.forEach((act) => {
+          const key = `${act.projectName}|${act.customerCompany}|${act.workDate}`;
+          existingEvalMap.set(key, {
+            workEvaluation: act.workEvaluation,
+            workEvaluationScore: act.workEvaluationScore,
+            evalCustomerClaim: act.evalCustomerClaim,
+            evalAllDevices: act.evalAllDevices,
+            evalOnTime: act.evalOnTime,
+            evalAfterService: act.evalAfterService,
+            evalUniform: act.evalUniform,
+            evalKindness: act.evalKindness,
+          });
+        });
+
+        const activitiesFromCustomers: typeof sub.recentActivities = [];
+        customers.forEach((customer) => {
+          customer.workHistory
+            .filter((work: any) => {
+              const managers = work.subcontractorManager
+                ? work.subcontractorManager.split(', ').map((s: string) => s.trim())
+                : [];
+              return managers.includes(sub.name);
+            })
+            .forEach((work: any) => {
+              const key = `${work.projectName}|${customer.company}|${work.workDate}`;
+              const existingEval = existingEvalMap.get(key) || {};
+              activitiesFromCustomers.push({
+                inquiryDate: work.inquiryDate,
+                customerCompany: customer.company,
+                projectName: work.projectName,
+                totalQuantity: work.totalQuantity,
+                detailQuantity: work.detailedQuantity,
+                estimateAmount: work.quotationAmount,
+                customerManager: work.accountManager,
+                workDate: work.workDate,
+                subcontractor: sub.name,
+                workEvaluation: existingEval.workEvaluation || '',
+                workEvaluationScore: existingEval.workEvaluationScore || 0,
+                evalCustomerClaim: existingEval.evalCustomerClaim,
+                evalAllDevices: existingEval.evalAllDevices,
+                evalOnTime: existingEval.evalOnTime,
+                evalAfterService: existingEval.evalAfterService,
+                evalUniform: existingEval.evalUniform,
+                evalKindness: existingEval.evalKindness,
+              });
+            });
+        });
+        activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
+        return { ...sub, recentActivities: activitiesFromCustomers };
+      })
+    );
+  }, [customers]);
+
   // 모바일 화면 감지
   useEffect(() => {
     const checkMobile = () => {
