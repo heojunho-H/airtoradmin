@@ -263,6 +263,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const [startMonth, setStartMonth] = useState(currentMonth);
   const [endMonth, setEndMonth] = useState(currentMonth);
   const [isAddingNewDeal, setIsAddingNewDeal] = useState(false);
+  const [activeDatePreset, setActiveDatePreset] = useState<string>('이번 달');
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
@@ -775,71 +776,70 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
             <input
               type="month"
               value={startMonth}
-              onChange={(e) => setStartMonth(e.target.value)}
+              onChange={(e) => { setStartMonth(e.target.value); setActiveDatePreset(''); }}
               className="px-2.5 py-1.5 text-[13px] text-slate-700 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <span className="text-slate-400 text-sm">~</span>
             <input
               type="month"
               value={endMonth}
-              onChange={(e) => setEndMonth(e.target.value)}
+              onChange={(e) => { setEndMonth(e.target.value); setActiveDatePreset(''); }}
               className="px-2.5 py-1.5 text-[13px] text-slate-700 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => {
+            {([
+              { label: '이번 달', action: () => {
                 const now = new Date();
                 const year = now.getFullYear();
                 const month = String(now.getMonth() + 1).padStart(2, '0');
                 setStartMonth(`${year}-${month}`);
                 setEndMonth(`${year}-${month}`);
-              }}
-              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[12px] font-semibold rounded-md hover:bg-slate-200 transition-colors"
-            >
-              이번 달
-            </button>
-            <button
-              onClick={() => {
+              }},
+              { label: '지난 달', action: () => {
                 const now = new Date();
                 const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
                 const month = now.getMonth() === 0 ? 12 : now.getMonth();
                 const lastMonth = `${year}-${String(month).padStart(2, '0')}`;
                 setStartMonth(lastMonth);
                 setEndMonth(lastMonth);
-              }}
-              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[12px] font-semibold rounded-md hover:bg-slate-200 transition-colors"
-            >
-              지난 달
-            </button>
-            <button
-              onClick={() => {
+              }},
+              { label: '지난 3개월', action: () => {
                 const now = new Date();
                 const endYear = now.getFullYear();
-                const endMonth = String(now.getMonth() + 1).padStart(2, '0');
-                
+                const endMo = String(now.getMonth() + 1).padStart(2, '0');
                 const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
                 const startYear = threeMonthsAgo.getFullYear();
-                const startMonthNum = String(threeMonthsAgo.getMonth() + 1).padStart(2, '0');
-                
-                setStartMonth(`${startYear}-${startMonthNum}`);
-                setEndMonth(`${endYear}-${endMonth}`);
-              }}
-              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[12px] font-semibold rounded-md hover:bg-slate-200 transition-colors"
-            >
-              지난 3개월
-            </button>
-            <button
-              onClick={() => {
-                const now = new Date();
-                const year = now.getFullYear();
+                const startMo = String(threeMonthsAgo.getMonth() + 1).padStart(2, '0');
+                setStartMonth(`${startYear}-${startMo}`);
+                setEndMonth(`${endYear}-${endMo}`);
+              }},
+              { label: '올해', action: () => {
+                const year = new Date().getFullYear();
                 setStartMonth(`${year}-01`);
                 setEndMonth(`${year}-12`);
-              }}
-              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[12px] font-semibold rounded-md hover:bg-slate-200 transition-colors"
-            >
-              올해
-            </button>
+              }},
+              { label: '작년', action: () => {
+                const year = new Date().getFullYear() - 1;
+                setStartMonth(`${year}-01`);
+                setEndMonth(`${year}-12`);
+              }},
+            ] as { label: string; action: () => void }[]).map((preset) => (
+              <button
+                key={preset.label}
+                onClick={() => {
+                  preset.action();
+                  setActiveDatePreset(preset.label);
+                }}
+                className={`px-3 py-1.5 text-[12px] font-semibold rounded-md transition-colors ${
+                  activeDatePreset === preset.label
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
