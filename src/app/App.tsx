@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, initialCustomers } from './components/CustomersPage';
 import { SalesPage, initialDeals } from './components/SalesPage';
 import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
+import { AiChatPanel } from './components/AiChatPanel';
 
 // Deal 데이터를 Customer 형식으로 변환
 function convertDealToCustomer(deal: any) {
@@ -88,6 +89,7 @@ export default function App() {
   };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
 
   const addNotification = (type: Notification['type'], message: string) => {
@@ -364,6 +366,14 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 ml-2">
+            {/* AI 비서 */}
+            <button
+              onClick={() => setAiPanelOpen(!aiPanelOpen)}
+              className="p-2 md:p-2.5 hover:bg-purple-50 rounded-xl transition-colors"
+              title="AI 비서"
+            >
+              <Sparkles className="w-5 h-5 text-purple-500" />
+            </button>
             {/* 알림 벨 */}
             <div className="relative" ref={notificationRef}>
               <button
@@ -481,6 +491,16 @@ export default function App() {
           </div>
         </nav>
       )}
+
+      {/* AI 채팅 패널 */}
+      <AiChatPanel
+        isOpen={aiPanelOpen}
+        onClose={() => setAiPanelOpen(false)}
+        deals={deals}
+        customers={customers}
+        managers={managers}
+        subcontractors={subcontractors}
+      />
     </div>
   );
 }
