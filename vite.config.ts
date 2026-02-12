@@ -16,6 +16,13 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: Number(process.env.PORT) || 3000,
+    proxy: {
+      '/api': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/login/, '/api/login_api.php'),
+      },
+    },
   },
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

@@ -21,9 +21,8 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('https://airtor.co.kr/api/login_api.php', {
+      const response = await fetch('/api/login', {
         method: 'POST',
-        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
         },
