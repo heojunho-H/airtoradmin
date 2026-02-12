@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -672,6 +672,8 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const selected = value ? value.split(', ').filter(Boolean) : [];
 
   const toggle = (name: string) => {
@@ -681,11 +683,27 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
     onChange(next.join(', '));
   };
 
+  const handleOpen = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const dropdownHeight = Math.min(names.length * 36 + 12, 200);
+      const showAbove = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight;
+      setDropdownPos({
+        top: showAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+    setOpen(!open);
+  };
+
   return (
     <div className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={handleOpen}
         className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-amber-500"
       >
         <span className={selected.length ? 'text-slate-900' : 'text-slate-400'}>
@@ -695,8 +713,11 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 min-w-full max-h-[200px] overflow-y-auto">
+          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed bg-white border border-slate-200 rounded-lg shadow-xl z-[9999] max-h-[200px] overflow-y-auto"
+            style={{ top: dropdownPos.top, left: dropdownPos.left, minWidth: dropdownPos.width }}
+          >
             <div className="p-1.5 space-y-0.5">
               {names.map((name) => (
                 <label key={name} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 rounded cursor-pointer">

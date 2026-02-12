@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, ChevronDown, Package } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut } from 'lucide-react';
 import { CustomersPage, initialCustomers } from './components/CustomersPage';
 import { SalesPage, initialDeals } from './components/SalesPage';
 import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
@@ -66,6 +67,8 @@ function convertDealToCustomer(deal: any) {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const userName = localStorage.getItem('user_name') || '';
   const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain'>('sales');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -74,6 +77,12 @@ export default function App() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [managers, setManagers] = useState(initialCustomerManagers);
   const [subcontractors, setSubcontractors] = useState(initialSubcontractors);
+
+  const handleLogout = () => {
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('user_id');
+    navigate('/login');
+  };
 
   // 영업에서 성공한 딜을 고객으로 변환
   const handleDealSuccess = (deal: any) => {
@@ -179,7 +188,7 @@ export default function App() {
         setSidebarOpen(false);
       }
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -196,12 +205,12 @@ export default function App() {
       {/* Sidebar */}
       <aside
         className={`${
-          isMobile 
-            ? sidebarOpen 
-              ? 'fixed inset-0 z-50 bg-white' 
+          isMobile
+            ? sidebarOpen
+              ? 'fixed inset-0 z-50 bg-white'
               : 'hidden'
-            : sidebarOpen 
-              ? 'w-64' 
+            : sidebarOpen
+              ? 'w-64'
               : 'w-20'
         } bg-white border-r border-slate-200 transition-all duration-300 flex flex-col`}
       >
@@ -275,7 +284,7 @@ export default function App() {
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
           )}
-          
+
           <div className="flex items-center flex-1 max-w-2xl">
             <div className="relative w-full">
               <Search className="absolute left-3 md:left-3.5 top-1/2 -translate-y-1/2 w-4 md:w-[18px] h-4 md:h-[18px] text-slate-400" />
@@ -291,6 +300,14 @@ export default function App() {
             <button className="relative p-2 md:p-2.5 hover:bg-slate-50 rounded-xl transition-colors">
               <Bell className="w-5 h-5 text-slate-600" />
               <span className="absolute top-1.5 md:top-2 right-1.5 md:right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
+            </button>
+            <span className="hidden md:inline text-sm text-slate-600 font-medium">{userName}</span>
+            <button
+              onClick={handleLogout}
+              className="p-2 md:p-2.5 hover:bg-red-50 rounded-xl transition-colors group"
+              title="로그아웃"
+            >
+              <LogOut className="w-5 h-5 text-slate-500 group-hover:text-red-500 transition-colors" />
             </button>
           </div>
         </header>
