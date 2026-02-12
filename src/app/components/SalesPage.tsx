@@ -275,6 +275,34 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
+  // 문의 등록일 기준 15일 초과 시 성공여부 자동 실패 처리
+  useEffect(() => {
+    const today = new Date();
+    const expiredDeals = dealsData.filter((deal) => {
+      if (deal.successStatus !== 'in-progress') return false;
+      const regDate = new Date(deal.registrationDate);
+      const diffDays = Math.floor((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays > 15;
+    });
+
+    if (expiredDeals.length > 0) {
+      setDealsData((prev) =>
+        prev.map((deal) => {
+          const regDate = new Date(deal.registrationDate);
+          const diffDays = Math.floor((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (deal.successStatus === 'in-progress' && diffDays > 15) {
+            return { ...deal, successStatus: 'failed' };
+          }
+          return deal;
+        })
+      );
+      expiredDeals.forEach((deal) => {
+        onNotification?.(`[${deal.company}] 문의 등록일 15일 초과로 자동 실패 처리되었습니다`);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 필터 상태
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedSuccessStatuses, setSelectedSuccessStatuses] = useState<string[]>([]);
