@@ -82,6 +82,35 @@ export default function App() {
     // 고객 관리 페이지로 자동 이동은 하지 않음 (사용자가 직접 확인)
   };
 
+  // 고객관리 작업이력 → 공급망관리 고객책임자 작업히스토리 동기화
+  useEffect(() => {
+    setManagers((prevManagers) =>
+      prevManagers.map((manager) => {
+        const activitiesFromCustomers: typeof manager.recentActivities = [];
+        customers.forEach((customer) => {
+          customer.workHistory
+            .filter((work: any) => work.accountManager === manager.name)
+            .forEach((work: any) => {
+              activitiesFromCustomers.push({
+                inquiryDate: work.inquiryDate,
+                customerCompany: customer.company,
+                projectName: work.projectName,
+                totalQuantity: work.totalQuantity,
+                detailQuantity: work.detailedQuantity,
+                estimateAmount: work.quotationAmount,
+                customerManager: work.accountManager,
+                workDate: work.workDate,
+                subcontractor: work.subcontractorManager,
+              });
+            });
+        });
+        // 날짜 내림차순 정렬
+        activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
+        return { ...manager, recentActivities: activitiesFromCustomers };
+      })
+    );
+  }, [customers]);
+
   // 모바일 화면 감지
   useEffect(() => {
     const checkMobile = () => {
