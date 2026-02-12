@@ -664,6 +664,58 @@ interface CustomersPageProps {
   subcontractorNames?: string[];
 }
 
+function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
+  value: string;
+  onChange: (value: string) => void;
+  names: string[];
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? value.split(', ').filter(Boolean) : [];
+
+  const toggle = (name: string) => {
+    const next = selected.includes(name)
+      ? selected.filter(n => n !== name)
+      : [...selected, name];
+    onChange(next.join(', '));
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-amber-500"
+      >
+        <span className={selected.length ? 'text-slate-900' : 'text-slate-400'}>
+          {selected.length ? selected.join(', ') : '선택하세요'}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 min-w-full max-h-[200px] overflow-y-auto">
+            <div className="p-1.5 space-y-0.5">
+              {names.map((name) => (
+                <label key={name} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(name)}
+                    onChange={() => toggle(name)}
+                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-sm text-slate-700">{name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [] }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
@@ -1905,16 +1957,11 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                         </div>
                         <div>
                           <label className="text-xs font-medium text-slate-700 block mb-1">작업팀장(하청)</label>
-                          <select
+                          <SubcontractorMultiSelect
                             value={newWork.subcontractorManager}
-                            onChange={(e) => setNewWork({ ...newWork, subcontractorManager: e.target.value })}
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
-                          >
-                            <option value="">선택하세요</option>
-                            {subcontractorNames.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
+                            onChange={(val) => setNewWork({ ...newWork, subcontractorManager: val })}
+                            names={subcontractorNames}
+                          />
                         </div>
                         <div className="col-span-4 flex items-center gap-4 pt-2">
                           <label className="flex items-center gap-2 cursor-pointer">
@@ -2160,16 +2207,11 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                                 </td>
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
-                                    <select
+                                    <SubcontractorMultiSelect
                                       value={editedCustomer.workHistory[index]?.subcontractorManager || work.subcontractorManager}
-                                      onChange={(e) => updateEditedWorkHistory(index, 'subcontractorManager', e.target.value)}
-                                      className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                      <option value="">선택하세요</option>
-                                      {subcontractorNames.map((name) => (
-                                        <option key={name} value={name}>{name}</option>
-                                      ))}
-                                    </select>
+                                      onChange={(val) => updateEditedWorkHistory(index, 'subcontractorManager', val)}
+                                      names={subcontractorNames}
+                                    />
                                   ) : (
                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                       <User className="w-4 h-4 text-slate-400" />
