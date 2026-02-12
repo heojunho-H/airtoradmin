@@ -641,9 +641,10 @@ export const initialSubcontractors: SubcontractorManager[] = [
 interface SupplyChainPageProps {
   externalManagersState?: [CustomerManager[], (m: CustomerManager[] | ((prev: CustomerManager[]) => CustomerManager[])) => void];
   externalSubcontractorsState?: [SubcontractorManager[], (s: SubcontractorManager[] | ((prev: SubcontractorManager[]) => SubcontractorManager[])) => void];
+  onNotification?: (message: string) => void;
 }
 
-export function SupplyChainPage({ externalManagersState, externalSubcontractorsState }: SupplyChainPageProps = {}) {
+export function SupplyChainPage({ externalManagersState, externalSubcontractorsState, onNotification }: SupplyChainPageProps = {}) {
   const [activeTab, setActiveTab] = useState<'managers' | 'subcontractors'>('managers');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedManager, setSelectedManager] = useState<CustomerManager | null>(null);
@@ -883,6 +884,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     if (confirm(`${name}을(를) 삭제하시겠습니까?`)) {
       // 삭제 로직 (실제로는 상태 업데이트 또는 API 호출)
       alert('삭제되었습니다.');
+      onNotification?.(`[${name}] 삭제되었습니다`);
     }
   };
 
@@ -902,6 +904,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       setSelectedManager(editedManager);
       setIsEditingManager(false);
       alert('정보가 저장되었습니다.');
+      onNotification?.(`[${editedManager.name}] 고객책임자 정보가 수정되었습니다`);
     }
   };
 
@@ -917,13 +920,14 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       if (selectedManager) {
         const updatedActivities = selectedManager.recentActivities.filter((_, index) => index !== activityIndex);
         const updatedManager = { ...selectedManager, recentActivities: updatedActivities };
-        
+
         const updatedManagers = managers.map((m) =>
           m.id === selectedManager.id ? updatedManager : m
         );
         setManagers(updatedManagers);
         setSelectedManager(updatedManager);
         alert('작업이 삭제되었습니다.');
+        onNotification?.(`[${selectedManager.name}] "${projectName}" 작업이 삭제되었습니다`);
       }
     }
   };
@@ -944,6 +948,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       setSelectedSubcontractor(editedSubcontractor);
       setIsEditingSubcontractor(false);
       alert('정보가 저장되었습니다.');
+      onNotification?.(`[${editedSubcontractor.name}] 작업팀장 정보가 수정되었습니다`);
     }
   };
 
@@ -966,6 +971,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
         setSubcontractors(updatedSubcontractors);
         setSelectedSubcontractor(updatedSubcontractor);
         alert('작업이 삭제되었습니다.');
+        onNotification?.(`[${selectedSubcontractor.name}] "${projectName}" 작업이 삭제되었습니다`);
       }
     }
   };
@@ -1035,6 +1041,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     setManagers([...managers, newManagerData]);
     setShowAddManagerModal(false);
     alert('책임자가 등록되었습니다.');
+    onNotification?.(`[${newManagerData.name}] 새 고객책임자가 등록되었습니다`);
   };
 
   // 작업팀장 등록 모달 열기 핸들러
@@ -1114,6 +1121,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     setSubcontractors([...subcontractors, newSubcontractorData]);
     setShowAddSubcontractorModal(false);
     alert('작업팀장이 등록되었습니다.');
+    onNotification?.(`[${newSubcontractorData.name}] 새 작업팀장이 등록되었습니다`);
   };
 
   return (

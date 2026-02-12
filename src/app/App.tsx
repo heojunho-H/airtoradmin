@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit } from 'lucide-react';
 import { CustomersPage, initialCustomers } from './components/CustomersPage';
 import { SalesPage, initialDeals } from './components/SalesPage';
 import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
@@ -81,7 +81,7 @@ export default function App() {
   // 알림 시스템
   type Notification = {
     id: number;
-    type: 'deal_success' | 'customer_registered' | 'management_due';
+    type: 'deal_success' | 'customer_registered' | 'management_due' | 'admin_action';
     message: string;
     timestamp: Date;
     read: boolean;
@@ -131,6 +131,10 @@ export default function App() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleAdminNotification = (message: string) => {
+    addNotification('admin_action', message);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('user_name');
@@ -396,10 +400,12 @@ export default function App() {
                           <div className={`mt-0.5 p-1.5 rounded-lg ${
                             n.type === 'deal_success' ? 'bg-green-100 text-green-600' :
                             n.type === 'customer_registered' ? 'bg-blue-100 text-blue-600' :
+                            n.type === 'admin_action' ? 'bg-purple-100 text-purple-600' :
                             'bg-amber-100 text-amber-600'
                           }`}>
                             {n.type === 'deal_success' ? <TrendingUp className="w-4 h-4" /> :
                              n.type === 'customer_registered' ? <UserPlus className="w-4 h-4" /> :
+                             n.type === 'admin_action' ? <FileEdit className="w-4 h-4" /> :
                              <CalendarClock className="w-4 h-4" />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -429,9 +435,9 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} customerManagerNames={managers.map(m => m.name)} />}
-          {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} />}
+          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
         </main>
       </div>
 

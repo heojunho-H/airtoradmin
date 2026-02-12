@@ -663,6 +663,7 @@ interface CustomersPageProps {
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
   subcontractorNames?: string[];
   customerManagerNames?: string[];
+  onNotification?: (message: string) => void;
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -738,7 +739,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [], customerManagerNames = [] }: CustomersPageProps = {}) {
+export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -925,6 +926,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
   const handleDeleteCustomer = (customerId: string, customerName: string) => {
     if (confirm(`${customerName} 고객을 삭제하시겠습니까?`)) {
       setCustomers(customers.filter(customer => customer.id !== customerId));
+      onNotification?.(`[${customerName}] 고객이 삭제되었습니다`);
     }
   };
 
@@ -979,13 +981,14 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
   // 수정 저장
   const handleSaveEdit = () => {
     if (!editedCustomer || !selectedCustomer) return;
-    
-    setCustomers(customers.map(customer => 
+
+    setCustomers(customers.map(customer =>
       customer.id === selectedCustomer.id ? editedCustomer : customer
     ));
     setSelectedCustomer(editedCustomer);
     setIsEditing(false);
     setEditedCustomer(null);
+    onNotification?.(`[${editedCustomer.company}] 고객 정보가 수정되었습니다`);
   };
 
   // 편집 중인 고객 필드 업데이트
@@ -1041,6 +1044,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
     setCustomers([customer, ...customers]);
     setShowAddCustomerModal(false);
+    onNotification?.(`[${customer.company}] 새 고객이 등록되었습니다`);
     setNewCustomer({
       company: '',
       grade: 'B',

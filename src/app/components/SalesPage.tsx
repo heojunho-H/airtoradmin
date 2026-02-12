@@ -244,9 +244,10 @@ interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
   customerManagerNames?: string[];
+  onNotification?: (message: string) => void;
 }
 
-export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNames = [] }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -546,10 +547,12 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       if (selectedDeal?.id === dealId) {
         setSelectedDeal(null);
       }
+      onNotification?.(`[${dealToDelete.company}] 거래가 삭제되었습니다`);
     }
   };
 
   const handleStatusChange = (dealId: number, newStatus: Deal['status']) => {
+    const targetDeal = dealsData.find((d) => d.id === dealId);
     setDealsData((prevDeals) =>
       prevDeals.map((deal) =>
         deal.id === dealId
@@ -574,6 +577,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       } : null);
     }
 
+    if (targetDeal) {
+      onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
+    }
+
     // 수주확정 시 고객 관리 페이지에 자동 등록
     if (newStatus === 'confirmed' && onDealSuccess) {
       const deal = dealsData.find((d) => d.id === dealId);
@@ -584,6 +591,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   };
 
   const handleSuccessStatusChange = (dealId: number, newSuccessStatus: Deal['successStatus']) => {
+    const targetDeal = dealsData.find((d) => d.id === dealId);
     setDealsData((prevDeals) =>
       prevDeals.map((deal) =>
         deal.id === dealId ? { ...deal, successStatus: newSuccessStatus } : deal
@@ -596,6 +604,11 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       setSelectedDeal((prev) => prev ? { ...prev, successStatus: newSuccessStatus } : null);
     }
 
+    const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : '진행중';
+    if (targetDeal) {
+      onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
+    }
+
     // 성공으로 변경 시 고객 관리 페이지에 자동 등록
     if (newSuccessStatus === 'success' && onDealSuccess) {
       const deal = dealsData.find((d) => d.id === dealId);
@@ -606,6 +619,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   };
 
   const handleSalesManagerInlineChange = (dealId: number, newManager: string) => {
+    const targetDeal = dealsData.find((d) => d.id === dealId);
     setDealsData((prevDeals) =>
       prevDeals.map((deal) =>
         deal.id === dealId ? { ...deal, salesManager: newManager } : deal
@@ -615,6 +629,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
 
     if (selectedDeal && selectedDeal.id === dealId) {
       setSelectedDeal((prev) => prev ? { ...prev, salesManager: newManager } : null);
+    }
+
+    if (targetDeal) {
+      onNotification?.(`[${targetDeal.company}] 담당자가 "${newManager}"(으)로 변경되었습니다`);
     }
   };
 
@@ -646,6 +664,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
         setDealsData((prevDeals) => [...prevDeals, newDeal]);
         setSelectedDeal(null);
         setIsAddingNewDeal(false);
+        onNotification?.(`[${editedDeal.company}] 새 거래가 등록되었습니다`);
       } else {
         // 기존 거래 수정
         setDealsData((prevDeals) =>
@@ -654,6 +673,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
           )
         );
         setSelectedDeal(editedDeal);
+        onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
       }
       setIsEditMode(false);
       setEditedDeal(null);
