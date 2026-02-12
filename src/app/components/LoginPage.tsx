@@ -66,7 +66,7 @@ export function LoginPage() {
             <Wind className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">AIRTOR System</h1>
-          <p className="text-sm md:text-base text-slate-600">에어컨 청소 서비스 관리자 로그인</p>
+          <p className="text-sm md:text-base text-slate-600">에어터 관리자 로그인</p>
         </div>
 
         {/* 로그인 폼 카드 */}
