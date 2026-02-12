@@ -259,8 +259,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const setDealsData = externalDealsState ? externalDealsState[1] : setInternalDealsData;
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedDeal, setEditedDeal] = useState<Deal | null>(null);
-  const [startMonth, setStartMonth] = useState('2024-01');
-  const [endMonth, setEndMonth] = useState('2024-02');
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [startMonth, setStartMonth] = useState(currentMonth);
+  const [endMonth, setEndMonth] = useState(currentMonth);
   const [isAddingNewDeal, setIsAddingNewDeal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
