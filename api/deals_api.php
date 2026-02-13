@@ -1,14 +1,36 @@
 <?php
 /**
  * 영업(딜) 데이터 API — airtoradmin 전용
+ * 테이블: Gn_Online (문의하기 폼과 동일한 테이블)
+ *
+ * [컬럼 매핑]
+ * on_num          → id (PK)
+ * on_regist       → registrationDate (unix timestamp)
+ * on_subject      → company (기업명)
+ * on_username     → contactName (담당자명)
+ * on_mobile       → contactPosition (직책)
+ * on_phone        → phone (전화번호)
+ * on_email        → email (이메일)
+ * on_fax          → address (주소)
+ * on_option1      → desiredService (희망서비스)
+ * on_option2      → detailedQuantity (상세수량)
+ * on_content      → requirements (세부사항)
+ * on_memo         → managementMemo (관리 메모)
+ * on_viewch       → isChecked (확인여부)
+ * --- 관리용 필드 (빈 컬럼 활용) ---
+ * on_option3      → status (진행상태)
+ * on_option4      → successStatus (성공여부)
+ * on_option5      → salesManager (고객책임자)
+ * on_link1        → quotationAmount (견적금액)
+ * on_link2        → confirmedWorkDate (확정작업일)
+ * on_visit_date   → totalQuantity (총수량)
  *
  * [안전 규칙]
  * - SELECT: 기존 데이터 변형 없이 읽기만 수행
  * - INSERT: 매핑된 필드만 설정, 나머지는 DB 기본값 유지
- * - UPDATE: 매핑된 필드만 수정, b_no 기준으로만 WHERE 조건
- * - DELETE: b_no 단건 삭제만 허용
+ * - UPDATE: 매핑된 필드만 수정, on_num 기준 WHERE 조건
+ * - DELETE: on_num 단건 삭제만 허용
  * - 모든 쿼리에 prepared statement 사용 (SQL Injection 방지)
- * - dbname='bbs61' 조건으로 이 게시판 데이터만 조회
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -16,13 +38,11 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-// OPTIONS preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-// DB 연결
 $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
 if ($conn->connect_error) {
     http_response_code(500);
@@ -37,13 +57,14 @@ $method = $_SERVER['REQUEST_METHOD'];
 // GET — 딜 목록 조회 (읽기 전용, 기존 데이터 변형 없음)
 // ============================================================
 if ($method === 'GET') {
-    $sql = "SELECT b_no, b_regist, b_category, b_subject, b_writer,
-                   b_ex1, b_ex2, b_email, b_ex3, b_ex4, b_ex5,
-                   b_ex6, b_ex7, b_ex8, b_ex9, b_content, b_ex10,
-                   b_link1, b_link2
-            FROM Gn_Board_Item_bbs61
-            WHERE dbname = 'bbs61'
-            ORDER BY b_no DESC";
+    $sql = "SELECT on_num, on_regist, on_subject, on_username, on_mobile,
+                   on_phone, on_email, on_fax, on_option1, on_option2,
+                   on_content, on_memo, on_viewch,
+                   on_option3, on_option4, on_option5,
+                   on_link1, on_link2, on_visit_date
+            FROM Gn_Online
+            WHERE on_site = 'airtor2014'
+            ORDER BY on_num DESC";
 
     $result = $conn->query($sql);
     if (!$result) {
@@ -55,26 +76,34 @@ if ($method === 'GET') {
 
     $deals = array();
     while ($row = $result->fetch_assoc()) {
+        // on_regist는 unix timestamp → YYYY-MM-DD 변환
+        $regDate = '';
+        if ($row['on_regist'] && is_numeric($row['on_regist'])) {
+            $regDate = date('Y-m-d', intval($row['on_regist']));
+        } else if ($row['on_regist']) {
+            $regDate = substr($row['on_regist'], 0, 10);
+        }
+
         $deals[] = array(
-            'id' => intval($row['b_no']),
-            'registrationDate' => substr($row['b_regist'], 0, 10),
-            'status' => $row['b_category'] !== '' ? $row['b_category'] : 'new',
-            'company' => $row['b_subject'],
-            'contactName' => $row['b_writer'],
-            'contactPosition' => $row['b_ex1'],
-            'phone' => $row['b_ex2'],
-            'email' => $row['b_email'],
-            'desiredService' => $row['b_ex3'],
-            'totalQuantity' => intval($row['b_ex4']),
-            'quotationAmount' => $row['b_ex5'],
-            'salesManager' => $row['b_ex6'],
-            'successStatus' => $row['b_ex7'] !== '' ? $row['b_ex7'] : 'in-progress',
-            'isChecked' => $row['b_ex8'] === '1' ? true : false,
-            'address' => $row['b_ex9'],
-            'requirements' => $row['b_content'],
-            'detailedQuantity' => $row['b_ex10'],
-            'confirmedWorkDate' => $row['b_link1'],
-            'managementMemo' => $row['b_link2']
+            'id' => intval($row['on_num']),
+            'registrationDate' => $regDate,
+            'company' => $row['on_subject'],
+            'contactName' => $row['on_username'],
+            'contactPosition' => $row['on_mobile'] ? $row['on_mobile'] : '',
+            'phone' => $row['on_phone'] ? $row['on_phone'] : '',
+            'email' => $row['on_email'],
+            'address' => $row['on_fax'] ? $row['on_fax'] : '',
+            'desiredService' => $row['on_option1'] ? $row['on_option1'] : '',
+            'detailedQuantity' => $row['on_option2'] ? $row['on_option2'] : '',
+            'requirements' => $row['on_content'],
+            'managementMemo' => $row['on_memo'],
+            'isChecked' => ($row['on_viewch'] === '1') ? true : false,
+            'status' => ($row['on_option3'] !== '' && $row['on_option3'] !== null) ? $row['on_option3'] : 'new',
+            'successStatus' => ($row['on_option4'] !== '' && $row['on_option4'] !== null) ? $row['on_option4'] : 'in-progress',
+            'salesManager' => $row['on_option5'] ? $row['on_option5'] : '',
+            'quotationAmount' => $row['on_link1'] ? $row['on_link1'] : '',
+            'confirmedWorkDate' => $row['on_link2'] ? $row['on_link2'] : '',
+            'totalQuantity' => $row['on_visit_date'] ? intval($row['on_visit_date']) : 0
         );
     }
 
@@ -95,15 +124,15 @@ if ($method === 'POST') {
         exit;
     }
 
-    $now = date('Y-m-d H:i:s');
+    $now = time();
 
-    // 매핑 필드만 INSERT, 그 외 컬럼은 DB 기본값 그대로
-    $sql = "INSERT INTO Gn_Board_Item_bbs61
-            (b_regist, b_modify, b_category, b_subject, b_writer,
-             b_ex1, b_ex2, b_email, b_ex3, b_ex4, b_ex5,
-             b_ex6, b_ex7, b_ex8, b_ex9, b_content, b_ex10,
-             b_link1, b_link2, dbname)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bbs61')";
+    $sql = "INSERT INTO Gn_Online
+            (on_regist, on_subject, on_username, on_mobile,
+             on_phone, on_email, on_fax, on_option1, on_option2,
+             on_content, on_memo, on_viewch,
+             on_option3, on_option4, on_option5,
+             on_link1, on_link2, on_visit_date, on_site)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'airtor2014')";
 
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
@@ -113,30 +142,37 @@ if ($method === 'POST') {
         exit;
     }
 
-    $regDate = isset($input['registrationDate']) ? $input['registrationDate'] . ' 00:00:00' : $now;
-    $status = isset($input['status']) ? $input['status'] : 'new';
+    // registrationDate → unix timestamp
+    $regTimestamp = strval($now);
+    if (isset($input['registrationDate']) && $input['registrationDate'] !== '') {
+        $ts = strtotime($input['registrationDate']);
+        if ($ts !== false) $regTimestamp = strval($ts);
+    }
+
     $company = isset($input['company']) ? $input['company'] : '';
     $contactName = isset($input['contactName']) ? $input['contactName'] : '';
     $contactPosition = isset($input['contactPosition']) ? $input['contactPosition'] : '';
     $phone = isset($input['phone']) ? $input['phone'] : '';
     $email = isset($input['email']) ? $input['email'] : '';
-    $desiredService = isset($input['desiredService']) ? $input['desiredService'] : '';
-    $totalQuantity = isset($input['totalQuantity']) ? strval($input['totalQuantity']) : '0';
-    $quotationAmount = isset($input['quotationAmount']) ? $input['quotationAmount'] : '';
-    $salesManager = isset($input['salesManager']) ? $input['salesManager'] : '';
-    $successStatus = isset($input['successStatus']) ? $input['successStatus'] : 'in-progress';
-    $isChecked = (!empty($input['isChecked']) && $input['isChecked']) ? '1' : '0';
     $address = isset($input['address']) ? $input['address'] : '';
-    $requirements = isset($input['requirements']) ? $input['requirements'] : '';
+    $desiredService = isset($input['desiredService']) ? $input['desiredService'] : '';
     $detailedQuantity = isset($input['detailedQuantity']) ? $input['detailedQuantity'] : '';
-    $confirmedWorkDate = isset($input['confirmedWorkDate']) ? $input['confirmedWorkDate'] : '';
+    $requirements = isset($input['requirements']) ? $input['requirements'] : '';
     $managementMemo = isset($input['managementMemo']) ? $input['managementMemo'] : '';
+    $isChecked = (!empty($input['isChecked']) && $input['isChecked']) ? '1' : '0';
+    $status = isset($input['status']) ? $input['status'] : 'new';
+    $successStatus = isset($input['successStatus']) ? $input['successStatus'] : 'in-progress';
+    $salesManager = isset($input['salesManager']) ? $input['salesManager'] : '';
+    $quotationAmount = isset($input['quotationAmount']) ? $input['quotationAmount'] : '';
+    $confirmedWorkDate = isset($input['confirmedWorkDate']) ? $input['confirmedWorkDate'] : '';
+    $totalQuantity = isset($input['totalQuantity']) ? strval($input['totalQuantity']) : '';
 
-    $stmt->bind_param('sssssssssssssssssss',
-        $regDate, $now, $status, $company, $contactName,
-        $contactPosition, $phone, $email, $desiredService, $totalQuantity, $quotationAmount,
-        $salesManager, $successStatus, $isChecked, $address, $requirements, $detailedQuantity,
-        $confirmedWorkDate, $managementMemo
+    $stmt->bind_param('ssssssssssssssssss',
+        $regTimestamp, $company, $contactName, $contactPosition,
+        $phone, $email, $address, $desiredService, $detailedQuantity,
+        $requirements, $managementMemo, $isChecked,
+        $status, $successStatus, $salesManager,
+        $quotationAmount, $confirmedWorkDate, $totalQuantity
     );
 
     if (!$stmt->execute()) {
@@ -156,7 +192,10 @@ if ($method === 'POST') {
 }
 
 // ============================================================
-// PUT — 딜 수정 (매핑 필드만 UPDATE, WHERE b_no = ? AND dbname = 'bbs61')
+// PUT — 딜 수정 (매핑 필드만 UPDATE, on_num 기준)
+// 주의: on_regist, on_subject, on_username, on_phone, on_email,
+//       on_fax, on_option1, on_option2, on_content 등
+//       문의 원본 데이터도 수정 가능 (관리자 편집 용도)
 // ============================================================
 if ($method === 'PUT') {
     $input = json_decode(file_get_contents('php://input'), true);
@@ -167,17 +206,14 @@ if ($method === 'PUT') {
         exit;
     }
 
-    $now = date('Y-m-d H:i:s');
-
-    // 매핑 필드만 수정, dbname 조건으로 이 게시판 데이터만 대상
-    $sql = "UPDATE Gn_Board_Item_bbs61 SET
-                b_modify = ?,
-                b_category = ?, b_subject = ?, b_writer = ?,
-                b_ex1 = ?, b_ex2 = ?, b_email = ?, b_ex3 = ?,
-                b_ex4 = ?, b_ex5 = ?, b_ex6 = ?, b_ex7 = ?,
-                b_ex8 = ?, b_ex9 = ?, b_content = ?, b_ex10 = ?,
-                b_link1 = ?, b_link2 = ?
-            WHERE b_no = ? AND dbname = 'bbs61'";
+    $sql = "UPDATE Gn_Online SET
+                on_subject = ?, on_username = ?, on_mobile = ?,
+                on_phone = ?, on_email = ?, on_fax = ?,
+                on_option1 = ?, on_option2 = ?,
+                on_content = ?, on_memo = ?, on_viewch = ?,
+                on_option3 = ?, on_option4 = ?, on_option5 = ?,
+                on_link1 = ?, on_link2 = ?, on_visit_date = ?
+            WHERE on_num = ?";
 
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
@@ -187,32 +223,32 @@ if ($method === 'PUT') {
         exit;
     }
 
-    $status = isset($input['status']) ? $input['status'] : 'new';
     $company = isset($input['company']) ? $input['company'] : '';
     $contactName = isset($input['contactName']) ? $input['contactName'] : '';
     $contactPosition = isset($input['contactPosition']) ? $input['contactPosition'] : '';
     $phone = isset($input['phone']) ? $input['phone'] : '';
     $email = isset($input['email']) ? $input['email'] : '';
-    $desiredService = isset($input['desiredService']) ? $input['desiredService'] : '';
-    $totalQuantity = isset($input['totalQuantity']) ? strval($input['totalQuantity']) : '0';
-    $quotationAmount = isset($input['quotationAmount']) ? $input['quotationAmount'] : '';
-    $salesManager = isset($input['salesManager']) ? $input['salesManager'] : '';
-    $successStatus = isset($input['successStatus']) ? $input['successStatus'] : 'in-progress';
-    $isChecked = (!empty($input['isChecked']) && $input['isChecked']) ? '1' : '0';
     $address = isset($input['address']) ? $input['address'] : '';
-    $requirements = isset($input['requirements']) ? $input['requirements'] : '';
+    $desiredService = isset($input['desiredService']) ? $input['desiredService'] : '';
     $detailedQuantity = isset($input['detailedQuantity']) ? $input['detailedQuantity'] : '';
-    $confirmedWorkDate = isset($input['confirmedWorkDate']) ? $input['confirmedWorkDate'] : '';
+    $requirements = isset($input['requirements']) ? $input['requirements'] : '';
     $managementMemo = isset($input['managementMemo']) ? $input['managementMemo'] : '';
+    $isChecked = (!empty($input['isChecked']) && $input['isChecked']) ? '1' : '0';
+    $status = isset($input['status']) ? $input['status'] : 'new';
+    $successStatus = isset($input['successStatus']) ? $input['successStatus'] : 'in-progress';
+    $salesManager = isset($input['salesManager']) ? $input['salesManager'] : '';
+    $quotationAmount = isset($input['quotationAmount']) ? $input['quotationAmount'] : '';
+    $confirmedWorkDate = isset($input['confirmedWorkDate']) ? $input['confirmedWorkDate'] : '';
+    $totalQuantity = isset($input['totalQuantity']) ? strval($input['totalQuantity']) : '';
     $id = intval($input['id']);
 
-    $stmt->bind_param('ssssssssssssssssssi',
-        $now,
-        $status, $company, $contactName,
-        $contactPosition, $phone, $email, $desiredService,
-        $totalQuantity, $quotationAmount, $salesManager, $successStatus,
-        $isChecked, $address, $requirements, $detailedQuantity,
-        $confirmedWorkDate, $managementMemo,
+    $stmt->bind_param('sssssssssssssssssi',
+        $company, $contactName, $contactPosition,
+        $phone, $email, $address,
+        $desiredService, $detailedQuantity,
+        $requirements, $managementMemo, $isChecked,
+        $status, $successStatus, $salesManager,
+        $quotationAmount, $confirmedWorkDate, $totalQuantity,
         $id
     );
 
@@ -231,7 +267,7 @@ if ($method === 'PUT') {
 }
 
 // ============================================================
-// DELETE — 딜 삭제 (단건만, dbname 조건으로 안전하게)
+// DELETE — 딜 삭제 (단건만, on_site 조건으로 안전하게)
 // ============================================================
 if ($method === 'DELETE') {
     $input = json_decode(file_get_contents('php://input'), true);
@@ -242,7 +278,7 @@ if ($method === 'DELETE') {
         exit;
     }
 
-    $sql = "DELETE FROM Gn_Board_Item_bbs61 WHERE b_no = ? AND dbname = 'bbs61' LIMIT 1";
+    $sql = "DELETE FROM Gn_Online WHERE on_num = ? AND on_site = 'airtor2014' LIMIT 1";
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
         http_response_code(500);
