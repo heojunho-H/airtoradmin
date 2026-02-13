@@ -92,6 +92,46 @@ interface Customer {
   memo: string; // 메모장
 }
 
+// API에서 고객 데이터를 조회
+export async function fetchCustomers(): Promise<Customer[]> {
+  const response = await fetch('/api/customers');
+  if (!response.ok) throw new Error('고객 데이터 조회 실패');
+  const result = await response.json();
+  return result.data || [];
+}
+
+// API에 고객 데이터를 저장 (추가)
+export async function createCustomer(customer: Omit<Customer, 'id'>): Promise<number> {
+  const response = await fetch('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(customer),
+  });
+  if (!response.ok) throw new Error('고객 추가 실패');
+  const result = await response.json();
+  return result.id;
+}
+
+// API에 고객 데이터를 수정
+export async function updateCustomer(customer: Customer): Promise<void> {
+  const response = await fetch('/api/customers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(customer),
+  });
+  if (!response.ok) throw new Error('고객 수정 실패');
+}
+
+// API에 고객 데이터를 삭제
+export async function deleteCustomer(id: number): Promise<void> {
+  const response = await fetch('/api/customers', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!response.ok) throw new Error('고객 삭제 실패');
+}
+
 export const initialCustomers: Customer[] = [
   {
     id: 1,
@@ -910,24 +950,29 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
   };
 
   // 고객 정보 업데이트 핸들러
-  const updateCustomerField = (customerId: string, field: string, value: any) => {
-    setCustomers(customers.map(customer => 
+  const updateCustomerField = (customerId: any, field: string, value: any) => {
+    const updated = customers.map(customer =>
       customer.id === customerId ? { ...customer, [field]: value } : customer
-    ));
-    
+    );
+    setCustomers(updated);
+
     // 선택된 고객이 업데이트된 경우 상세 정보도 업데이트
     if (selectedCustomer && selectedCustomer.id === customerId) {
       setSelectedCustomer({ ...selectedCustomer, [field]: value });
     }
-    
+
     setEditingCell(null);
+    // DB에 업데이트
+    const target = updated.find(c => c.id === customerId);
+    if (target) updateCustomer(target).catch(err => console.error('고객 수정 API 실패:', err));
   };
 
   // 고객 삭제 핸들러
-  const handleDeleteCustomer = (customerId: string, customerName: string) => {
+  const handleDeleteCustomer = (customerId: any, customerName: string) => {
     if (confirm(`${customerName} 고객을 삭제하시겠습니까?`)) {
       setCustomers(customers.filter(customer => customer.id !== customerId));
       onNotification?.(`[${customerName}] 고객이 삭제되었습니다`);
+      deleteCustomer(Number(customerId)).catch(err => console.error('고객 삭제 API 실패:', err));
     }
   };
 
@@ -990,6 +1035,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     setIsEditing(false);
     setEditedCustomer(null);
     onNotification?.(`[${editedCustomer.company}] 고객 정보가 수정되었습니다`);
+    updateCustomer(editedCustomer).catch(err => console.error('고객 수정 API 실패:', err));
   };
 
   // 편집 중인 고객 필드 업데이트
@@ -1019,15 +1065,13 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     nextDate.setDate(nextDate.getDate() + (newCustomer.managementCycle || 30));
     const nextManagementDate = nextDate.toISOString().split('T')[0];
 
-    const customer: Customer = {
-      id: `CUST${String(customers.length + 1).padStart(3, '0')}`,
+    const customerData: any = {
       company: newCustomer.company,
       grade: newCustomer.grade || 'B',
-      status: newCustomer.status || '신규',
-      industry: newCustomer.industry || '',
-      region: newCustomer.region || '',
+      customerStatus: newCustomer.status || '신규',
+      contactName: newCustomer.contactName || '',
+      contactPosition: newCustomer.contactPosition || '',
       lastWorkDate: today,
-      totalWorks: 0,
       totalQuantity: 0,
       totalAmount: 0,
       deals: 0,
@@ -1037,15 +1081,24 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
       accountManager: newCustomer.accountManager || '',
       phone: newCustomer.phone,
       email: newCustomer.email || '',
+      address: newCustomer.address || '',
+      fieldManager: '',
       workHistory: [],
       emailHistory: [],
       internalNotes: [],
+      detailedQuantity: [],
       memo: '',
     };
 
+    // 먼저 임시 id로 UI 업데이트 후, API 호출로 실제 id 반영
+    const tempId = Date.now();
+    const customer = { ...customerData, id: tempId } as Customer;
     setCustomers([customer, ...customers]);
     setShowAddCustomerModal(false);
     onNotification?.(`[${customer.company}] 새 고객이 등록되었습니다`);
+    createCustomer(customerData).then(newId => {
+      setCustomers(prev => prev.map(c => c.id === tempId ? { ...c, id: newId } : c));
+    }).catch(err => console.error('고객 추가 API 실패:', err));
     setNewCustomer({
       company: '',
       grade: 'B',

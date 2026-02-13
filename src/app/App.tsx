@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
-import { CustomersPage, initialCustomers } from './components/CustomersPage';
+import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals } from './components/SalesPage';
-import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
+import { SupplyChainPage, fetchManagers, fetchSubcontractors } from './components/SupplyChainPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
 // Deal 데이터를 Customer 형식으로 변환
@@ -75,15 +75,24 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [managers, setManagers] = useState(initialCustomerManagers);
-  const [subcontractors, setSubcontractors] = useState(initialSubcontractors);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [managers, setManagers] = useState<any[]>([]);
+  const [subcontractors, setSubcontractors] = useState<any[]>([]);
 
-  // DB에서 딜 데이터 로드
+  // DB에서 데이터 로드
   useEffect(() => {
     fetchDeals()
       .then((data) => setDeals(data))
       .catch((err) => console.error('딜 데이터 로드 실패:', err));
+    fetchCustomers()
+      .then((data) => setCustomers(data))
+      .catch((err) => console.error('고객 데이터 로드 실패:', err));
+    fetchManagers()
+      .then((data) => setManagers(data))
+      .catch((err) => console.error('고객책임자 데이터 로드 실패:', err));
+    fetchSubcontractors()
+      .then((data) => setSubcontractors(data))
+      .catch((err) => console.error('작업팀장 데이터 로드 실패:', err));
   }, []);
 
   // 알림 시스템

@@ -110,6 +110,80 @@ interface EvaluationRecord {
   memo?: string;
 }
 
+// === 고객책임자 API ===
+export async function fetchManagers(): Promise<CustomerManager[]> {
+  const response = await fetch('/api/managers');
+  if (!response.ok) throw new Error('고객책임자 데이터 조회 실패');
+  const result = await response.json();
+  return result.data || [];
+}
+
+export async function createManager(manager: Omit<CustomerManager, 'id'>): Promise<number> {
+  const response = await fetch('/api/managers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(manager),
+  });
+  if (!response.ok) throw new Error('고객책임자 추가 실패');
+  const result = await response.json();
+  return result.id;
+}
+
+export async function updateManager(manager: CustomerManager): Promise<void> {
+  const response = await fetch('/api/managers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(manager),
+  });
+  if (!response.ok) throw new Error('고객책임자 수정 실패');
+}
+
+export async function deleteManager(id: number): Promise<void> {
+  const response = await fetch('/api/managers', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!response.ok) throw new Error('고객책임자 삭제 실패');
+}
+
+// === 작업팀장/하청 API ===
+export async function fetchSubcontractors(): Promise<SubcontractorManager[]> {
+  const response = await fetch('/api/subcontractors');
+  if (!response.ok) throw new Error('작업팀장 데이터 조회 실패');
+  const result = await response.json();
+  return result.data || [];
+}
+
+export async function createSubcontractor(sub: Omit<SubcontractorManager, 'id'>): Promise<number> {
+  const response = await fetch('/api/subcontractors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub),
+  });
+  if (!response.ok) throw new Error('작업팀장 추가 실패');
+  const result = await response.json();
+  return result.id;
+}
+
+export async function updateSubcontractor(sub: SubcontractorManager): Promise<void> {
+  const response = await fetch('/api/subcontractors', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub),
+  });
+  if (!response.ok) throw new Error('작업팀장 수정 실패');
+}
+
+export async function deleteSubcontractor(id: number): Promise<void> {
+  const response = await fetch('/api/subcontractors', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!response.ok) throw new Error('작업팀장 삭제 실패');
+}
+
 export const initialCustomerManagers: CustomerManager[] = [
   {
     id: 1,
@@ -882,7 +956,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
   const handleDelete = (e: React.MouseEvent, id: number, name: string) => {
     e.stopPropagation();
     if (confirm(`${name}을(를) 삭제하시겠습니까?`)) {
-      // 삭제 로직 (실제로는 상태 업데이트 또는 API 호출)
+      if (activeTab === 'managers') {
+        setManagers(managers.filter(m => m.id !== id));
+        deleteManager(id).catch(err => console.error('고객책임자 삭제 API 실패:', err));
+      } else {
+        setSubcontractors(subcontractors.filter(s => s.id !== id));
+        deleteSubcontractor(id).catch(err => console.error('작업팀장 삭제 API 실패:', err));
+      }
       alert('삭제되었습니다.');
       onNotification?.(`[${name}] 삭제되었습니다`);
     }
@@ -905,6 +985,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       setIsEditingManager(false);
       alert('정보가 저장되었습니다.');
       onNotification?.(`[${editedManager.name}] 고객책임자 정보가 수정되었습니다`);
+      updateManager(editedManager).catch(err => console.error('고객책임자 수정 API 실패:', err));
     }
   };
 
@@ -928,6 +1009,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
         setSelectedManager(updatedManager);
         alert('작업이 삭제되었습니다.');
         onNotification?.(`[${selectedManager.name}] "${projectName}" 작업이 삭제되었습니다`);
+        updateManager(updatedManager).catch(err => console.error('고객책임자 수정 API 실패:', err));
       }
     }
   };
@@ -949,6 +1031,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       setIsEditingSubcontractor(false);
       alert('정보가 저장되었습니다.');
       onNotification?.(`[${editedSubcontractor.name}] 작업팀장 정보가 수정되었습니다`);
+      updateSubcontractor(editedSubcontractor).catch(err => console.error('작업팀장 수정 API 실패:', err));
     }
   };
 
@@ -972,6 +1055,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
         setSelectedSubcontractor(updatedSubcontractor);
         alert('작업이 삭제되었습니다.');
         onNotification?.(`[${selectedSubcontractor.name}] "${projectName}" 작업이 삭제되었습니다`);
+        updateSubcontractor(updatedSubcontractor).catch(err => console.error('작업팀장 수정 API 실패:', err));
       }
     }
   };
@@ -1042,6 +1126,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     setShowAddManagerModal(false);
     alert('책임자가 등록되었습니다.');
     onNotification?.(`[${newManagerData.name}] 새 고객책임자가 등록되었습니다`);
+    const tempId = newManagerData.id;
+    createManager(newManagerData).then(newId => {
+      setManagers(prev => prev.map(m => m.id === tempId ? { ...m, id: newId } : m));
+    }).catch(err => console.error('고객책임자 추가 API 실패:', err));
   };
 
   // 작업팀장 등록 모달 열기 핸들러
@@ -1122,6 +1210,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     setShowAddSubcontractorModal(false);
     alert('작업팀장이 등록되었습니다.');
     onNotification?.(`[${newSubcontractorData.name}] 새 작업팀장이 등록되었습니다`);
+    const tempId = newSubcontractorData.id;
+    createSubcontractor(newSubcontractorData).then(newId => {
+      setSubcontractors(prev => prev.map(s => s.id === tempId ? { ...s, id: newId } : s));
+    }).catch(err => console.error('작업팀장 추가 API 실패:', err));
   };
 
   return (

@@ -27,6 +27,21 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => '/api/deals_api.php',
       },
+      '/api/customers': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+        rewrite: () => '/api/customers_api.php',
+      },
+      '/api/managers': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+        rewrite: () => '/api/managers_api.php',
+      },
+      '/api/subcontractors': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+        rewrite: () => '/api/subcontractors_api.php',
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
