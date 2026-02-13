@@ -60,176 +60,45 @@ interface Deal {
   managementMemo: string; // 관리 메모
 }
 
-export const initialDeals: Deal[] = [
-  {
-    id: 1,
-    registrationDate: '2024-02-01',
-    status: 'price-negotiation',
-    company: '삼성전자',
-    contactName: '이재용',
-    contactPosition: '구매팀 과장',
-    phone: '010-1234-5678',
-    email: 'lee.jy@samsung.com',
-    desiredService: 'ERP 시스템 구축',
-    totalQuantity: 250,
-    quotationAmount: '₩12,500만',
-    salesManager: '김민수',
-    successStatus: 'in-progress',
-    isChecked: true,
-    address: '서울특별시 서초구 서초대로 74길 11',
-    requirements: '기존 레거시 시스템과의 통합 필요, 3개월 내 구축 완료 희망',
-    detailedQuantity: '라이선스 250개, 서버 5대, 교육 10회',
-    confirmedWorkDate: '2024-03-15',
-    managementMemo: 'VIP 고객, 최우선 대응 필요. 경쟁사 제안서 검토 중',
-  },
-  {
-    id: 2,
-    registrationDate: '2024-01-28',
-    status: 'quote-call',
-    company: 'LG유플러스',
-    contactName: '박민영',
-    contactPosition: 'IT기획팀 차장',
-    phone: '010-2345-6789',
-    email: 'park.my@lguplus.co.kr',
-    desiredService: 'CRM 솔루션',
-    totalQuantity: 150,
-    quotationAmount: '₩4,500만',
-    salesManager: '이영희',
-    successStatus: 'in-progress',
-    isChecked: true,
-    address: '서울특별시 용산구 한강대로 32',
-    requirements: '모바일 앱 포함, 기존 시스템 데이터 마이그레이션',
-    detailedQuantity: '사용자 계정 150개, 모바일 라이선스 150개',
-    confirmedWorkDate: '2024-03-01',
-    managementMemo: '예산 심의 중, 다음 주 최종 결정 예정',
-  },
-  {
-    id: 3,
-    registrationDate: '2024-02-03',
-    status: 'schedule',
-    company: '현대자동차',
-    contactName: '정의선',
-    contactPosition: '디지털혁신본부장',
-    phone: '010-3456-7890',
-    email: 'jung.es@hyundai.com',
-    desiredService: '데이터 분석 플랫폼',
-    totalQuantity: 500,
-    quotationAmount: '₩8,900만',
-    salesManager: '박준호',
-    successStatus: 'in-progress',
-    isChecked: true,
-    address: '서울특별시 서초구 헌릉로 12',
-    requirements: 'AI 기반 예측 분석 기능 필수, 실시간 대시보드',
-    detailedQuantity: '동시접속 500명, 데이터 저장소 10TB',
-    confirmedWorkDate: '2024-02-28',
-    managementMemo: '대형 프로젝트, 단계별 구축 검토 중',
-  },
-  {
-    id: 4,
-    registrationDate: '2024-01-25',
-    status: 'call',
-    company: '네이버',
-    contactName: '최수연',
-    contactPosition: '인프라팀 팀장',
-    phone: '010-4567-8901',
-    email: 'choi.sy@naver.com',
-    desiredService: '클라우드 인프라 구축',
-    totalQuantity: 100,
-    quotationAmount: '₩3,200만',
-    salesManager: '최서연',
-    successStatus: 'in-progress',
-    isChecked: false,
-    address: '경기도 성남시 분당구 정자일로 95',
-    requirements: 'AWS 기반 구축, 고가용성 필수',
-    detailedQuantity: 'EC2 인스턴스 100개, RDS 10개',
-    confirmedWorkDate: '',
-    managementMemo: '초기 상담 단계, 요구사항 파악 필요',
-  },
-  {
-    id: 5,
-    registrationDate: '2024-02-05',
-    status: 'confirmed',
-    company: 'KB금융',
-    contactName: '윤종규',
-    contactPosition: '보안담당 임원',
-    phone: '010-5678-9012',
-    email: 'yoon.jk@kbfg.com',
-    desiredService: '보안 솔루션',
-    totalQuantity: 300,
-    quotationAmount: '₩6,700만',
-    salesManager: '정우성',
-    successStatus: 'success',
-    isChecked: true,
-    address: '서울특별시 중구 을지로 79',
-    requirements: '금융권 보안 규정 준수, 정기 점검 서비스 포함',
-    detailedQuantity: '방화벽 5대, 백신 라이선스 300개, 연간 유지보수',
-    confirmedWorkDate: '2024-02-12',
-    managementMemo: '계약 완료, 구축 일정 조율 중',
-  },
-  {
-    id: 6,
-    registrationDate: '2024-01-30',
-    status: 'quote-sent',
-    company: '카카오',
-    contactName: '여민수',
-    contactPosition: '서비스기획팀 부장',
-    phone: '010-6789-0123',
-    email: 'yeo.ms@kakao.com',
-    desiredService: 'AI 챗봇 시스템',
-    totalQuantity: 80,
-    quotationAmount: '₩2,800만',
-    salesManager: '강지민',
-    successStatus: 'in-progress',
-    isChecked: true,
-    address: '제주특별자치도 제주시 첨단로 242',
-    requirements: '다국어 지원, 자연어 처리 고도화',
-    detailedQuantity: '챗봇 인스턴스 80개, 학습 데이터 구축',
-    confirmedWorkDate: '',
-    managementMemo: '견적서 발송 완료, 검토 기간 1주일',
-  },
-  {
-    id: 7,
-    registrationDate: '2024-01-20',
-    status: 'new',
-    company: 'SK하이닉스',
-    contactName: '박정호',
-    contactPosition: 'IT개발팀 과장',
-    phone: '010-7890-1234',
-    email: 'park.jh@skhynix.com',
-    desiredService: '모바일 앱 개발',
-    totalQuantity: 200,
-    quotationAmount: '₩9,500만',
-    salesManager: '윤소희',
-    successStatus: 'in-progress',
-    isChecked: false,
-    address: '경기도 이천시 부발읍 경충대로 2091',
-    requirements: 'iOS/Android 동시 개발, 반응형 디자인',
-    detailedQuantity: '앱 2종, 유지보수 12개월',
-    confirmedWorkDate: '',
-    managementMemo: '신규 문의, 1차 미팅 예정',
-  },
-  {
-    id: 8,
-    registrationDate: '2024-02-07',
-    status: 'confirmed',
-    company: 'LG전자',
-    contactName: '조주완',
-    contactPosition: '마케팅본부 이사',
-    phone: '010-8901-2345',
-    email: 'cho.jw@lge.com',
-    desiredService: '웹사이트 리뉴얼',
-    totalQuantity: 50,
-    quotationAmount: '₩1,800만',
-    salesManager: '임태훈',
-    successStatus: 'success',
-    isChecked: true,
-    address: '서울특별시 영등포구 여의대로 128',
-    requirements: '반응형 웹, SEO 최적화, CMS 구축',
-    detailedQuantity: '메인 페이지 10개, 서브 페이지 40개',
-    confirmedWorkDate: '2024-02-08',
-    managementMemo: '계약 완료, 착수금 입금 완료',
-  },
-];
+// API에서 딜 데이터를 조회
+export async function fetchDeals(): Promise<Deal[]> {
+  const response = await fetch('/api/deals');
+  if (!response.ok) throw new Error('딜 데이터 조회 실패');
+  const result = await response.json();
+  return result.data || [];
+}
+
+// API에 딜 데이터를 저장 (추가)
+export async function createDeal(deal: Omit<Deal, 'id'>): Promise<number> {
+  const response = await fetch('/api/deals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(deal),
+  });
+  if (!response.ok) throw new Error('딜 추가 실패');
+  const result = await response.json();
+  return result.id;
+}
+
+// API에 딜 데이터를 수정
+export async function updateDeal(deal: Deal): Promise<void> {
+  const response = await fetch('/api/deals', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(deal),
+  });
+  if (!response.ok) throw new Error('딜 수정 실패');
+}
+
+// API에 딜 데이터를 삭제
+export async function deleteDeal(id: number): Promise<void> {
+  const response = await fetch('/api/deals', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!response.ok) throw new Error('딜 삭제 실패');
+}
 
 const customerJourneyStages = [
   { id: 'new', name: '신규', icon: User, color: 'blue' },
@@ -255,7 +124,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
   const [editingSalesManagerId, setEditingSalesManagerId] = useState<number | null>(null);
-  const [internalDealsData, setInternalDealsData] = useState<Deal[]>(initialDeals);
+  const [internalDealsData, setInternalDealsData] = useState<Deal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const dealsData = externalDealsState ? externalDealsState[0] : internalDealsData;
   const setDealsData = externalDealsState ? externalDealsState[1] : setInternalDealsData;
   const [isEditMode, setIsEditMode] = useState(false);
@@ -268,6 +138,21 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
+  // DB에서 딜 데이터 로드
+  useEffect(() => {
+    fetchDeals()
+      .then((data) => {
+        if (!externalDealsState) {
+          setInternalDealsData(data);
+        }
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error('딜 데이터 로드 실패:', err);
+        setIsLoading(false);
+      });
+  }, []);
+
   // 모바일 감지
   useEffect(() => {
     const checkMobile = () => {
@@ -567,104 +452,103 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
     (minAmount !== '' ? 1 : 0) +
     (maxAmount !== '' ? 1 : 0);
 
-  const handleDeleteDeal = (dealId: number, e: React.MouseEvent) => {
+  const handleDeleteDeal = async (dealId: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     const dealToDelete = dealsData.find(d => d.id === dealId);
     if (!dealToDelete) return;
-    
+
     if (window.confirm(`"${dealToDelete.company}" 거래를 삭제하시겠습니까?`)) {
-      setDealsData(dealsData.filter(deal => deal.id !== dealId));
-      if (selectedDeal?.id === dealId) {
-        setSelectedDeal(null);
+      try {
+        await deleteDeal(dealId);
+        setDealsData(dealsData.filter(deal => deal.id !== dealId));
+        if (selectedDeal?.id === dealId) {
+          setSelectedDeal(null);
+        }
+        onNotification?.(`[${dealToDelete.company}] 거래가 삭제되었습니다`);
+      } catch (err) {
+        alert('거래 삭제에 실패했습니다.');
+        console.error(err);
       }
-      onNotification?.(`[${dealToDelete.company}] 거래가 삭제되었습니다`);
     }
   };
 
   const handleStatusChange = (dealId: number, newStatus: Deal['status']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
+    if (!targetDeal) return;
+
+    const updatedDeal = {
+      ...targetDeal,
+      status: newStatus,
+      successStatus: newStatus === 'confirmed' ? 'success' as const : targetDeal.successStatus
+    };
+
+    // DB에 저장 (비동기, UI는 즉시 반영)
+    updateDeal(updatedDeal).catch((err) => console.error('상태 변경 저장 실패:', err));
+
     setDealsData((prevDeals) =>
-      prevDeals.map((deal) =>
-        deal.id === dealId
-          ? {
-              ...deal,
-              status: newStatus,
-              // 수주확정으로 변경되면 성공여부를 자동으로 '성공'으로 변경
-              successStatus: newStatus === 'confirmed' ? 'success' : deal.successStatus
-            }
-          : deal
-      )
+      prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
     );
     setEditingStatusId(null);
 
-    // Update selected deal if it's open
     if (selectedDeal && selectedDeal.id === dealId) {
-      setSelectedDeal((prev) => prev ? {
-        ...prev,
-        status: newStatus,
-        // 수주확정으로 변경되면 성공여부를 자동으로 '성공'으로 변경
-        successStatus: newStatus === 'confirmed' ? 'success' : prev.successStatus
-      } : null);
+      setSelectedDeal(updatedDeal);
     }
 
-    if (targetDeal) {
-      onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
-    }
+    onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
 
     // 수주확정 시 고객 관리 페이지에 자동 등록
     if (newStatus === 'confirmed' && onDealSuccess) {
-      const deal = dealsData.find((d) => d.id === dealId);
-      if (deal) {
-        onDealSuccess({ ...deal, status: 'confirmed', successStatus: 'success' });
-      }
+      onDealSuccess(updatedDeal);
     }
   };
 
   const handleSuccessStatusChange = (dealId: number, newSuccessStatus: Deal['successStatus']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
+    if (!targetDeal) return;
+
+    const updatedDeal = { ...targetDeal, successStatus: newSuccessStatus };
+
+    // DB에 저장
+    updateDeal(updatedDeal).catch((err) => console.error('성공여부 변경 저장 실패:', err));
+
     setDealsData((prevDeals) =>
-      prevDeals.map((deal) =>
-        deal.id === dealId ? { ...deal, successStatus: newSuccessStatus } : deal
-      )
+      prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
     );
     setEditingSuccessStatusId(null);
 
-    // Update selected deal if it's open
     if (selectedDeal && selectedDeal.id === dealId) {
-      setSelectedDeal((prev) => prev ? { ...prev, successStatus: newSuccessStatus } : null);
+      setSelectedDeal(updatedDeal);
     }
 
     const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : '진행중';
-    if (targetDeal) {
-      onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
-    }
+    onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
 
     // 성공으로 변경 시 고객 관리 페이지에 자동 등록
     if (newSuccessStatus === 'success' && onDealSuccess) {
-      const deal = dealsData.find((d) => d.id === dealId);
-      if (deal) {
-        onDealSuccess({ ...deal, successStatus: 'success' });
-      }
+      onDealSuccess(updatedDeal);
     }
   };
 
   const handleSalesManagerInlineChange = (dealId: number, newManager: string) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
+    if (!targetDeal) return;
+
+    const updatedDeal = { ...targetDeal, salesManager: newManager };
+
+    // DB에 저장
+    updateDeal(updatedDeal).catch((err) => console.error('담당자 변경 저장 실패:', err));
+
     setDealsData((prevDeals) =>
-      prevDeals.map((deal) =>
-        deal.id === dealId ? { ...deal, salesManager: newManager } : deal
-      )
+      prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
     );
     setEditingSalesManagerId(null);
 
     if (selectedDeal && selectedDeal.id === dealId) {
-      setSelectedDeal((prev) => prev ? { ...prev, salesManager: newManager } : null);
+      setSelectedDeal(updatedDeal);
     }
 
-    if (targetDeal) {
-      onNotification?.(`[${targetDeal.company}] 담당자가 "${newManager}"(으)로 변경되었습니다`);
-    }
+    onNotification?.(`[${targetDeal.company}] 담당자가 "${newManager}"(으)로 변경되었습니다`);
   };
 
   const handleEditClick = () => {
@@ -681,7 +565,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editedDeal) {
       if (isAddingNewDeal) {
         // 필수 입력: 전화번호, 기업명
@@ -689,22 +573,35 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
           alert('전화번호와 기업명은 필수 입력 항목입니다.');
           return;
         }
-        // 새 거래 추가
-        const newId = Math.max(...dealsData.map(d => d.id), 0) + 1;
-        const newDeal = { ...editedDeal, id: newId };
-        setDealsData((prevDeals) => [...prevDeals, newDeal]);
-        setSelectedDeal(null);
-        setIsAddingNewDeal(false);
-        onNotification?.(`[${editedDeal.company}] 새 거래가 등록되었습니다`);
+        // 새 거래 추가 — DB 저장
+        try {
+          const newId = await createDeal(editedDeal);
+          const newDeal = { ...editedDeal, id: newId };
+          setDealsData((prevDeals) => [...prevDeals, newDeal]);
+          setSelectedDeal(null);
+          setIsAddingNewDeal(false);
+          onNotification?.(`[${editedDeal.company}] 새 거래가 등록되었습니다`);
+        } catch (err) {
+          alert('거래 등록에 실패했습니다. 다시 시도해주세요.');
+          console.error(err);
+          return;
+        }
       } else {
-        // 기존 거래 수정
-        setDealsData((prevDeals) =>
-          prevDeals.map((deal) =>
-            deal.id === editedDeal.id ? editedDeal : deal
-          )
-        );
-        setSelectedDeal(editedDeal);
-        onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
+        // 기존 거래 수정 — DB 저장
+        try {
+          await updateDeal(editedDeal);
+          setDealsData((prevDeals) =>
+            prevDeals.map((deal) =>
+              deal.id === editedDeal.id ? editedDeal : deal
+            )
+          );
+          setSelectedDeal(editedDeal);
+          onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
+        } catch (err) {
+          alert('거래 수정에 실패했습니다. 다시 시도해주세요.');
+          console.error(err);
+          return;
+        }
       }
       setIsEditMode(false);
       setEditedDeal(null);

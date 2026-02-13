@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, initialCustomers } from './components/CustomersPage';
-import { SalesPage, initialDeals } from './components/SalesPage';
+import { SalesPage, fetchDeals } from './components/SalesPage';
 import { SupplyChainPage, initialCustomerManagers, initialSubcontractors } from './components/SupplyChainPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
@@ -74,10 +74,17 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
-  const [deals, setDeals] = useState(initialDeals);
+  const [deals, setDeals] = useState<any[]>([]);
   const [customers, setCustomers] = useState(initialCustomers);
   const [managers, setManagers] = useState(initialCustomerManagers);
   const [subcontractors, setSubcontractors] = useState(initialSubcontractors);
+
+  // DB에서 딜 데이터 로드
+  useEffect(() => {
+    fetchDeals()
+      .then((data) => setDeals(data))
+      .catch((err) => console.error('딜 데이터 로드 실패:', err));
+  }, []);
 
   // 알림 시스템
   type Notification = {

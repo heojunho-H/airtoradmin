@@ -22,6 +22,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => `/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       },
+      '/api/deals': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+        rewrite: () => '/api/deals_api.php',
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
