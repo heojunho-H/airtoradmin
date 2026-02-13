@@ -3,6 +3,7 @@
 
 interface Env {
   GEMINI_API_KEY: string;
+  ALLOWED_ORIGIN?: string;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -12,10 +13,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
       },
     });
   }
+
+  const allowedOrigin = context.env.ALLOWED_ORIGIN || 'https://airtoradmin.pages.dev';
 
   const body = await context.request.text();
 
@@ -34,17 +36,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     status: response.status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
     },
   });
 };
 
 // OPTIONS preflight 처리
-export const onRequestOptions: PagesFunction = async () => {
+export const onRequestOptions: PagesFunction<Env> = async (context) => {
+  const allowedOrigin = context.env.ALLOWED_ORIGIN || 'https://airtoradmin.pages.dev';
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
