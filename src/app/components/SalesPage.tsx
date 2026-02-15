@@ -2106,6 +2106,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   const dqData = parseDetailedQuantity(editedDeal?.detailedQuantity || '');
                   const updateDQ = (updated: DetailedQuantityData) => {
                     handleFieldChange('detailedQuantity', serializeDetailedQuantity(updated));
+                    const total = Object.values(updated.categories).reduce((s, v) => s + (v || 0), 0)
+                      + updated.others.reduce((s, o) => s + (o.quantity || 0), 0);
+                    handleFieldChange('totalQuantity', total);
                   };
                   return (
                     <div className="space-y-3">
