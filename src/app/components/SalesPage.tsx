@@ -2205,17 +2205,27 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     <StickyNote className="w-4 h-4" />
                     관리 메모
                   </h4>
-                  {isEditMode ? (
-                    <textarea
-                      value={editedDeal?.managementMemo || ''}
-                      onChange={(e) => handleFieldChange('managementMemo', e.target.value)}
-                      placeholder="내부 관리용 메모를 입력하세요"
-                      rows={3}
-                      className="w-full px-3 py-2 text-[15px] text-indigo-900 bg-white border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                    />
-                  ) : (
-                    <p className="text-[15px] text-indigo-900">{selectedDeal.managementMemo}</p>
-                  )}
+                  <textarea
+                    value={isEditMode ? (editedDeal?.managementMemo || '') : (selectedDeal.managementMemo || '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (isEditMode) {
+                        handleFieldChange('managementMemo', value);
+                      } else {
+                        const updatedDeal = { ...selectedDeal, managementMemo: value };
+                        setSelectedDeal(updatedDeal);
+                        setDealsData(prev => prev.map(d => d.id === updatedDeal.id ? updatedDeal : d));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!isEditMode && selectedDeal) {
+                        updateDeal(selectedDeal).catch(err => console.error('관리 메모 저장 실패:', err));
+                      }
+                    }}
+                    placeholder="내부 관리용 메모를 입력하세요"
+                    rows={3}
+                    className="w-full px-3 py-2 text-[15px] text-indigo-900 bg-white border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
                 </div>
               </div>
 
