@@ -50,8 +50,9 @@ if (!$rname) {
     exit;
 }
 
-// Gnuboard 표준 온라인 상담 파일 경로
+// Gnuboard 온라인 상담 파일 경로
 $fileDirs = array(
+    $_SERVER['DOCUMENT_ROOT'] . '/online/data/',
     $_SERVER['DOCUMENT_ROOT'] . '/data/file/online/',
     $_SERVER['DOCUMENT_ROOT'] . '/data/online/',
     $_SERVER['DOCUMENT_ROOT'] . '/data/file/',
