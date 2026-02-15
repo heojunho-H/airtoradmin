@@ -1591,7 +1591,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       {/* 고객책임자 상세 모달 */}
       {selectedManager && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white md:rounded-2xl w-full max-w-6xl h-full md:h-auto md:max-h-[90vh] overflow-auto">
+          <div className="bg-white md:rounded-2xl w-full max-w-[1600px] h-full md:h-auto md:max-h-[95vh] overflow-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-5 flex items-center justify-between">
               <h2 className="text-[18px] font-semibold text-slate-900">고객책임자 상세 정보</h2>
               <button
@@ -1831,7 +1831,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       {/* 작업팀장(하청) 상세 모달 */}
       {selectedSubcontractor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white md:rounded-2xl w-full max-w-[1400px] h-full md:h-auto md:max-h-[90vh] overflow-auto">
+          <div className="bg-white md:rounded-2xl w-full max-w-[1600px] h-full md:h-auto md:max-h-[95vh] overflow-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-5 flex items-center justify-between">
               <h2 className="text-[18px] font-semibold text-slate-900">작업팀장 상세 정보</h2>
               <button

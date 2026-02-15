@@ -1846,7 +1846,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       {/* Deal Detail Modal */}
       {selectedDeal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white md:rounded-xl shadow-xl max-w-7xl w-full h-full md:h-auto md:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white md:rounded-xl shadow-xl max-w-[1600px] w-full h-full md:h-auto md:max-h-[95vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between z-10">
               <div className="flex-1 min-w-0 mr-3">
                 <h2 className="text-lg md:text-2xl font-semibold text-slate-900 truncate">
