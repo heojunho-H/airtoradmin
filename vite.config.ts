@@ -42,6 +42,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => '/api/subcontractors_api.php',
       },
+      '/api/file_download.php': {
+        target: 'https://airtor.co.kr',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
