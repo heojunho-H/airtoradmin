@@ -12,14 +12,14 @@ $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $fileNum = isset($_GET['file']) ? intval($_GET['file']) : 0;
 
 if ($id <= 0 || $fileNum < 1 || $fileNum > 3) {
-    http_response_code(400);
+    header('HTTP/1.1 400 Bad Request');
     echo 'Invalid parameters';
     exit;
 }
 
 $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
 if ($conn->connect_error) {
-    http_response_code(500);
+    header('HTTP/1.1 500 Internal Server Error');
     echo 'DB connection failed';
     exit;
 }
@@ -34,7 +34,7 @@ $stmt->execute();
 $stmt->bind_result($oname, $rname);
 
 if (!$stmt->fetch()) {
-    http_response_code(404);
+    header('HTTP/1.1 404 Not Found');
     echo 'Deal not found';
     $stmt->close();
     $conn->close();
@@ -45,7 +45,7 @@ $stmt->close();
 $conn->close();
 
 if (!$rname) {
-    http_response_code(404);
+    header('HTTP/1.1 404 Not Found');
     echo 'File not found';
     exit;
 }
@@ -66,7 +66,7 @@ foreach ($fileDirs as $dir) {
 }
 
 if (!$filePath) {
-    http_response_code(404);
+    header('HTTP/1.1 404 Not Found');
     echo 'File not found on disk';
     exit;
 }
@@ -83,7 +83,7 @@ foreach ($fileDirs as $dir) {
 }
 
 if (!$allowed) {
-    http_response_code(403);
+    header('HTTP/1.1 403 Forbidden');
     echo 'Access denied';
     exit;
 }
