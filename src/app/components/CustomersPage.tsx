@@ -846,6 +846,39 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     reminder3: false,
   });
 
+  // 상세수량 JSON 파싱 및 포맷팅 함수
+  const formatDetailedQuantity = (detailedQuantity: string): React.ReactNode => {
+    if (!detailedQuantity) return <span className="text-sm text-slate-400">-</span>;
+    try {
+      const parsed = JSON.parse(detailedQuantity);
+      if (parsed && typeof parsed === 'object' && parsed.categories) {
+        const categories = Object.entries(parsed.categories as Record<string, number>)
+          .filter(([, qty]) => qty > 0);
+        const others = (parsed.others as { name: string; quantity: number }[] || [])
+          .filter((o) => o.name || o.quantity > 0);
+        return (
+          <div className="text-sm text-slate-700 space-y-0.5">
+            {categories.map(([name, qty]) => (
+              <div key={name} className="flex items-center justify-between gap-2">
+                <span className="text-slate-600">{name}</span>
+                <span className="font-medium text-slate-800">{qty}대</span>
+              </div>
+            ))}
+            {others.map((o, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 pt-0.5 border-t border-slate-100">
+                <span className="text-slate-500 text-xs truncate max-w-[150px]" title={o.name}>{o.name}</span>
+                {o.quantity > 0 && <span className="font-medium text-slate-800">{o.quantity}대</span>}
+              </div>
+            ))}
+          </div>
+        );
+      }
+    } catch {
+      // JSON 파싱 실패 시 원본 텍스트 표시
+    }
+    return <span className="text-sm text-slate-700">{detailedQuantity}</span>;
+  };
+
   // 금액 포맷팅 함수 (만, 억 단위)
   const formatAmount = (amount: number): string => {
     if (amount >= 100000000) {
@@ -2307,7 +2340,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
-                                    <span className="text-sm text-slate-700">{work.detailedQuantity}</span>
+                                    formatDetailedQuantity(work.detailedQuantity)
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
