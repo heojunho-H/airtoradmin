@@ -34,6 +34,7 @@ import {
   ChevronUp,
   Trash2,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 
@@ -930,6 +931,56 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     }
   });
 
+  // 내보내기 핸들러
+  const handleExport = () => {
+    const formatAmount = (amount: number): string => {
+      if (amount >= 100000000) {
+        const eok = Math.floor(amount / 100000000);
+        const remainder = amount % 100000000;
+        if (remainder >= 10000) {
+          return `${eok}억 ${Math.floor(remainder / 10000)}만`;
+        }
+        return `${eok}억`;
+      } else if (amount >= 10000) {
+        return `${Math.floor(amount / 10000)}만`;
+      }
+      return amount.toLocaleString();
+    };
+
+    const exportData = sortedCustomers.map((c) => ({
+      '기업명': c.company,
+      '등급': c.grade,
+      '고객상태': c.customerStatus,
+      '담당자명': c.contactName,
+      '직책': c.contactPosition,
+      '작업횟수': c.deals,
+      '최근작업일': c.lastWorkDate,
+      '총수량': c.totalQuantity,
+      '총금액': formatAmount(c.totalAmount),
+      '관리주기(일)': c.managementCycle,
+      '다음관리예정일': c.nextManagementDate,
+      '리마인드상태': c.reminderStatus,
+      '고객책임자': c.accountManager,
+      '전화번호': c.phone,
+      '이메일': c.email,
+      '주소': c.address,
+      '현장팀장': c.fieldManager,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [
+      { wch: 20 }, { wch: 6 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+      { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 12 },
+      { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 24 },
+      { wch: 30 }, { wch: 12 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '고객관리');
+    const today = new Date().toISOString().substring(0, 10);
+    XLSX.writeFile(wb, `고객관리_${today}.xlsx`);
+  };
+
   // 정렬 핸들러
   const handleSort = (column: 'lastWorkDate' | 'totalQuantity' | 'totalAmount' | 'nextManagementDate') => {
     if (sortColumn === column) {
@@ -1339,7 +1390,10 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
           <p className="text-slate-500 mt-1">{sortedCustomers.length}명의 고객</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+          >
             <Download className="w-4 h-4" />
             <span className="text-sm font-medium">내보내기</span>
           </button>
