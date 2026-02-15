@@ -1073,9 +1073,10 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
     const updatedCustomer = { ...selectedCustomer, workHistory: updatedWorkHistory };
     setSelectedCustomer(updatedCustomer);
-    setCustomers(customers.map(customer => 
+    setCustomers(customers.map(customer =>
       customer.id === selectedCustomer.id ? updatedCustomer : customer
     ));
+    updateCustomer(updatedCustomer).catch(err => console.error('리마인드 상태 업데이트 API 실패:', err));
   };
 
   // 리포트전송 상태 토글 핸들러
@@ -1091,9 +1092,10 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
     const updatedCustomer = { ...selectedCustomer, workHistory: updatedWorkHistory };
     setSelectedCustomer(updatedCustomer);
-    setCustomers(customers.map(customer => 
+    setCustomers(customers.map(customer =>
       customer.id === selectedCustomer.id ? updatedCustomer : customer
     ));
+    updateCustomer(updatedCustomer).catch(err => console.error('리포트전송 상태 업데이트 API 실패:', err));
   };
 
   // 수정 모드 시작
@@ -1989,6 +1991,11 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                             memo: updatedMemo,
                           });
                         }}
+                        onBlur={() => {
+                          // 포커스 해제 시 DB에 저장
+                          const target = customers.find(c => c.id === selectedCustomer.id);
+                          if (target) updateCustomer({ ...target, memo: selectedCustomer.memo }).catch(err => console.error('메모 저장 API 실패:', err));
+                        }}
                         placeholder="메모를 입력하세요..."
                         className="flex-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none leading-relaxed"
                       />
@@ -2215,13 +2222,17 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                               );
                               
                               // selectedCustomer도 업데이트
-                              setSelectedCustomer({
+                              const updatedCustomer = {
                                 ...selectedCustomer,
                                 workHistory: updatedWorkHistory,
                                 deals: updatedWorkHistory.length,
                                 lastWorkDate: newWork.workDate || selectedCustomer.lastWorkDate,
-                              });
-                              
+                              };
+                              setSelectedCustomer(updatedCustomer);
+
+                              // DB에 저장
+                              updateCustomer(updatedCustomer).catch(err => console.error('작업 추가 API 실패:', err));
+
                               // 폼 초기화
                               setNewWork({
                                 inquiryDate: '',
@@ -2519,12 +2530,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                                         );
                                         
                                         // selectedCustomer도 업데이트
-                                        setSelectedCustomer({
+                                        const updatedCustomer = {
                                           ...selectedCustomer,
                                           workHistory: updatedWorkHistory,
                                           deals: updatedWorkHistory.length,
                                           lastWorkDate: newLastWorkDate,
-                                        });
+                                        };
+                                        setSelectedCustomer(updatedCustomer);
+
+                                        // DB에 저장
+                                        updateCustomer(updatedCustomer).catch(err => console.error('작업 삭제 API 실패:', err));
                                       }
                                     }}
                                     className="p-1.5 hover:bg-red-50 rounded transition-colors group"
