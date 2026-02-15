@@ -24,6 +24,12 @@
  * on_link1        → quotationAmount (견적금액)
  * on_link2        → confirmedWorkDate (확정작업일)
  * on_visit_date   → totalQuantity (총수량)
+ * on_userfile1_oname → file1Name (첨부파일1 원본명)
+ * on_userfile1_rname → file1Path (첨부파일1 저장명)
+ * on_userfile2_oname → file2Name (첨부파일2 원본명)
+ * on_userfile2_rname → file2Path (첨부파일2 저장명)
+ * on_userfile3_oname → file3Name (첨부파일3 원본명)
+ * on_userfile3_rname → file3Path (첨부파일3 저장명)
  *
  * [안전 규칙]
  * - SELECT: 기존 데이터 변형 없이 읽기만 수행
@@ -61,7 +67,10 @@ if ($method === 'GET') {
                    on_phone, on_email, on_fax, on_option1, on_option2,
                    on_content, on_memo, on_viewch,
                    on_option3, on_option4, on_option5,
-                   on_link1, on_link2, on_visit_date
+                   on_link1, on_link2, on_visit_date,
+                   on_userfile1_oname, on_userfile1_rname,
+                   on_userfile2_oname, on_userfile2_rname,
+                   on_userfile3_oname, on_userfile3_rname
             FROM Gn_Online
             WHERE on_site = 'airtor2014'
             ORDER BY on_num DESC";
@@ -103,7 +112,13 @@ if ($method === 'GET') {
             'salesManager' => $row['on_option5'] ? $row['on_option5'] : '',
             'quotationAmount' => $row['on_link1'] ? $row['on_link1'] : '',
             'confirmedWorkDate' => $row['on_link2'] ? $row['on_link2'] : '',
-            'totalQuantity' => $row['on_visit_date'] ? intval($row['on_visit_date']) : 0
+            'totalQuantity' => $row['on_visit_date'] ? intval($row['on_visit_date']) : 0,
+            'file1Name' => $row['on_userfile1_oname'] ? $row['on_userfile1_oname'] : '',
+            'file1Path' => $row['on_userfile1_rname'] ? $row['on_userfile1_rname'] : '',
+            'file2Name' => $row['on_userfile2_oname'] ? $row['on_userfile2_oname'] : '',
+            'file2Path' => $row['on_userfile2_rname'] ? $row['on_userfile2_rname'] : '',
+            'file3Name' => $row['on_userfile3_oname'] ? $row['on_userfile3_oname'] : '',
+            'file3Path' => $row['on_userfile3_rname'] ? $row['on_userfile3_rname'] : ''
         );
     }
 

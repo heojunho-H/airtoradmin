@@ -60,6 +60,13 @@ interface Deal {
   detailedQuantity: string; // 상세수량
   confirmedWorkDate: string; // 확정작업일
   managementMemo: string; // 관리 메모
+  // 첨부파일 (문의하기 폼에서 업로드)
+  file1Name: string;
+  file1Path: string;
+  file2Name: string;
+  file2Path: string;
+  file3Name: string;
+  file3Path: string;
 }
 
 // API에서 딜 데이터를 조회
@@ -743,6 +750,12 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       detailedQuantity: '',
       confirmedWorkDate: '',
       managementMemo: '',
+      file1Name: '',
+      file1Path: '',
+      file2Name: '',
+      file2Path: '',
+      file3Name: '',
+      file3Path: '',
     };
     setSelectedDeal(newDeal);
     setEditedDeal(newDeal);
@@ -2236,6 +2249,32 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   />
                 </div>
               </div>
+
+              {/* 첨부파일 */}
+              {(selectedDeal.file1Path || selectedDeal.file2Path || selectedDeal.file3Path) && (
+                <div className="bg-slate-50 p-5 rounded-xl">
+                  <h4 className="text-[15px] font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    첨부파일
+                  </h4>
+                  <div className="space-y-2">
+                    {[
+                      { name: selectedDeal.file1Name, path: selectedDeal.file1Path, num: 1 },
+                      { name: selectedDeal.file2Name, path: selectedDeal.file2Path, num: 2 },
+                      { name: selectedDeal.file3Name, path: selectedDeal.file3Path, num: 3 },
+                    ].filter(f => f.path).map((file) => (
+                      <a
+                        key={file.num}
+                        href={`/api/file_download.php?id=${selectedDeal.id}&file=${file.num}`}
+                        className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group"
+                      >
+                        <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                        <span className="text-[14px] text-slate-700 group-hover:text-blue-700">{file.name || file.path}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 담당자 및 일정 정보 */}
               <div className="grid grid-cols-3 gap-4">
