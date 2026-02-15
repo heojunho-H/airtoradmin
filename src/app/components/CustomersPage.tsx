@@ -2584,7 +2584,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                         <option value="신규">신규</option>
                         <option value="재구매">재구매</option>
                         <option value="충성고객">충성고객</option>
-                        <option value="고���이탈">고객이탈</option>
+                        <option value="고객이탈">고객이탈</option>
                       </select>
                     </div>
                     <div>

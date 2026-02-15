@@ -427,7 +427,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
     recentProjects: [
       { date: '2024-02-01', projectName: '삼성전자 공장 전기공사', client: '삼성전자', status: '진행중' },
       { date: '2024-01-15', projectName: 'LG화학 전반 설치', client: 'LG화학', status: '완료' },
-      { date: '2024-01-05', projectName: '현대자동차 제어시스템', client: '현대자동���', status: '진행중' },
+      { date: '2024-01-05', projectName: '현대자동차 제어시스템', client: '현대자동차', status: '진행중' },
     ],
     memo: '성실하고 협력적인 업체. 다음 프로젝트 우선 배정 고려.',
     repurchaseCount: 35,
@@ -554,7 +554,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
     company: '하늘기계',
     phone: '010-7890-1234',
     email: 'jung@skytech.com',
-    address: '인천시 남동��� 논현로 789',
+    address: '인천시 남동구 논현로 789',
     assignedArea: '경상권',
     registrationDate: '2017-11-08',
     specialization: '기계설비',
@@ -661,7 +661,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
         item1Score: 1,
         item2Score: 0,
         totalScore: 1,
-        memo: '우선순위로 ���력함',
+        memo: '우선순위로 협력함',
       },
       {
         date: '2024-01-20',
@@ -1041,7 +1041,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     setEditedSubcontractor(null);
   };
 
-  // 작업���장 작업 히스토리 삭제 핸들러
+  // 작업팀장 작업 히스토리 삭제 핸들러
   const handleDeleteSubcontractorActivity = (activityIndex: number, projectName: string) => {
     if (confirm(`"${projectName}" 작업을 삭제하시겠습니까?`)) {
       if (selectedSubcontractor) {
@@ -2073,7 +2073,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                         <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업팀장(하청)</th>
                         <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업평가</th>
                         <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업평가 점수</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">삭���</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">삭제</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -2217,7 +2217,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     </div>
                     <div className="flex items-center gap-2 text-[14px] text-slate-600">
                       <UserCircle className="w-4 h-4" />
-                      나���: {selectedSubcontractor?.age}세
+                      나이: {selectedSubcontractor?.age}세
                     </div>
                     <div className="flex items-center gap-2 text-[14px]">
                       <Star className={`w-4 h-4 ${
