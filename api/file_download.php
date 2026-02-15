@@ -31,18 +31,16 @@ $rnameCol = "on_userfile{$fileNum}_rname";
 $stmt = $conn->prepare("SELECT {$onameCol}, {$rnameCol} FROM Gn_Online WHERE on_num = ?");
 $stmt->bind_param('i', $id);
 $stmt->execute();
-$result = $stmt->get_result();
+$stmt->bind_result($oname, $rname);
 
-if ($result->num_rows === 0) {
+if (!$stmt->fetch()) {
     http_response_code(404);
     echo 'Deal not found';
+    $stmt->close();
     $conn->close();
     exit;
 }
 
-$row = $result->fetch_assoc();
-$oname = $row[$onameCol];
-$rname = $row[$rnameCol];
 $stmt->close();
 $conn->close();
 
