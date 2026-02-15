@@ -2263,14 +2263,17 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       { name: selectedDeal.file2Name, path: selectedDeal.file2Path, num: 2 },
                       { name: selectedDeal.file3Name, path: selectedDeal.file3Path, num: 3 },
                     ].filter(f => f.path).map((file) => (
-                      <a
+                      <button
                         key={file.num}
-                        href={`/api/file_download.php?id=${selectedDeal.id}&file=${file.num}`}
-                        className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.open(`/api/file_download.php?id=${selectedDeal.id}&file=${file.num}`, '_blank');
+                        }}
+                        className="flex items-center gap-3 px-4 py-3 w-full bg-white border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left"
                       >
                         <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
                         <span className="text-[14px] text-slate-700 group-hover:text-blue-700">{file.name || file.path}</span>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 </div>
