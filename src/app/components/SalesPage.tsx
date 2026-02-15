@@ -112,6 +112,51 @@ const customerJourneyStages = [
   { id: 'confirmed', name: '수주확정', icon: CheckCircle, color: 'green' },
 ];
 
+const QUANTITY_CATEGORIES = [
+  '벽걸이형', '스탠드형', '1way 천정형', '2way 천정형',
+  '4way 천정형', '원형 천정형', 'FCU형', '매립덕트형',
+] as const;
+
+interface DetailedQuantityData {
+  categories: Record<string, number>;
+  others: { name: string; quantity: number }[];
+}
+
+function parseDetailedQuantity(raw: string): DetailedQuantityData {
+  const defaults: DetailedQuantityData = {
+    categories: Object.fromEntries(QUANTITY_CATEGORIES.map(c => [c, 0])),
+    others: [],
+  };
+  if (!raw) return defaults;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      categories: { ...defaults.categories, ...(parsed.categories || {}) },
+      others: Array.isArray(parsed.others) ? parsed.others : [],
+    };
+  } catch {
+    // 기존 텍스트 데이터인 경우 기타로 처리
+    return { ...defaults, others: raw.trim() ? [{ name: raw, quantity: 0 }] : [] };
+  }
+}
+
+function serializeDetailedQuantity(data: DetailedQuantityData): string {
+  return JSON.stringify(data);
+}
+
+function summarizeDetailedQuantity(raw: string): string {
+  const data = parseDetailedQuantity(raw);
+  const parts: string[] = [];
+  for (const cat of QUANTITY_CATEGORIES) {
+    const qty = data.categories[cat] || 0;
+    if (qty > 0) parts.push(`${cat} ${qty}대`);
+  }
+  for (const o of data.others) {
+    if (o.name && o.quantity > 0) parts.push(`${o.name} ${o.quantity}대`);
+  }
+  return parts.length > 0 ? parts.join(', ') : '없음';
+}
+
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
@@ -367,6 +412,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       '이메일': deal.email,
       '희망서비스': deal.desiredService,
       '총수량': deal.totalQuantity,
+      '상세수량': summarizeDetailedQuantity(deal.detailedQuantity),
       '견적금액': deal.quotationAmount,
       '고객책임자': deal.salesManager,
       '성공여부': successMap[deal.successStatus] || deal.successStatus,
@@ -2056,16 +2102,85 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   <Package className="w-4 h-4" />
                   상세 수량
                 </h4>
-                {isEditMode ? (
-                  <textarea
-                    value={editedDeal?.detailedQuantity || ''}
-                    onChange={(e) => handleFieldChange('detailedQuantity', e.target.value)}
-                    placeholder="상세 수량 정보를 입력하세요 (예: 라이선스 250개, 서버 5대)"
-                    rows={2}
-                    className="w-full px-3 py-2 text-[15px] text-slate-700 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                ) : (
-                  <p className="text-[15px] text-slate-700">{selectedDeal.detailedQuantity}</p>
+                {isEditMode ? (() => {
+                  const dqData = parseDetailedQuantity(editedDeal?.detailedQuantity || '');
+                  const updateDQ = (updated: DetailedQuantityData) => {
+                    handleFieldChange('detailedQuantity', serializeDetailedQuantity(updated));
+                  };
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {QUANTITY_CATEGORIES.map((cat) => (
+                          <div key={cat} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200">
+                            <label className="text-[13px] text-slate-600 whitespace-nowrap flex-1">{cat}</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={dqData.categories[cat] || 0}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                updateDQ({ ...dqData, categories: { ...dqData.categories, [cat]: val } });
+                              }}
+                              className="w-16 px-2 py-1 text-[13px] text-right text-slate-700 bg-slate-50 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <span className="text-[12px] text-slate-400">대</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* 기타 항목 */}
+                      <div className="border-t border-slate-200 pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[13px] font-medium text-slate-600">기타</span>
+                          <button
+                            type="button"
+                            onClick={() => updateDQ({ ...dqData, others: [...dqData.others, { name: '', quantity: 0 }] })}
+                            className="text-[12px] text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            + 항목 추가
+                          </button>
+                        </div>
+                        {dqData.others.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-2 mb-2">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => {
+                                const updated = [...dqData.others];
+                                updated[idx] = { ...updated[idx], name: e.target.value };
+                                updateDQ({ ...dqData, others: updated });
+                              }}
+                              placeholder="종목명"
+                              className="flex-1 px-3 py-1.5 text-[13px] text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.quantity || 0}
+                              onChange={(e) => {
+                                const updated = [...dqData.others];
+                                updated[idx] = { ...updated[idx], quantity: parseInt(e.target.value) || 0 };
+                                updateDQ({ ...dqData, others: updated });
+                              }}
+                              className="w-16 px-2 py-1.5 text-[13px] text-right text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <span className="text-[12px] text-slate-400">대</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = dqData.others.filter((_, i) => i !== idx);
+                                updateDQ({ ...dqData, others: updated });
+                              }}
+                              className="text-slate-400 hover:text-red-500 text-[14px]"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <p className="text-[15px] text-slate-700">{summarizeDetailedQuantity(selectedDeal.detailedQuantity)}</p>
                 )}
               </div>
 
