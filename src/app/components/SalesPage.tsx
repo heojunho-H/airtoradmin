@@ -2267,7 +2267,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         key={file.num}
                         onClick={(e) => {
                           e.preventDefault();
-                          window.open(`/api/file_download.php?id=${selectedDeal.id}&file=${file.num}`, '_blank');
+                          window.open(`https://airtor.co.kr/online/download.php?on_num=${selectedDeal.id}&idx=${file.num}`, '_blank');
                         }}
                         className="flex items-center gap-3 px-4 py-3 w-full bg-white border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left"
                       >
