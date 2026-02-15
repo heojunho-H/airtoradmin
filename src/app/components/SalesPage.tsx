@@ -233,7 +233,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
           const regDate = new Date(deal.registrationDate);
           const diffDays = Math.floor((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
           if (deal.successStatus === 'in-progress' && diffDays > 15) {
-            return { ...deal, successStatus: 'failed' };
+            const updatedDeal = { ...deal, successStatus: 'failed' as const };
+            updateDeal(updatedDeal).catch(err => console.error('자동 실패 처리 API 실패:', err));
+            return updatedDeal;
           }
           return deal;
         })
