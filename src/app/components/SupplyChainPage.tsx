@@ -861,39 +861,6 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     return `₩${amount.toLocaleString()}`;
   };
 
-  // 상세수량 JSON 파싱 및 포맷팅 함수
-  const formatDetailedQuantity = (detailedQuantity: string): React.ReactNode => {
-    if (!detailedQuantity) return <span className="text-[14px] text-slate-400">-</span>;
-    try {
-      const parsed = JSON.parse(detailedQuantity);
-      if (parsed && typeof parsed === 'object' && parsed.categories) {
-        const categories = Object.entries(parsed.categories as Record<string, number>)
-          .filter(([, qty]) => (qty as number) > 0);
-        const others = (parsed.others as { name: string; quantity: number }[] || [])
-          .filter((o) => o.name || o.quantity > 0);
-        return (
-          <div className="text-[14px] text-slate-600 space-y-0.5">
-            {categories.map(([name, qty]) => (
-              <div key={name} className="flex items-center justify-between gap-2">
-                <span className="text-slate-600">{name}</span>
-                <span className="font-medium text-slate-800">{qty as number}대</span>
-              </div>
-            ))}
-            {others.map((o, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 pt-0.5 border-t border-slate-100">
-                <span className="text-slate-500 text-xs truncate max-w-[150px]" title={o.name}>{o.name}</span>
-                {o.quantity > 0 && <span className="font-medium text-slate-800">{o.quantity}대</span>}
-              </div>
-            ))}
-          </div>
-        );
-      }
-    } catch {
-      // JSON 파싱 실패 시 원본 텍스트 표시
-    }
-    return <span className="text-[14px] text-slate-600">{detailedQuantity}</span>;
-  };
-
   // 최종 점수 자동 계산 함수
   const calculateFinalScore = (subcontractor: SubcontractorManager): number => {
     // 기본점수 (subcontractor의 baseScore 사용)
@@ -1763,7 +1730,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.customerCompany}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.projectName}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.totalQuantity}</td>
-                          <td className="py-3 px-4">{formatDetailedQuantity(activity.detailQuantity)}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.detailQuantity}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900">{formatAmount(activity.estimateAmount)}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.customerManager}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.workDate}</td>
@@ -2116,7 +2083,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.customerCompany}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.projectName}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.totalQuantity}</td>
-                          <td className="py-3 px-4">{formatDetailedQuantity(activity.detailQuantity)}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.detailQuantity}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900">{formatAmount(activity.estimateAmount)}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.customerManager}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.workDate}</td>
