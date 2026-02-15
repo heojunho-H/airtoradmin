@@ -55,7 +55,7 @@ if ($conn->connect_error) {
     echo json_encode(array('error' => 'DB connection failed'));
     exit;
 }
-$conn->set_charset('utf8');
+$conn->set_charset('utf8mb4');
 
 $method = $_SERVER['REQUEST_METHOD'];
 

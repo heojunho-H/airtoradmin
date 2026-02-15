@@ -8,7 +8,7 @@ if ($conn->connect_error) {
     echo json_encode(array('error' => 'DB connection failed: ' . $conn->connect_error));
     exit;
 }
-$conn->set_charset('utf8');
+$conn->set_charset('utf8mb4');
 
 $results = array();
 
@@ -38,7 +38,7 @@ $sql1 = "CREATE TABLE IF NOT EXISTS airtor_customers (
     email_history TEXT,
     internal_notes TEXT,
     created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8";
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 if ($conn->query($sql1)) {
     $results['airtor_customers'] = 'OK';
@@ -68,7 +68,7 @@ $sql2 = "CREATE TABLE IF NOT EXISTS airtor_customer_managers (
     specialties TEXT,
     recent_activities TEXT,
     created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8";
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 if ($conn->query($sql2)) {
     $results['airtor_customer_managers'] = 'OK';
@@ -104,7 +104,7 @@ $sql3 = "CREATE TABLE IF NOT EXISTS airtor_subcontractors (
     recent_projects TEXT,
     recent_activities TEXT,
     created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8";
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 if ($conn->query($sql3)) {
     $results['airtor_subcontractors'] = 'OK';
