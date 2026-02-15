@@ -807,7 +807,13 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     // 이미 같은 회사가 있으면 중복 추가하지 않음
     const exists = customers.some((c) => c.company === newCustomerFromDeal.company);
     if (!exists) {
+      const tempId = newCustomerFromDeal.id;
       setCustomers((prev) => [newCustomerFromDeal, ...prev]);
+      // DB에도 저장
+      const { id, ...customerData } = newCustomerFromDeal;
+      createCustomer(customerData).then((newId) => {
+        setCustomers((prev) => prev.map((c) => c.id === tempId ? { ...c, id: newId } : c));
+      }).catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
     }
   }, [newCustomerFromDeal]);
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
