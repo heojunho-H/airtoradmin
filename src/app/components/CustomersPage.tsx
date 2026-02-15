@@ -942,12 +942,12 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
         bValue = new Date(b.lastWorkDate).getTime();
         break;
       case 'totalQuantity':
-        aValue = a.totalQuantity;
-        bValue = b.totalQuantity;
+        aValue = a.workHistory && a.workHistory.length > 0 ? a.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : a.totalQuantity;
+        bValue = b.workHistory && b.workHistory.length > 0 ? b.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : b.totalQuantity;
         break;
       case 'totalAmount':
-        aValue = a.totalAmount;
-        bValue = b.totalAmount;
+        aValue = a.workHistory && a.workHistory.length > 0 ? a.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : a.totalAmount;
+        bValue = b.workHistory && b.workHistory.length > 0 ? b.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : b.totalAmount;
         break;
       case 'nextManagementDate':
         aValue = new Date(a.nextManagementDate).getTime();
@@ -988,8 +988,8 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
       '직책': c.contactPosition,
       '작업횟수': c.deals,
       '최근작업일': c.lastWorkDate,
-      '총수량': c.totalQuantity,
-      '총금액': formatAmount(c.totalAmount),
+      '총수량': c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : c.totalQuantity,
+      '총금액': formatAmount(c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : c.totalAmount),
       '관리주기(일)': c.managementCycle,
       '다음관리예정일': c.nextManagementDate,
       '리마인드상태': c.reminderStatus,
@@ -1541,7 +1541,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                 />
                 <MobileCardField
                   label="총 금액"
-                  value={<span className="font-semibold text-green-600">{formatAmount(customer.totalAmount)}</span>}
+                  value={<span className="font-semibold text-green-600">{formatAmount(customer.workHistory && customer.workHistory.length > 0 ? customer.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : customer.totalAmount)}</span>}
                 />
               </div>
               
@@ -1722,11 +1722,22 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1.5">
                       <Package className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-700">{customer.totalQuantity.toLocaleString()}</span>
+                      <span className="text-sm text-slate-700">
+                        {(customer.workHistory && customer.workHistory.length > 0
+                          ? customer.workHistory.reduce((sum, work) => sum + work.totalQuantity, 0)
+                          : customer.totalQuantity
+                        ).toLocaleString()}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm font-semibold text-slate-900">{formatAmount(customer.totalAmount)}</span>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {formatAmount(
+                        customer.workHistory && customer.workHistory.length > 0
+                          ? customer.workHistory.reduce((sum, work) => sum + work.quotationAmount, 0)
+                          : customer.totalAmount
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1.5">
