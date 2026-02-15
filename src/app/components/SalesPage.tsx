@@ -33,7 +33,9 @@ import {
   Package,
   StickyNote,
   ChevronDown,
+  Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 
@@ -341,6 +343,45 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
     
     return 0;
   });
+
+  // 내보내기 핸들러
+  const handleExport = () => {
+    const statusMap: Record<string, string> = {
+      'new': '신규', 'call': '유선상담', 'quote-sent': '견적서 발송',
+      'quote-call': '유선견적상담', 'price-negotiation': '가격조율',
+      'schedule': '일정조율', 'confirmed': '수주확정',
+    };
+    const successMap: Record<string, string> = {
+      'in-progress': '진행중', 'success': '계약 성공', 'failed': '계약 실패',
+    };
+
+    const exportData = sortedDeals.map((deal) => ({
+      '문의등록일': deal.registrationDate,
+      '진행상태': statusMap[deal.status] || deal.status,
+      '기업명': deal.company,
+      '담당자명': deal.contactName,
+      '직책': deal.contactPosition,
+      '전화번호': deal.phone,
+      '이메일': deal.email,
+      '희망서비스': deal.desiredService,
+      '총수량': deal.totalQuantity,
+      '견적금액': deal.quotationAmount,
+      '고객책임자': deal.salesManager,
+      '성공여부': successMap[deal.successStatus] || deal.successStatus,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const colWidths = [
+      { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 10 },
+      { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
+      { wch: 12 }, { wch: 12 },
+    ];
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '영업관리');
+    XLSX.writeFile(wb, `영업관리_${startMonth}~${endMonth}.xlsx`);
+  };
 
   // 정렬 핸들러
   const handleSort = (field: 'registrationDate' | 'totalQuantity' | 'quotationAmount') => {
@@ -911,7 +952,14 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
               파이프라인
             </button>
           </div>
-          <button 
+          <button
+            onClick={handleExport}
+            className="px-5 py-2.5 bg-white text-green-700 border border-green-300 rounded-xl hover:bg-green-50 transition-all shadow-sm hover:shadow flex items-center gap-2"
+          >
+            <Download className="w-[18px] h-[18px]" />
+            <span className="text-[14px] font-semibold">내보내기</span>
+          </button>
+          <button
             onClick={handleAddNewDeal}
             className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
           >
