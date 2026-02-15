@@ -213,9 +213,11 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
 
   // 견적금액 파싱 함수 (만원 단위 처리)
   const parseQuotationAmount = (quotationAmount: string): number => {
+    if (!quotationAmount) return 0;
     // "₩12,500만" 형식 처리
     const isManWon = quotationAmount.includes('만');
     const numericValue = parseFloat(quotationAmount.replace(/[^0-9.]/g, ''));
+    if (isNaN(numericValue)) return 0;
     return isManWon ? numericValue * 10000 : numericValue;
   };
 
