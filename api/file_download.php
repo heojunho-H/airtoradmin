@@ -92,7 +92,8 @@ if (!$allowed) {
 
 // 다운로드 헤더
 $downloadName = $oname ? $oname : $rname;
-$mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+$mimeType = function_exists('mime_content_type') ? mime_content_type($filePath) : '';
+if (!$mimeType) $mimeType = 'application/octet-stream';
 
 header('Content-Type: ' . $mimeType);
 header('Content-Disposition: attachment; filename="' . rawurlencode($downloadName) . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
