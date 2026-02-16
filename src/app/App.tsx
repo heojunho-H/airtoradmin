@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals } from './components/SalesPage';
-import { SupplyChainPage, fetchManagers, fetchSubcontractors } from './components/SupplyChainPage';
+import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
 // Deal 데이터를 Customer 형식으로 변환
@@ -178,8 +178,8 @@ export default function App() {
 
   // 고객관리 작업이력 → 공급망관리 고객책임자 작업히스토리 동기화
   useEffect(() => {
-    setManagers((prevManagers) =>
-      prevManagers.map((manager) => {
+    setManagers((prevManagers) => {
+      const updatedManagers = prevManagers.map((manager) => {
         const activitiesFromCustomers: typeof manager.recentActivities = [];
         customers.forEach((customer) => {
           customer.workHistory
@@ -201,14 +201,19 @@ export default function App() {
         // 날짜 내림차순 정렬
         activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
         return { ...manager, recentActivities: activitiesFromCustomers };
-      })
-    );
+      });
+      // DB에 동기화된 매니저 데이터 저장
+      updatedManagers.forEach((manager) => {
+        updateManager(manager).catch(err => console.error('고객책임자 활동내역 동기화 API 실패:', err));
+      });
+      return updatedManagers;
+    });
   }, [customers]);
 
   // 고객관리 작업이력 → 공급망관리 작업팀장(하청) 작업히스토리 동기화
   useEffect(() => {
-    setSubcontractors((prevSubs) =>
-      prevSubs.map((sub) => {
+    setSubcontractors((prevSubs) => {
+      const updatedSubs = prevSubs.map((sub) => {
         // 기존 평가 데이터를 키로 보존 (projectName + customerCompany + workDate)
         const existingEvalMap = new Map<string, any>();
         sub.recentActivities.forEach((act) => {
@@ -260,8 +265,13 @@ export default function App() {
         });
         activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
         return { ...sub, recentActivities: activitiesFromCustomers };
-      })
-    );
+      });
+      // DB에 동기화된 작업팀장 데이터 저장
+      updatedSubs.forEach((sub) => {
+        updateSubcontractor(sub).catch(err => console.error('작업팀장 활동내역 동기화 API 실패:', err));
+      });
+      return updatedSubs;
+    });
   }, [customers]);
 
   // 모바일 화면 감지
