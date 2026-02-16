@@ -1429,11 +1429,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             <select
                               value={manager.assignedArea}
                               onChange={(e) => {
+                                const updatedManager = { ...manager, assignedArea: e.target.value };
                                 const updatedManagers = managers.map((m) =>
-                                  m.id === manager.id ? { ...m, assignedArea: e.target.value } : m
+                                  m.id === manager.id ? updatedManager : m
                                 );
                                 setManagers(updatedManagers);
                                 setEditingAreaId(null);
+                                updateManager(updatedManager).catch(err => console.error('고객책임자 담당지역 수정 API 실패:', err));
                               }}
                               onBlur={() => setEditingAreaId(null)}
                               autoFocus
@@ -1465,11 +1467,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             <select
                               value={manager.status}
                               onChange={(e) => {
+                                const updatedManager = { ...manager, status: e.target.value as 'active' | 'vacation' | 'leave' };
                                 const updatedManagers = managers.map((m) =>
-                                  m.id === manager.id ? { ...m, status: e.target.value as 'active' | 'vacation' | 'leave' } : m
+                                  m.id === manager.id ? updatedManager : m
                                 );
                                 setManagers(updatedManagers);
                                 setEditingStatusId(null);
+                                updateManager(updatedManager).catch(err => console.error('고객책임자 상태 수정 API 실패:', err));
                               }}
                               onBlur={() => setEditingStatusId(null)}
                               autoFocus
@@ -2015,6 +2019,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           memo: updatedMemo,
                         });
                       }}
+                      onBlur={() => {
+                        const current = subcontractors.find(s => s.id === selectedSubcontractor.id);
+                        if (current) {
+                          updateSubcontractor(current).catch(err => console.error('메모 저장 API 실패:', err));
+                        }
+                      }}
                       placeholder="메모를 입력하세요..."
                       className="flex-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none leading-relaxed"
                     />
@@ -2040,6 +2050,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             : sub
                         )
                       );
+                    }}
+                    onBlur={() => {
+                      const current = subcontractors.find(s => s.id === selectedSubcontractor.id);
+                      if (current) {
+                        updateSubcontractor(current).catch(err => console.error('기본점수 저장 API 실패:', err));
+                      }
                     }}
                     className="w-full text-[22px] font-semibold text-indigo-900 bg-transparent border-b border-indigo-200 focus:border-indigo-500 focus:outline-none text-center"
                   />
@@ -2458,20 +2474,21 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                         : sub
                     );
                     setSubcontractors(updatedSubcontractors);
-                    
+
                     // 선택된 작업팀장 정보도 업데이트
                     const updatedSelectedSubcontractor = updatedSubcontractors.find(
                       (sub) => sub.id === selectedSubcontractor.id
                     );
                     if (updatedSelectedSubcontractor) {
                       setSelectedSubcontractor(updatedSelectedSubcontractor);
+                      updateSubcontractor(updatedSelectedSubcontractor).catch(err => console.error('협력평가 저장 API 실패:', err));
                     }
-                    
+
                     // 입력값 초기화
                     setEvaluationItem1(0);
                     setEvaluationItem2(0);
                     setEvaluationMemo('');
-                    
+
                     setShowEvaluationModal(false);
                   }
                 }}
@@ -2777,16 +2794,17 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     );
                     
                     setSubcontractors(updatedSubcontractors);
-                    
+
                     // 선택된 작업팀장 정보도 업데이트
                     const updatedSelectedSubcontractor = updatedSubcontractors.find(
                       (sub) => sub.id === selectedSubcontractor.id
                     );
                     if (updatedSelectedSubcontractor) {
                       setSelectedSubcontractor(updatedSelectedSubcontractor);
+                      updateSubcontractor(updatedSelectedSubcontractor).catch(err => console.error('작업평가 저장 API 실패:', err));
                     }
                   }
-                  
+
                   // 초기화
                   setWorkEvalCustomerClaim(0);
                   setWorkEvalAllDevices(0);
