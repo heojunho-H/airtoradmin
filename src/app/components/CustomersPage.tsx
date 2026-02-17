@@ -897,10 +897,30 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     return `₩${amount.toLocaleString()}`;
   };
 
-  // 다음 관리 예정일 계산 함수
+  // 관리 주기 옵션 (일 수 → 표시 라벨)
+  const CYCLE_OPTIONS = [
+    { value: 30, label: '1개월' },
+    { value: 90, label: '3개월' },
+    { value: 180, label: '6개월' },
+    { value: 365, label: '1년' },
+    { value: 730, label: '2년' },
+  ];
+
+  const getCycleLabel = (cycle: number): string => {
+    const option = CYCLE_OPTIONS.find(o => o.value === cycle);
+    return option ? option.label : `${cycle}일`;
+  };
+
+  // 다음 관리 예정일 계산 함수 (월 단위 정확 계산)
   const calculateNextManagementDate = (lastWorkDate: string, managementCycle: number): string => {
     const lastDate = new Date(lastWorkDate);
-    lastDate.setDate(lastDate.getDate() + managementCycle);
+    const monthsMap: Record<number, number> = { 30: 1, 90: 3, 180: 6, 365: 12, 730: 24 };
+    const months = monthsMap[managementCycle];
+    if (months) {
+      lastDate.setMonth(lastDate.getMonth() + months);
+    } else {
+      lastDate.setDate(lastDate.getDate() + managementCycle);
+    }
     const year = lastDate.getFullYear();
     const month = String(lastDate.getMonth() + 1).padStart(2, '0');
     const day = String(lastDate.getDate()).padStart(2, '0');
@@ -996,7 +1016,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
       '최근작업일': c.lastWorkDate,
       '총수량': c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : c.totalQuantity,
       '총금액': formatAmount(c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : c.totalAmount),
-      '관리주기(일)': c.managementCycle,
+      '관리주기': getCycleLabel(c.managementCycle),
       '다음관리예정일': c.nextManagementDate,
       '리마인드상태': c.reminderStatus,
       '고객책임자': c.accountManager,
@@ -1153,9 +1173,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + (newCustomer.managementCycle || 30));
-    const nextManagementDate = nextDate.toISOString().split('T')[0];
+    const nextManagementDate = calculateNextManagementDate(today, newCustomer.managementCycle || 30);
 
     const customerData: any = {
       company: newCustomer.company,
@@ -1750,7 +1768,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-700">{customer.managementCycle}일</span>
+                      <span className="text-sm text-slate-700">{getCycleLabel(customer.managementCycle)}</span>
                     </div>
                   </td>
                   <td className="px-4 py-4">
@@ -2054,14 +2072,17 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
                       <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">관리 주기</p>
                       {isEditing && editedCustomer ? (
-                        <input
-                          type="number"
+                        <select
                           value={editedCustomer.managementCycle}
                           onChange={(e) => updateEditedField('managementCycle', Number(e.target.value))}
                           className="text-2xl font-bold text-indigo-900 mt-2 w-full border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        >
+                          {CYCLE_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
                       ) : (
-                        <p className="text-2xl font-bold text-indigo-900 mt-2">{selectedCustomer.managementCycle}일</p>
+                        <p className="text-2xl font-bold text-indigo-900 mt-2">{getCycleLabel(selectedCustomer.managementCycle)}</p>
                       )}
                     </div>
                     <div className="bg-teal-50 p-4 rounded-lg border border-teal-100">
@@ -2727,14 +2748,16 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">관리 주기 (일)</label>
-                      <input
-                        type="number"
+                      <label className="block text-sm font-medium text-slate-700 mb-1">관리 주기</label>
+                      <select
                         value={newCustomer.managementCycle || 30}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, managementCycle: parseInt(e.target.value) || 30 })}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, managementCycle: parseInt(e.target.value) })}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="30"
-                      />
+                      >
+                        {CYCLE_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">리마인드 상태</label>
