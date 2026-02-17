@@ -571,6 +571,29 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
     }
   };
 
+  // 거래 상세 열기 — 미확인이면 자동 확인 처리
+  const handleDealSelect = (deal: Deal) => {
+    if (!deal.isChecked) {
+      const updatedDeal = { ...deal, isChecked: true };
+      setSelectedDeal(updatedDeal);
+      setDealsData(dealsData.map(d => d.id === deal.id ? updatedDeal : d));
+      updateDeal(updatedDeal).catch(err => console.error('확인 상태 저장 실패:', err));
+    } else {
+      setSelectedDeal(deal);
+    }
+  };
+
+  // 확인 상태 토글
+  const handleToggleChecked = (dealId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetDeal = dealsData.find(d => d.id === dealId);
+    if (!targetDeal) return;
+    const updatedDeal = { ...targetDeal, isChecked: !targetDeal.isChecked };
+    setDealsData(dealsData.map(d => d.id === dealId ? updatedDeal : d));
+    if (selectedDeal?.id === dealId) setSelectedDeal(updatedDeal);
+    updateDeal(updatedDeal).catch(err => console.error('확인 상태 저장 실패:', err));
+  };
+
   const handleStatusChange = (dealId: number, newStatus: Deal['status']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
@@ -1232,7 +1255,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
           {isMobile ? (
             <div className="space-y-3">
               {filteredDeals.map((deal) => (
-                <MobileCard key={deal.id} onClick={() => setSelectedDeal(deal)}>
+                <MobileCard key={deal.id} onClick={() => handleDealSelect(deal)}>
                   <MobileCardRow className="mb-2">
                     <MobileCardBadge variant={deal.successStatus === 'success' ? 'success' : deal.successStatus === 'failed' ? 'danger' : 'default'}>
                       {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : '진행중'}
@@ -1518,14 +1541,14 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   <tr
                     key={deal.id}
                     className="hover:bg-slate-50 transition-colors cursor-pointer"
-                    onClick={() => setSelectedDeal(deal)}
+                    onClick={() => handleDealSelect(deal)}
                   >
                     <td className="px-4 py-4">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center" onClick={(e) => handleToggleChecked(deal.id, e)}>
                         {deal.isChecked ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                          <CheckCircle2 className="w-5 h-5 text-green-600 cursor-pointer hover:text-green-700" />
                         ) : (
-                          <div className="w-5 h-5 border-2 border-slate-300 rounded-full" />
+                          <div className="w-5 h-5 border-2 border-slate-300 rounded-full cursor-pointer hover:border-green-400" />
                         )}
                       </div>
                     </td>
@@ -1790,15 +1813,19 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     <div
                       key={deal.id}
                       className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => setSelectedDeal(deal)}
+                      onClick={() => handleDealSelect(deal)}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-medium text-slate-900 text-sm line-clamp-1">
                           {deal.desiredService}
                         </h4>
-                        {deal.isChecked && (
-                          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
-                        )}
+                        <div onClick={(e) => handleToggleChecked(deal.id, e)}>
+                          {deal.isChecked ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 cursor-pointer hover:text-green-700" />
+                          ) : (
+                            <div className="w-4 h-4 border-2 border-slate-300 rounded-full flex-shrink-0 cursor-pointer hover:border-green-400" />
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">
