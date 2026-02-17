@@ -49,13 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
-if ($conn->connect_error) {
-    http_response_code(500);
-    echo json_encode(array('error' => 'DB connection failed'));
-    exit;
-}
-$conn->set_charset('utf8mb4');
+require_once __DIR__ . '/db_config.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 

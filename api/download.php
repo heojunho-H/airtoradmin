@@ -1,55 +1,77 @@
-<?
-include $_SERVER["DOCUMENT_ROOT"]."/admin/lib/lib.php";
+<?php
+/**
+ * 파일 다운로드 — Prepared Statement 적용
+ * 기존 eregi(), sql_fetch() 등 deprecated 함수 제거
+ */
 
-if(is_numeric($on_num)==false || is_numeric($idx)==false) die();
+require_once __DIR__ . '/db_config.php';
 
-$sql = "select * from Gn_Online where on_num = $on_num ";
-$res = sql_fetch($sql);
-$file_oname = $res["on_userfile{$idx}_oname"];
-$file_rname = $res["on_userfile{$idx}_rname"];
+$on_num = isset($_GET['on_num']) ? intval($_GET['on_num']) : 0;
+$idx = isset($_GET['idx']) ? intval($_GET['idx']) : 0;
 
-$fileDir = $DOCUMENT_ROOT."/online/data/".$file_rname; //실제 파일명 또는 경로
+if ($on_num <= 0 || $idx <= 0) {
+    http_response_code(400);
+    die('잘못된 요청입니다.');
+}
 
-//$dnurl = "다운될 파일 이름(경로)" ;
-$dnfile = urlencode("$fileDir"); // 파일명이나 경로에 한글이나 공백이 포함될 경우를 고려
+// 허용 컬럼 화이트리스트 (idx 1~3만 허용)
+if ($idx < 1 || $idx > 3) {
+    http_response_code(400);
+    die('잘못된 파일 인덱스입니다.');
+}
 
-$dn = "1"; // 1 이면 다운 0 이면 브라우져가 인식하면 화면에 출력
-$dn_yn = ($dn) ? "attachment" : "inline";
+$oname_col = "on_userfile{$idx}_oname";
+$rname_col = "on_userfile{$idx}_rname";
 
-$bin_txt = "1"; // 아랫글보구 수정해섭...
-$bin_txt = ($bin_txt) ? "r" : "rb"; 
+// Prepared Statement 사용
+$stmt = $conn->prepare("SELECT {$oname_col}, {$rname_col} FROM Gn_Online WHERE on_num = ? LIMIT 1");
+$stmt->bind_param('i', $on_num);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$stmt->close();
+$conn->close();
 
-// attachment 면 바로 다운 inline 브라우져가 인식하면 화면에 출력
+if (!$row) {
+    http_response_code(404);
+    die('데이터를 찾을 수 없습니다.');
+}
 
-// 2021-08-10 DHL 브라우저에 따라 제목 깨질수 있어서 조치함
-$ie = isset($_SERVER['HTTP_USER_AGENT']) && (strpos($_SERVER['HTTP_USER_AGENT'], 'MSIE') !== false || strpos($_SERVER['HTTP_USER_AGENT'], 'Trident') !== false);
-if($ie)
-	$file_oname=iconv("UTF-8", "EUC-KR", $file_oname);
+$file_oname = $row[$oname_col];
+$file_rname = $row[$rname_col];
 
-if(eregi("(MSIE 5.5|MSIE 6.0)", $HTTP_USER_AGENT)) // 브라우져 구분
-{ 
-    Header("Content-type: application/octet-stream"); 
-    Header("Content-Length: ".filesize("$fileDir"));   // 이부부을 넣어 주어야지 다운로드 진행 상태가 표시 됩니다.
-    Header("Content-Disposition: $dn_yn; filename=$file_oname");  
-    Header("Content-Transfer-Encoding: binary");  
-    Header("Pragma: no-cache");  
-    Header("Expires: 0");  
-} else { 
-    Header("Content-type: file/unknown");     
-    // Header("Content-type: application/octet-stream");
-    Header("Content-Length: ".filesize("$fileDir")); 
-    Header("Content-Disposition: $dn_yn; filename=$file_oname"); 
-    Header("Content-Description: PHP3 Generated Data");    
-    Header("Pragma: no-cache"); 
-    Header("Expires: 0"); 
-} 
+if (empty($file_rname)) {
+    http_response_code(404);
+    die('파일이 존재하지 않습니다.');
+}
 
-if (is_file("$fileDir")) 
-{ 
-    $fp = fopen("$fileDir", "$bin_txt");
-        if (!fpassthru($fp))  // 서버부하를 줄이려면 print 나 echo 또는 while 문을 이용한 기타 보단 이방법이...
-        fclose($fp); 
-} else {
-    echo "해당 파일이나 경로가 존재하지 않습니다.";
-} 
-?>
+// 경로 조작 방지: 파일명에 디렉토리 구분자 포함 시 차단
+if (strpos($file_rname, '/') !== false || strpos($file_rname, '\\') !== false || strpos($file_rname, '..') !== false) {
+    http_response_code(400);
+    die('잘못된 파일 경로입니다.');
+}
+
+$fileDir = $_SERVER['DOCUMENT_ROOT'] . '/online/data/' . $file_rname;
+
+if (!is_file($fileDir)) {
+    http_response_code(404);
+    die('해당 파일이나 경로가 존재하지 않습니다.');
+}
+
+// IE 브라우저 파일명 인코딩 처리
+$ua = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+$is_ie = (strpos($ua, 'MSIE') !== false || strpos($ua, 'Trident') !== false);
+
+if ($is_ie) {
+    $file_oname = iconv('UTF-8', 'EUC-KR//IGNORE', $file_oname);
+}
+
+header('Content-Type: application/octet-stream');
+header('Content-Length: ' . filesize($fileDir));
+header('Content-Disposition: attachment; filename="' . $file_oname . '"');
+header('Content-Transfer-Encoding: binary');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+readfile($fileDir);
+exit;
