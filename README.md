@@ -1,73 +1,31 @@
-# React + TypeScript + Vite
+[프로젝트명: 사내 운영 시스템 개발 Admin]
+"내부 비효율을 혁신하는 AI 기반 영업/고객(CRM)/공급망 관리(SCM) 솔루션"
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+1. Executive Summary (프로젝트 요약)
+기존 수기로 관리되던 산업의 영업 데이터와 고객 이력을 디지털로 전환(DX)하고, AI를 도입(AX)하여 운영 비용(OPEX)을 최소화하고 고객 재구매율을 극대화하는 B2B SaaS 형태의 사내 관리 솔루션입니다.
 
-Currently, two official plugins are available:
+2. Problem (시장 및 현장의 Pain Point)
+데이터 파편화: 고객 연락처, 솔루션 이력, 견적서 등이 엑셀과 수기로 분산되어 히스토리 추적 불가.
+비효율적인 리소스 낭비: 반복적인 견적서 작성 및 단순 고객 응대에 일평균 1시간 소요.
+낮은 재구매 전환율: 고객의 다음 서비스 주기를 선제적으로 파악하지 못해 발생하는 기회비용 손실.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+3. Solution & Business Impact (핵심 가치)
+본 프로덕트는 단순한 기록 툴을 넘어, '데이터 기반의 의사결정'과 '업무 자동화'를 통해 실질적인 재무적 임팩트를 창출합니다.
+  운영 리소스 8% 절감: 파편화된 B2B 고객(학교, 관공서, 병원) 데이터를 중앙 집중화하여 업무 병목(Bottleneck) 해소.
+  LTV(고객 생애 가치) 및 재구매율 상승: 체계적인 이력 관리를 통해 서비스 적기를 도출하고, 선제적 영업(Outbound Sales) 타이밍 확보.
+  AI 기반 업무 자동화 (AX 적용): Google Gemini 3.0 Pro 모델을 연동하여, 복잡한 고객 요구사항을 분석하고 영업 이메일/보고서 초안을 자동 생성. (단순 반복 업무 시간 10% 단축)
 
-## React Compiler
+4. Key Features (임팩트 창출을 위한 핵심 기능)
+B2B 파이프라인 대시보드: 리드(Lead) 확보부터 계약 체결까지의 세일즈 퍼널(Funnel) 시각화.
+AI 영업 어시스턴트 (Gemini API): 고객 상담 텍스트를 분석하여 핵심 요구사항 요약 및 다음 액션 플랜(Next Step) 제안.
+히스토리 트래킹: 특정 관공서/학교의 연도별 세척 내역 및 특이사항 영구 보존.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+5. Technology for Impact (기술 도입의 비즈니스적 이유)
+기술을 위한 기술이 아닌, 빠른 MVP 검증과 서비스 안정성을 위한 최적의 스택을 선정했습니다.
+Frontend & Deployment: Cloudflare Pages (유지보수 비용 제로(Zero), 글로벌 CDN을 통한 압도적인 로딩 속도로 업무 지연 방지)
+AI Engine: Google Gemini API (LLM 중 가장 비용 효율적이며, 방대한 영업 컨텍스트를 빠르게 처리할 수 있는 추론 능력 활용)
+Architecture: 서버리스(Serverless) 기반으로 구축하여 초기 인프라 고정 비용(CAPEX) 최소화.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+6. Next Step & Vision (향후 계획)
+1단계: 사내 도입을 통한 MVP 검증 및 업무 효율성(ROI) 데이터 확보.
+2단계: 동종 업계 영세 사업자들을 위한 버티컬(Vertical) SaaS 형태로 스핀오프(Spin-off) 확장.
