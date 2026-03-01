@@ -20,7 +20,7 @@ export default defineConfig({
       '/api/gemini': {
         target: 'https://generativelanguage.googleapis.com',
         changeOrigin: true,
-        rewrite: () => `/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        rewrite: () => `/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${process.env.GEMINI_API_KEY}`,
       },
       '/api/deals': {
         target: 'https://airtor.co.kr',
