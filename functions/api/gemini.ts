@@ -27,6 +27,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
+      // @ts-ignore
+      cf: { colo: 'LAX' },
     }
   );
 
