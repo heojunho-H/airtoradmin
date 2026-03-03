@@ -120,8 +120,8 @@ const customerJourneyStages = [
 ];
 
 const QUANTITY_CATEGORIES = [
-  '벽걸이형', '스탠드형', '1way 천정형', '2way 천정형',
-  '4way 천정형', '원형 천정형', 'FCU형', '매립덕트형',
+  '벽걸이형', '스탠드 일반형', '스탠드 대형', '1way 천정형', '2way 천정형',
+  '4way 천정형', '원형 천정형', 'FCU형', '매립덕트형', '실외기',
 ] as const;
 
 interface DetailedQuantityData {

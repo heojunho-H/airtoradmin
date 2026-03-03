@@ -904,7 +904,12 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     { value: 180, label: '6개월' },
     { value: 365, label: '1년' },
     { value: 730, label: '2년' },
+    { value: -1, label: '기타 (직접 입력)' },
   ];
+
+  const isPresetCycle = (cycle: number): boolean => {
+    return [30, 90, 180, 365, 730].includes(cycle);
+  };
 
   const getCycleLabel = (cycle: number): string => {
     const option = CYCLE_OPTIONS.find(o => o.value === cycle);
@@ -2072,15 +2077,32 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
                       <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">관리 주기</p>
                       {isEditing && editedCustomer ? (
-                        <select
-                          value={editedCustomer.managementCycle}
-                          onChange={(e) => updateEditedField('managementCycle', Number(e.target.value))}
-                          className="text-2xl font-bold text-indigo-900 mt-2 w-full border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          {CYCLE_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
+                        <div className="mt-2 space-y-2">
+                          <select
+                            value={isPresetCycle(editedCustomer.managementCycle) ? editedCustomer.managementCycle : -1}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (val !== -1) updateEditedField('managementCycle', val);
+                            }}
+                            className="text-lg font-bold text-indigo-900 w-full border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            {CYCLE_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          {!isPresetCycle(editedCustomer.managementCycle) && (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                value={editedCustomer.managementCycle}
+                                onChange={(e) => updateEditedField('managementCycle', Number(e.target.value) || 1)}
+                                className="flex-1 text-lg font-bold text-indigo-900 border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                              <span className="text-sm text-indigo-600 font-medium">일</span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <p className="text-2xl font-bold text-indigo-900 mt-2">{getCycleLabel(selectedCustomer.managementCycle)}</p>
                       )}
@@ -2750,14 +2772,31 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">관리 주기</label>
                       <select
-                        value={newCustomer.managementCycle || 30}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, managementCycle: parseInt(e.target.value) })}
+                        value={isPresetCycle(newCustomer.managementCycle || 30) ? (newCustomer.managementCycle || 30) : -1}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (val !== -1) setNewCustomer({ ...newCustomer, managementCycle: val });
+                          else setNewCustomer({ ...newCustomer, managementCycle: 0 });
+                        }}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {CYCLE_OPTIONS.map(o => (
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>
+                      {!isPresetCycle(newCustomer.managementCycle || 30) && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={newCustomer.managementCycle || ''}
+                            onChange={(e) => setNewCustomer({ ...newCustomer, managementCycle: parseInt(e.target.value) || 0 })}
+                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="일 수를 입력하세요"
+                          />
+                          <span className="text-sm text-slate-600 font-medium">일</span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">리마인드 상태</label>

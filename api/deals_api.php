@@ -1,4 +1,7 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
+
 /**
  * 영업(딜) 데이터 API — airtoradmin 전용
  * 테이블: Gn_Online (문의하기 폼과 동일한 테이블)
@@ -49,7 +52,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-require_once __DIR__ . '/db_config.php';
+$conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
+if ($conn->connect_error) {
+    http_response_code(500);
+    echo json_encode(array('error' => 'DB connection failed'));
+    exit;
+}
+$conn->set_charset('utf8');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -87,6 +96,19 @@ if ($method === 'GET') {
             $regDate = substr($row['on_regist'], 0, 10);
         }
 
+        // on_option3/4/5 는 고객 폼 데이터와 충돌 — 유효한 관리값이 아니면 기본값으로 대체
+        $validStatuses = array('new','call','quote-sent','quote-call','price-negotiation','schedule','confirmed');
+        $rawStatus = ($row['on_option3'] !== '' && $row['on_option3'] !== null) ? $row['on_option3'] : '';
+        $statusVal = in_array($rawStatus, $validStatuses) ? $rawStatus : 'new';
+
+        $validSuccess = array('in-progress','success','failed');
+        $rawSuccess = ($row['on_option4'] !== '' && $row['on_option4'] !== null) ? $row['on_option4'] : '';
+        $successVal = in_array($rawSuccess, $validSuccess) ? $rawSuccess : 'in-progress';
+
+        $formMethods = array('simple','detail','file');
+        $rawManager = $row['on_option5'] ? $row['on_option5'] : '';
+        $managerVal = in_array($rawManager, $formMethods) ? '' : $rawManager;
+
         $deals[] = array(
             'id' => intval($row['on_num']),
             'registrationDate' => $regDate,
@@ -101,9 +123,9 @@ if ($method === 'GET') {
             'requirements' => $row['on_content'],
             'managementMemo' => $row['on_memo'],
             'isChecked' => ($row['on_viewch'] === '1') ? true : false,
-            'status' => ($row['on_option3'] !== '' && $row['on_option3'] !== null) ? $row['on_option3'] : 'new',
-            'successStatus' => ($row['on_option4'] !== '' && $row['on_option4'] !== null) ? $row['on_option4'] : 'in-progress',
-            'salesManager' => $row['on_option5'] ? $row['on_option5'] : '',
+            'status' => $statusVal,
+            'successStatus' => $successVal,
+            'salesManager' => $managerVal,
             'quotationAmount' => $row['on_link1'] ? $row['on_link1'] : '',
             'confirmedWorkDate' => $row['on_link2'] ? $row['on_link2'] : '',
             'totalQuantity' => $row['on_visit_date'] ? intval($row['on_visit_date']) : 0,
