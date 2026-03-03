@@ -2237,12 +2237,12 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
               {/* 요구사항 및 메모 */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-amber-50 p-5 rounded-xl border border-amber-200">
-                  <h4 className="text-[15px] font-semibold text-amber-800 mb-3">기타 요구사항</h4>
+                  <h4 className="text-[15px] font-semibold text-amber-800 mb-3">세부 전달사항</h4>
                   {isEditMode ? (
                     <textarea
                       value={editedDeal?.requirements || ''}
                       onChange={(e) => handleFieldChange('requirements', e.target.value)}
-                      placeholder="고객의 특별 요구사항을 입력하세요"
+                      placeholder="세부 전달사항을 입력하세요"
                       rows={3}
                       className="w-full px-3 py-2 text-[15px] text-amber-900 bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
                     />
