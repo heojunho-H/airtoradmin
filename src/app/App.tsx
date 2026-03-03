@@ -23,7 +23,7 @@ function convertDealToCustomer(deal: any) {
   return {
     id: Date.now(),
     company: deal.company,
-    grade: 'B' as const,
+    grade: '미설정',
     customerStatus: '신규' as const,
     contactName: deal.contactName,
     contactPosition: deal.contactPosition,
