@@ -95,14 +95,14 @@ export function buildDataContext(
 - 진행상태별: ${Object.entries(dealsByStatus).map(([k, v]) => `${k} ${v}건`).join(', ')}
 - 성공여부별: ${Object.entries(dealsBySuccess).map(([k, v]) => `${k} ${v}건`).join(', ')}
 - 딜 목록:
-${deals.slice(0, 30).map(d => `  · ${d.company} | 상태:${statusMap[d.status] || d.status} | 성공여부:${successMap[d.successStatus] || d.successStatus} | 견적:${d.quotationAmount} | 담당:${d.salesManager} | 등록일:${d.registrationDate}`).join('\n')}
+${deals.slice(0, 30).map(d => `  · ${d.company} | 상태:${statusMap[d.status] || d.status} | 성공여부:${successMap[d.successStatus] || d.successStatus} | 희망서비스:${d.desiredService || '-'} | 총수량:${d.totalQuantity || 0}대 | 견적:${d.quotationAmount || '-'} | 확정작업일:${d.confirmedWorkDate || '-'} | 담당:${d.salesManager || '-'} | 등록일:${d.registrationDate} | 세부전달사항:${d.requirements || '-'}`).join('\n')}
 
 ## 고객 데이터 (총 ${customers.length}명)
 - 등급별: ${Object.entries(customersByGrade).map(([k, v]) => `${k}등급 ${v}명`).join(', ')}
 - 총 거래금액: ${(totalCustomerAmount / 100000000).toFixed(1)}억원
 - 관리주기 도래 고객: ${dueCustomers.length}명${dueCustomers.length > 0 ? ' (' + dueCustomers.map((c: any) => c.company).join(', ') + ')' : ''}
 - 고객 목록:
-${customers.slice(0, 30).map((c: any) => `  · ${c.company} | ${c.grade}등급 | ${c.customerStatus || c.status || ''} | 거래${c.deals}건 | 금액${(c.totalAmount / 10000).toFixed(0)}만원 | 담당:${c.accountManager} | 다음관리일:${c.nextManagementDate}`).join('\n')}
+${customers.slice(0, 30).map((c: any) => `  · ${c.company} | ${c.grade || '미설정'}등급 | ${c.customerStatus || ''} | 거래${c.deals}건 | 총수량:${c.totalQuantity || 0}대 | 금액${(c.totalAmount / 10000).toFixed(0)}만원 | 담당:${c.accountManager} | 다음관리일:${c.nextManagementDate}`).join('\n')}
 
 ## 고객책임자 (총 ${managers.length}명)
 ${managers.slice(0, 20).map((m: any) => `  · ${m.name} | 담당고객${m.assignedCustomers}명 | 활동프로젝트${m.activeProjects}건 | 매출${(m.totalSalesAmount / 10000).toFixed(0)}만원 | 평가${m.performanceRating}점 | 재구매율${m.repurchaseRate}%`).join('\n')}
