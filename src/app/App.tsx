@@ -20,6 +20,10 @@ function convertDealToCustomer(deal: any) {
     return num || 0;
   };
 
+  const contacts = (deal.contactName || deal.phone || deal.email)
+    ? [{ name: deal.contactName || '', position: deal.contactPosition || '', phone: deal.phone || '', email: deal.email || '' }]
+    : [];
+
   return {
     id: Date.now(),
     company: deal.company,
@@ -27,6 +31,7 @@ function convertDealToCustomer(deal: any) {
     customerStatus: '신규' as const,
     contactName: deal.contactName,
     contactPosition: deal.contactPosition,
+    contacts,
     deals: 1,
     lastWorkDate: deal.confirmedWorkDate || today,
     totalQuantity: deal.totalQuantity,
