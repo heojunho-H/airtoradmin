@@ -818,20 +818,68 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 영업 관리에서 성공한 딜이 넘어오면 고객 자동 등록
+  // 영업 관리에서 성공한 딜이 넘어오면 고객 자동 등록 또는 기존 고객 업데이트
   useEffect(() => {
     if (!newCustomerFromDeal) return;
-    // 이미 같은 회사가 있으면 중복 추가하지 않음
-    const exists = customers.some((c) => c.company === newCustomerFromDeal.company);
-    if (!exists) {
-      const tempId = newCustomerFromDeal.id;
-      setCustomers((prev) => [newCustomerFromDeal, ...prev]);
-      // DB에도 저장
-      const { id, ...customerData } = newCustomerFromDeal;
-      createCustomer(customerData).then((newId) => {
-        setCustomers((prev) => prev.map((c) => c.id === tempId ? { ...c, id: newId } : c));
-      }).catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
-    }
+
+    setCustomers((prev) => {
+      const existingIdx = prev.findIndex((c) => c.company === newCustomerFromDeal.company);
+
+      if (existingIdx === -1) {
+        // 신규 고객 — DB 저장
+        const tempId = newCustomerFromDeal.id;
+        const { id, ...customerData } = newCustomerFromDeal;
+        createCustomer(customerData).then((newId) => {
+          setCustomers((p) => p.map((c) => c.id === tempId ? { ...c, id: newId } : c));
+        }).catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
+        return [newCustomerFromDeal, ...prev];
+      }
+
+      // 기존 고객 — 작업이력 병합 + 담당자 추가
+      const existing = prev[existingIdx];
+
+      // 1. 작업이력: 딜의 작업이력을 기존 히스토리에 추가
+      const newWorkEntries = newCustomerFromDeal.workHistory || [];
+      const mergedWorkHistory = [...(existing.workHistory || []), ...newWorkEntries];
+
+      // 2. 담당자: 이름 또는 전화번호가 일치하는 기존 담당자가 없으면 추가
+      const existingContacts = getContacts(existing);
+      const incomingContact: Contact = {
+        name: newCustomerFromDeal.contactName || '',
+        position: newCustomerFromDeal.contactPosition || '',
+        phone: newCustomerFromDeal.phone || '',
+        email: newCustomerFromDeal.email || '',
+      };
+      const hasContact = !incomingContact.name && !incomingContact.phone;
+      const contactAlreadyExists = existingContacts.some(
+        (c) =>
+          (incomingContact.name && c.name === incomingContact.name) ||
+          (incomingContact.phone && c.phone === incomingContact.phone)
+      );
+      const mergedContacts =
+        hasContact || contactAlreadyExists
+          ? existingContacts
+          : [...existingContacts, incomingContact];
+
+      // 3. 수치 업데이트
+      const updated: Customer = {
+        ...existing,
+        workHistory: mergedWorkHistory,
+        contacts: mergedContacts,
+        contactName: mergedContacts[0]?.name || existing.contactName,
+        contactPosition: mergedContacts[0]?.position || existing.contactPosition,
+        phone: mergedContacts[0]?.phone || existing.phone,
+        email: mergedContacts[0]?.email || existing.email,
+        deals: (existing.deals || 0) + 1,
+        lastWorkDate: newCustomerFromDeal.lastWorkDate || existing.lastWorkDate,
+        totalQuantity: (existing.totalQuantity || 0) + (newCustomerFromDeal.totalQuantity || 0),
+        totalAmount: (existing.totalAmount || 0) + (newCustomerFromDeal.totalAmount || 0),
+      };
+
+      updateCustomer(updated).catch((err) => console.error('딜→고객 병합 API 실패:', err));
+
+      return prev.map((c) => c.id === existing.id ? updated : c);
+    });
   }, [newCustomerFromDeal]);
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
   const [newNote, setNewNote] = useState('');
