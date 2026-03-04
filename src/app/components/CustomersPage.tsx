@@ -67,13 +67,21 @@ interface InternalNote {
   content: string;
 }
 
+interface Contact {
+  name: string;
+  position: string;
+  phone: string;
+  email: string;
+}
+
 interface Customer {
   id: number;
   company: string; // 기업명
   grade: 'S' | 'A' | 'B'; // 고객 등급
   customerStatus: '신규' | '재구매' | '충성고객'; // 고객 상태
-  contactName: string; // 담당자명
-  contactPosition: string; // 담당자 직책
+  contactName: string; // 담당자명 (첫 번째 담당자, 하위 호환)
+  contactPosition: string; // 담당자 직책 (첫 번째 담당자, 하위 호환)
+  contacts?: Contact[]; // 담당자 목록 (복수)
   deals: number; // 작업 횟수
   lastWorkDate: string; // 최근 작업일자
   totalQuantity: number; // 총 수량
@@ -82,8 +90,8 @@ interface Customer {
   nextManagementDate: string; // 다음 관리 예정일
   reminderStatus: '미발송' | '발송예약완료'; // 리마인드 메일 진행 상태
   accountManager: string; // 고객 책임자
-  phone: string; // 전화번호
-  email: string; // 이메일
+  phone: string; // 전화번호 (첫 번째 담당자, 하위 호환)
+  email: string; // 이메일 (첫 번째 담당자, 하위 호환)
   address: string; // 주소
   detailedQuantity: { item: string; quantity: number }[]; // 상세 수량
   workHistory: WorkHistory[]; // 작업 히스토리
@@ -91,6 +99,15 @@ interface Customer {
   emailHistory: EmailHistory[]; // 이메일 발송 이력
   internalNotes: InternalNote[]; // 내부 관리 메모
   memo: string; // 메모장
+}
+
+// 고객의 담당자 목록 반환 (contacts 배열 우선, 없으면 레거시 단일 필드 폴백)
+function getContacts(customer: Customer): Contact[] {
+  if (customer.contacts && customer.contacts.length > 0) return customer.contacts;
+  if (customer.contactName || customer.phone || customer.email) {
+    return [{ name: customer.contactName || '', position: customer.contactPosition || '', phone: customer.phone || '', email: customer.email || '' }];
+  }
+  return [];
 }
 
 // API에서 고객 데이터를 조회
@@ -1131,8 +1148,9 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
   // 수정 모드 시작
   const handleStartEdit = () => {
+    if (!selectedCustomer) return;
     setIsEditing(true);
-    setEditedCustomer(selectedCustomer ? { ...selectedCustomer } : null);
+    setEditedCustomer({ ...selectedCustomer, contacts: getContacts(selectedCustomer) });
   };
 
   // 수정 취소
@@ -1145,20 +1163,52 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
   const handleSaveEdit = () => {
     if (!editedCustomer || !selectedCustomer) return;
 
-    setCustomers(customers.map(customer =>
-      customer.id === selectedCustomer.id ? editedCustomer : customer
-    ));
-    setSelectedCustomer(editedCustomer);
+    // 첫 번째 담당자를 레거시 필드에 동기화 (API 하위 호환)
+    const contacts = editedCustomer.contacts || [];
+    const saved: Customer = {
+      ...editedCustomer,
+      contacts,
+      contactName: contacts[0]?.name || '',
+      contactPosition: contacts[0]?.position || '',
+      phone: contacts[0]?.phone || '',
+      email: contacts[0]?.email || '',
+    };
+
+    setCustomers(customers.map(c => c.id === selectedCustomer.id ? saved : c));
+    setSelectedCustomer(saved);
     setIsEditing(false);
     setEditedCustomer(null);
-    onNotification?.(`[${editedCustomer.company}] 고객 정보가 수정되었습니다`);
-    updateCustomer(editedCustomer).catch(err => console.error('고객 수정 API 실패:', err));
+    onNotification?.(`[${saved.company}] 고객 정보가 수정되었습니다`);
+    updateCustomer(saved).catch(err => console.error('고객 수정 API 실패:', err));
   };
 
   // 편집 중인 고객 필드 업데이트
   const updateEditedField = (field: string, value: any) => {
     if (!editedCustomer) return;
     setEditedCustomer({ ...editedCustomer, [field]: value });
+  };
+
+  // 담당자 추가
+  const handleAddContact = () => {
+    if (!editedCustomer) return;
+    const contacts = editedCustomer.contacts || [];
+    setEditedCustomer({ ...editedCustomer, contacts: [...contacts, { name: '', position: '', phone: '', email: '' }] });
+  };
+
+  // 담당자 삭제
+  const handleRemoveContact = (idx: number) => {
+    if (!editedCustomer) return;
+    const contacts = (editedCustomer.contacts || []).filter((_, i) => i !== idx);
+    setEditedCustomer({ ...editedCustomer, contacts });
+  };
+
+  // 담당자 필드 수정
+  const handleUpdateContact = (idx: number, field: keyof Contact, value: string) => {
+    if (!editedCustomer) return;
+    const contacts = (editedCustomer.contacts || []).map((c, i) =>
+      i === idx ? { ...c, [field]: value } : c
+    );
+    setEditedCustomer({ ...editedCustomer, contacts });
   };
 
   // 편집 중인 작업 히스토리 업데이트
@@ -1892,7 +1942,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                       <h3 className="text-lg font-semibold text-slate-900">기본 정보</h3>
                     </div>
                     <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
-                      <div>
+                      <div className="col-span-2">
                         <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">기업명</label>
                         {isEditing && editedCustomer ? (
                           <input
@@ -1908,66 +1958,81 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                           </div>
                         )}
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">담당자명 / 직책</label>
+                      <div className="col-span-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">담당자 정보</label>
+                          {isEditing && (
+                            <button
+                              onClick={handleAddContact}
+                              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                            >
+                              + 담당자 추가
+                            </button>
+                          )}
+                        </div>
                         {isEditing && editedCustomer ? (
-                          <div className="flex gap-1 mt-1">
-                            <input
-                              type="text"
-                              value={editedCustomer.contactName}
-                              onChange={(e) => updateEditedField('contactName', e.target.value)}
-                              placeholder="담당자명"
-                              className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <input
-                              type="text"
-                              value={editedCustomer.contactPosition}
-                              onChange={(e) => updateEditedField('contactPosition', e.target.value)}
-                              placeholder="직책"
-                              className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                          <div className="space-y-2">
+                            {(editedCustomer.contacts || []).length === 0 && (
+                              <p className="text-xs text-slate-400">담당자를 추가해주세요</p>
+                            )}
+                            {(editedCustomer.contacts || []).map((c, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={c.name}
+                                  onChange={(e) => handleUpdateContact(i, 'name', e.target.value)}
+                                  placeholder="담당자명"
+                                  className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={c.position}
+                                  onChange={(e) => handleUpdateContact(i, 'position', e.target.value)}
+                                  placeholder="직책"
+                                  className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                  type="tel"
+                                  value={c.phone}
+                                  onChange={(e) => handleUpdateContact(i, 'phone', e.target.value)}
+                                  placeholder="전화번호"
+                                  className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                  type="email"
+                                  value={c.email}
+                                  onChange={(e) => handleUpdateContact(i, 'email', e.target.value)}
+                                  placeholder="이메일"
+                                  className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-1/4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  onClick={() => handleRemoveContact(i)}
+                                  className="flex-shrink-0 p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                  title="삭제"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
                           </div>
                         ) : (
-                          <p className="mt-1 text-sm text-slate-900">
-                            {selectedCustomer.contactName} / {selectedCustomer.contactPosition}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">이메일</label>
-                        {isEditing && editedCustomer ? (
-                          <div className="mt-1 flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-slate-400" />
-                            <input
-                              type="email"
-                              value={editedCustomer.email}
-                              onChange={(e) => updateEditedField('email', e.target.value)}
-                              className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                        ) : (
-                          <div className="mt-1 flex items-center gap-2 text-sm text-slate-900">
-                            <Mail className="w-4 h-4 text-slate-400" />
-                            {selectedCustomer.email}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">전화번호</label>
-                        {isEditing && editedCustomer ? (
-                          <div className="mt-1 flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-slate-400" />
-                            <input
-                              type="tel"
-                              value={editedCustomer.phone}
-                              onChange={(e) => updateEditedField('phone', e.target.value)}
-                              className="text-sm text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                        ) : (
-                          <div className="mt-1 flex items-center gap-2 text-sm text-slate-900">
-                            <Phone className="w-4 h-4 text-slate-400" />
-                            {selectedCustomer.phone}
+                          <div className="space-y-1.5">
+                            {getContacts(selectedCustomer).length === 0 ? (
+                              <p className="text-sm text-slate-400">담당자 정보 없음</p>
+                            ) : (
+                              getContacts(selectedCustomer).map((c, i) => (
+                                <div key={i} className="flex items-center gap-4 text-sm text-slate-900">
+                                  <span className="font-medium w-20 shrink-0">{c.name || '—'}</span>
+                                  <span className="text-slate-500 w-24 shrink-0">{c.position || '—'}</span>
+                                  <span className="flex items-center gap-1 w-32 shrink-0">
+                                    <Phone className="w-3.5 h-3.5 text-slate-400" />{c.phone || '—'}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Mail className="w-3.5 h-3.5 text-slate-400" />{c.email || '—'}
+                                  </span>
+                                </div>
+                              ))
+                            )}
                           </div>
                         )}
                       </div>
