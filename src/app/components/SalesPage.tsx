@@ -1873,8 +1873,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
       {/* Deal Detail Modal */}
       {selectedDeal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white md:rounded-xl shadow-xl max-w-[1600px] w-full h-full md:h-auto md:max-h-[95vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between z-10">
+          <div className="bg-white md:rounded-xl shadow-xl max-w-[1600px] w-full h-full md:h-auto md:max-h-[95vh] flex flex-col overflow-hidden">
+            <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between shadow-sm flex-shrink-0">
               <div className="flex-1 min-w-0 mr-3">
                 <h2 className="text-lg md:text-2xl font-semibold text-slate-900 truncate">
                   {isAddingNewDeal ? '새 거래 추가' : '거래 상세 정보'}
@@ -1896,11 +1896,12 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
               </button>
             </div>
 
-            <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-4 md:space-y-6">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-6 flex-1 overflow-y-auto">
               {/* 진행 단계 */}
               <div>
                 <h4 className="text-[14px] md:text-[15px] font-semibold text-slate-700 mb-3 md:mb-4">진행 단계</h4>
-                <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+                <div className="overflow-x-auto pb-1">
+                <div className="flex gap-2 min-w-max md:min-w-0 md:grid md:grid-cols-7">
                   {customerJourneyStages.map((stage, index) => {
                     const currentDeal = isEditMode ? editedDeal : selectedDeal;
                     const isActive = currentDeal && stage.id === currentDeal.status;
@@ -1910,7 +1911,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     return (
                       <div
                         key={stage.id}
-                        className={`flex flex-col items-center gap-2 p-3 rounded-lg border transition-all ${
+                        className={`flex-shrink-0 w-[90px] md:w-auto flex flex-col items-center gap-2 p-3 rounded-lg border transition-all ${
                           !isAddingNewDeal ? 'cursor-pointer hover:shadow-md' : isEditMode ? 'cursor-pointer hover:shadow-md' : 'cursor-not-allowed opacity-70'
                         } ${
                           isActive
@@ -1945,7 +1946,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                           )}
                         </div>
                         <span
-                          className={`text-[11px] font-medium text-center leading-tight ${
+                          className={`text-[12px] font-medium text-center leading-tight ${
                             isActive
                               ? 'text-blue-700'
                               : isPast
@@ -1959,7 +1960,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     );
                   })}
                 </div>
-                <p className="text-[13px] text-slate-500 mt-3 text-center">단계를 클릭하여 진행상태를 변경할 수 있습니다</p>
+                </div>
+                {!isAddingNewDeal && (
+                  <p className="text-[13px] text-slate-500 mt-3 text-center">단계를 클릭하여 진행상태를 변경할 수 있습니다</p>
+                )}
               </div>
 
               {/* 기본 정보 */}
@@ -1977,7 +1981,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.company || ''}
                         onChange={(e) => handleFieldChange('company', e.target.value)}
                         placeholder="기업명을 입력하세요"
-                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.company?.trim() ? 'border-red-300' : 'border-slate-300'}`}
+                        className={`w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.company?.trim() ? 'border-red-300' : 'border-slate-300'}`}
                       />
                     ) : (
                       <div className="flex items-center gap-2">
@@ -1994,7 +1998,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.desiredService || ''}
                         onChange={(e) => handleFieldChange('desiredService', e.target.value)}
                         placeholder="희망하는 서비스를 입력하세요"
-                        className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.desiredService}</p>
@@ -2003,20 +2007,20 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   <div>
                     <p className="text-[13px] text-slate-500 mb-1">담당자명 / 직책</p>
                     {isEditMode ? (
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2">
                         <input
                           type="text"
                           value={editedDeal?.contactName || ''}
                           onChange={(e) => handleFieldChange('contactName', e.target.value)}
                           placeholder="담당자명"
-                          className="flex-1 px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <input
                           type="text"
                           value={editedDeal?.contactPosition || ''}
                           onChange={(e) => handleFieldChange('contactPosition', e.target.value)}
                           placeholder="직책"
-                          className="flex-1 px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     ) : (
@@ -2031,11 +2035,11 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     </p>
                     {isEditMode ? (
                       <input
-                        type="text"
+                        type="tel"
                         value={editedDeal?.phone || ''}
                         onChange={(e) => handleFieldChange('phone', e.target.value)}
                         placeholder="010-0000-0000"
-                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300`}
+                        className={`w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300`}
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.phone}</p>
@@ -2051,7 +2055,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.email || ''}
                         onChange={(e) => handleFieldChange('email', e.target.value)}
                         placeholder="example@company.com"
-                        className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.email}</p>
@@ -2067,7 +2071,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.address || ''}
                         onChange={(e) => handleFieldChange('address', e.target.value)}
                         placeholder="주소를 입력하세요"
-                        className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.address}</p>
@@ -2124,6 +2128,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     {isEditMode ? (
                       <input
                         type="text"
+                        inputMode="decimal"
                         value={editedDeal?.quotationAmount || ''}
                         onChange={(e) => handleFieldChange('quotationAmount', e.target.value)}
                         placeholder="₩0만"
@@ -2162,7 +2167,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {QUANTITY_CATEGORIES.map((cat) => (
                           <div key={cat} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200">
-                            <label className="text-[13px] text-slate-600 whitespace-nowrap flex-1">{cat}</label>
+                            <label className="text-[13px] text-slate-600 min-w-0 flex-1 truncate">{cat}</label>
                             <input
                               type="number"
                               min={0}
@@ -2184,7 +2189,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                           <button
                             type="button"
                             onClick={() => updateDQ({ ...dqData, others: [...dqData.others, { name: '', quantity: 0 }] })}
-                            className="text-[12px] text-blue-600 hover:text-blue-800 font-medium"
+                            className="py-1.5 px-2 text-[13px] text-blue-600 hover:text-blue-800 font-medium rounded"
                           >
                             + 항목 추가
                           </button>
@@ -2220,9 +2225,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                                 const updated = dqData.others.filter((_, i) => i !== idx);
                                 updateDQ({ ...dqData, others: updated });
                               }}
-                              className="text-slate-400 hover:text-red-500 text-[14px]"
+                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0"
                             >
-                              <X className="w-3.5 h-3.5" />
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
                         ))}
@@ -2244,7 +2249,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       onChange={(e) => handleFieldChange('requirements', e.target.value)}
                       placeholder="세부 전달사항을 입력하세요"
                       rows={3}
-                      className="w-full px-3 py-2 text-[15px] text-amber-900 bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                      className="w-full px-3 py-2 text-base text-amber-900 bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
                     />
                   ) : (
                     <p className="text-[15px] text-amber-900">{selectedDeal.requirements}</p>
@@ -2274,7 +2279,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     }}
                     placeholder="내부 관리용 메모를 입력하세요"
                     rows={3}
-                    className="w-full px-3 py-2 text-[15px] text-indigo-900 bg-white border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    className="w-full px-3 py-2 text-base text-indigo-900 bg-white border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                   />
                 </div>
               </div>
@@ -2316,7 +2321,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                     <select
                       value={editedDeal?.salesManager || ''}
                       onChange={(e) => handleFieldChange('salesManager', e.target.value)}
-                      className="w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                      className="w-full px-3 py-2 text-base font-medium text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
                     >
                       <option value="">선택하세요</option>
                       {customerManagerNames.map((name) => (
@@ -2341,7 +2346,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       type="date"
                       value={editedDeal?.confirmedWorkDate || ''}
                       onChange={(e) => handleFieldChange('confirmedWorkDate', e.target.value)}
-                      className="w-full px-3 py-2 text-[15px] font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                      className="w-full px-3 py-2 text-base font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
                     />
                   ) : (
                     <p className="text-[15px] font-semibold text-slate-900 mt-2">
@@ -2369,17 +2374,19 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                 </div>
               </div>
 
-              {/* 액션 버튼 */}
-              <div className="flex gap-3 pt-4 border-t border-slate-200">
+            </div>
+            {/* 액션 버튼 - sticky footer */}
+            <div className="px-4 md:px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0">
+              <div className="flex gap-3">
                 {isEditMode ? (
                   <>
-                    <button 
+                    <button
                       onClick={handleSaveEdit}
                       className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm hover:shadow"
                     >
                       {isAddingNewDeal ? '거래 추가' : '저장하기'}
                     </button>
-                    <button 
+                    <button
                       onClick={handleCancelEdit}
                       className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
                     >
@@ -2388,13 +2395,13 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   </>
                 ) : (
                   <>
-                    <button 
+                    <button
                       onClick={handleEditClick}
                       className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm hover:shadow"
                     >
                       수정하기
                     </button>
-                    <button 
+                    <button
                       onClick={() => setSelectedDeal(null)}
                       className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
                     >
