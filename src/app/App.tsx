@@ -323,7 +323,7 @@ export default function App() {
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors"
           >
             {sidebarOpen ? (
               <X className="w-5 h-5 text-slate-600" />
@@ -379,7 +379,7 @@ export default function App() {
           {isMobile && (
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors mr-2"
+              className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors mr-2"
             >
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
@@ -400,7 +400,7 @@ export default function App() {
             {/* AI 비서 */}
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
-              className="p-2 md:p-2.5 hover:bg-purple-50 rounded-xl transition-colors"
+              className="p-2.5 hover:bg-purple-50 rounded-xl transition-colors"
               title="AI 비서"
             >
               <Sparkles className="w-5 h-5 text-purple-500" />
@@ -409,7 +409,7 @@ export default function App() {
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative p-2 md:p-2.5 hover:bg-slate-50 rounded-xl transition-colors"
+                className="relative p-2.5 hover:bg-slate-50 rounded-xl transition-colors"
               >
                 <Bell className="w-5 h-5 text-slate-600" />
                 {unreadCount > 0 && (
@@ -474,7 +474,7 @@ export default function App() {
             <span className="hidden md:inline text-sm text-slate-600 font-medium">{userName}</span>
             <button
               onClick={handleLogout}
-              className="p-2 md:p-2.5 hover:bg-red-50 rounded-xl transition-colors group"
+              className="p-2.5 hover:bg-red-50 rounded-xl transition-colors group"
               title="로그아웃"
             >
               <LogOut className="w-5 h-5 text-slate-500 group-hover:text-red-500 transition-colors" />
