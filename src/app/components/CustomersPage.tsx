@@ -1027,7 +1027,8 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
   // 정렬 로직
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
-    if (!sortColumn) return 0;
+    // 기본 정렬: id 내림차순 (최근 등록 순)
+    if (!sortColumn) return b.id - a.id;
 
     let aValue: any;
     let bValue: any;
