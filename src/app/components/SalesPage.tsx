@@ -1890,17 +1890,17 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   setIsEditMode(false);
                   setEditedDeal(null);
                 }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
+                className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
               >
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
-            <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+            <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-4 md:space-y-6">
               {/* 진행 단계 */}
               <div>
                 <h4 className="text-[14px] md:text-[15px] font-semibold text-slate-700 mb-3 md:mb-4">진행 단계</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
                   {customerJourneyStages.map((stage, index) => {
                     const currentDeal = isEditMode ? editedDeal : selectedDeal;
                     const isActive = currentDeal && stage.id === currentDeal.status;
@@ -1968,7 +1968,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   <Building2 className="w-4 h-4" />
                   기본 정보
                 </h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-[13px] text-slate-500 mb-1">기업명 {isAddingNewDeal && <span className="text-red-500">*</span>}</p>
                     {isEditMode ? (
@@ -2057,7 +2057,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.email}</p>
                     )}
                   </div>
-                  <div className="col-span-2">
+                  <div className="md:col-span-2">
                     <p className="text-[13px] text-slate-500 mb-1 flex items-center gap-1">
                       <MapPin className="w-3 h-3" /> 주소
                     </p>
@@ -2082,7 +2082,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   <Briefcase className="w-4 h-4" />
                   거래 정보
                 </h4>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <p className="text-[13px] font-medium text-blue-600 uppercase tracking-wider mb-1">문의 등록일</p>
                     {isEditMode ? (
@@ -2090,17 +2090,17 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         type="date"
                         value={editedDeal?.registrationDate || ''}
                         onChange={(e) => handleFieldChange('registrationDate', e.target.value)}
-                        className="w-full px-3 py-2 text-xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-blue-900 mt-2">
+                      <p className="text-lg md:text-xl font-bold text-blue-900 mt-2">
                         {selectedDeal.registrationDate}
                       </p>
                     )}
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                     <p className="text-[13px] font-medium text-purple-600 uppercase tracking-wider mb-1">진행상태</p>
-                    <p className="text-xl font-bold text-purple-900 mt-2">
+                    <p className="text-lg md:text-xl font-bold text-purple-900 mt-2">
                       {getStatusLabel(selectedDeal.status)}
                     </p>
                   </div>
@@ -2111,10 +2111,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         type="number"
                         value={editedDeal?.totalQuantity || 0}
                         onChange={(e) => handleFieldChange('totalQuantity', parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 text-xl font-bold text-green-900 bg-white border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mt-2"
+                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-green-900 bg-white border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mt-2"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-green-900 mt-2">
+                      <p className="text-lg md:text-xl font-bold text-green-900 mt-2">
                         {selectedDeal.totalQuantity}
                       </p>
                     )}
@@ -2127,10 +2127,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.quotationAmount || ''}
                         onChange={(e) => handleFieldChange('quotationAmount', e.target.value)}
                         placeholder="₩0만"
-                        className="w-full px-3 py-2 text-xl font-bold text-orange-900 bg-white border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mt-2"
+                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-orange-900 bg-white border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mt-2"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-orange-900 mt-2">
+                      <p className="text-lg md:text-xl font-bold text-orange-900 mt-2">
                         {selectedDeal.quotationAmount}
                       </p>
                     )}
@@ -2171,7 +2171,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                                 const val = parseInt(e.target.value) || 0;
                                 updateDQ({ ...dqData, categories: { ...dqData.categories, [cat]: val } });
                               }}
-                              className="w-16 px-2 py-1 text-[13px] text-right text-slate-700 bg-slate-50 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              className="w-12 md:w-16 px-2 py-1 text-[13px] text-right text-slate-700 bg-slate-50 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
                             />
                             <span className="text-[12px] text-slate-400">대</span>
                           </div>
@@ -2211,7 +2211,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                                 updated[idx] = { ...updated[idx], quantity: parseInt(e.target.value) || 0 };
                                 updateDQ({ ...dqData, others: updated });
                               }}
-                              className="w-16 px-2 py-1.5 text-[13px] text-right text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              className="w-12 md:w-16 px-2 py-1.5 text-[13px] text-right text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
                             />
                             <span className="text-[12px] text-slate-400">대</span>
                             <button
@@ -2235,7 +2235,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
               </div>
 
               {/* 요구사항 및 메모 */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-amber-50 p-5 rounded-xl border border-amber-200">
                   <h4 className="text-[15px] font-semibold text-amber-800 mb-3">세부 전달사항</h4>
                   {isEditMode ? (
@@ -2309,7 +2309,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
               )}
 
               {/* 담당자 및 일정 정보 */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">고객책임자</p>
                   {isEditMode ? (
