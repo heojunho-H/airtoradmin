@@ -689,9 +689,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const handleSaveEdit = async () => {
     if (editedDeal) {
       if (isAddingNewDeal) {
-        // 필수 입력: 전화번호, 기업명
-        if (!editedDeal.phone.trim() || !editedDeal.company.trim()) {
-          alert('전화번호와 기업명은 필수 입력 항목입니다.');
+        // 필수 입력: 기업명
+        if (!editedDeal.company.trim()) {
+          alert('기업명은 필수 입력 항목입니다.');
           return;
         }
         // 새 거래 추가 — DB 저장
@@ -2027,7 +2027,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                   </div>
                   <div>
                     <p className="text-[13px] text-slate-500 mb-1 flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> 전화번호 {isAddingNewDeal && <span className="text-red-500">*</span>}
+                      <Phone className="w-3 h-3" /> 전화번호
                     </p>
                     {isEditMode ? (
                       <input
@@ -2035,7 +2035,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
                         value={editedDeal?.phone || ''}
                         onChange={(e) => handleFieldChange('phone', e.target.value)}
                         placeholder="010-0000-0000"
-                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAddingNewDeal && !editedDeal?.phone?.trim() ? 'border-red-300' : 'border-slate-300'}`}
+                        className={`w-full px-3 py-2 text-[15px] font-medium text-slate-900 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300`}
                       />
                     ) : (
                       <p className="text-[15px] font-medium text-slate-900">{selectedDeal.phone}</p>
