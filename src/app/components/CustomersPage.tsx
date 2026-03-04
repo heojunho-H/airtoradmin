@@ -1172,8 +1172,8 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
 
   // 고객 추가 핸들러
   const handleAddCustomer = () => {
-    if (!newCustomer.company || !newCustomer.phone) {
-      alert('회사명과 전화번호는 필수 입력 항목입니다.');
+    if (!newCustomer.company) {
+      alert('회사명은 필수 입력 항목입니다.');
       return;
     }
 
@@ -2694,7 +2694,7 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        전화번호 <span className="text-red-500">*</span>
+                        전화번호
                       </label>
                       <input
                         type="tel"
