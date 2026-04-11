@@ -484,7 +484,7 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} onNewCustomerFromDealProcessed={() => setNewCustomerFromDeal(null)} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
         </main>

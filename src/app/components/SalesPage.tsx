@@ -718,6 +718,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
           );
           setSelectedDeal(editedDeal);
           onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
+          // 모달에서 수주확정으로 저장 시 고객 자동 등록
+          if (editedDeal.status === 'confirmed' && onDealSuccess) {
+            onDealSuccess(editedDeal);
+          }
         } catch (err) {
           alert('거래 수정에 실패했습니다. 다시 시도해주세요.');
           console.error(err);

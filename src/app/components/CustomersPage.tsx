@@ -719,6 +719,7 @@ export const initialCustomers: Customer[] = [
 
 interface CustomersPageProps {
   newCustomerFromDeal?: Customer | null;
+  onNewCustomerFromDealProcessed?: () => void;
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
   subcontractorNames?: string[];
   customerManagerNames?: string[];
@@ -798,7 +799,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ newCustomerFromDeal, externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
+export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProcessed, externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -822,21 +823,21 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
   useEffect(() => {
     if (!newCustomerFromDeal) return;
 
-    setCustomers((prev) => {
-      const existingIdx = prev.findIndex((c) => c.company === newCustomerFromDeal.company);
+    const existingIdx = customers.findIndex((c) => c.company === newCustomerFromDeal.company);
 
-      if (existingIdx === -1) {
-        // 신규 고객 — DB 저장
-        const tempId = newCustomerFromDeal.id;
-        const { id, ...customerData } = newCustomerFromDeal;
-        createCustomer(customerData).then((newId) => {
+    if (existingIdx === -1) {
+      // 신규 고객 — 즉시 UI 반영 후 DB 저장
+      const tempId = newCustomerFromDeal.id;
+      const { id, ...customerData } = newCustomerFromDeal;
+      setCustomers((prev) => [newCustomerFromDeal, ...prev]);
+      createCustomer(customerData)
+        .then((newId) => {
           setCustomers((p) => p.map((c) => c.id === tempId ? { ...c, id: newId } : c));
-        }).catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
-        return [newCustomerFromDeal, ...prev];
-      }
-
+        })
+        .catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
+    } else {
       // 기존 고객 — 작업이력 병합 + 담당자 추가
-      const existing = prev[existingIdx];
+      const existing = customers[existingIdx];
 
       // 1. 작업이력: 딜의 작업이력을 기존 히스토리에 추가
       const newWorkEntries = newCustomerFromDeal.workHistory || [];
@@ -876,10 +877,13 @@ export function CustomersPage({ newCustomerFromDeal, externalCustomersState, sub
         totalAmount: (existing.totalAmount || 0) + (newCustomerFromDeal.totalAmount || 0),
       };
 
+      setCustomers((prev) => prev.map((c) => c.id === existing.id ? updated : c));
       updateCustomer(updated).catch((err) => console.error('딜→고객 병합 API 실패:', err));
+    }
 
-      return prev.map((c) => c.id === existing.id ? updated : c);
-    });
+    // 처리 완료 후 초기화 (재진입 시 중복 처리 방지)
+    onNewCustomerFromDealProcessed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newCustomerFromDeal]);
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
   const [newNote, setNewNote] = useState('');
