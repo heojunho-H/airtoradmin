@@ -166,17 +166,38 @@ function summarizeDetailedQuantity(raw: string): string {
 
 type DateFilter = { startMonth: string; endMonth: string; activeDatePreset: string };
 
+type SalesViewState = {
+  viewMode: 'pipeline' | 'list';
+  searchTerm: string;
+  showFilters: boolean;
+  selectedStatuses: string[];
+  selectedSuccessStatuses: string[];
+  selectedSalesManagers: string[];
+  minQuantity: string;
+  maxQuantity: string;
+  minAmount: string;
+  maxAmount: string;
+  sortField: 'registrationDate' | 'totalQuantity' | 'quotationAmount' | null;
+  sortDirection: 'asc' | 'desc';
+};
+
+const DEFAULT_VIEW_STATE: SalesViewState = {
+  viewMode: 'list', searchTerm: '', showFilters: false,
+  selectedStatuses: [], selectedSuccessStatuses: [], selectedSalesManagers: [],
+  minQuantity: '', maxQuantity: '', minAmount: '', maxAmount: '',
+  sortField: null, sortDirection: 'asc',
+};
+
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
   externalDateFilterState?: [DateFilter, (s: DateFilter | ((prev: DateFilter) => DateFilter)) => void];
+  externalViewState?: [SalesViewState, (s: SalesViewState | ((prev: SalesViewState) => SalesViewState)) => void];
   customerManagerNames?: string[];
   onNotification?: (message: string) => void;
 }
 
-export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilterState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
-  const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
-  const [searchTerm, setSearchTerm] = useState('');
+export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
@@ -197,8 +218,25 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   const setStartMonth = (v: string) => setDateFilter((prev) => ({ ...prev, startMonth: v }));
   const setEndMonth = (v: string) => setDateFilter((prev) => ({ ...prev, endMonth: v }));
   const setActiveDatePreset = (v: string) => setDateFilter((prev) => ({ ...prev, activeDatePreset: v }));
+
+  // 뷰/필터/정렬 상태 — 페이지 이탈 후 복귀 시 유지
+  const [internalViewState, setInternalViewState] = useState<SalesViewState>(DEFAULT_VIEW_STATE);
+  const viewState = externalViewState ? externalViewState[0] : internalViewState;
+  const setViewState = externalViewState ? externalViewState[1] : setInternalViewState;
+  const { viewMode, searchTerm, showFilters, selectedStatuses, selectedSuccessStatuses, selectedSalesManagers, minQuantity, maxQuantity, minAmount, maxAmount, sortField, sortDirection } = viewState;
+  const setViewMode = (v: SalesViewState['viewMode']) => setViewState((prev) => ({ ...prev, viewMode: v }));
+  const setSearchTerm = (v: string) => setViewState((prev) => ({ ...prev, searchTerm: v }));
+  const setShowFilters = (v: boolean) => setViewState((prev) => ({ ...prev, showFilters: v }));
+  const setSelectedStatuses = (v: string[] | ((p: string[]) => string[])) => setViewState((prev) => ({ ...prev, selectedStatuses: typeof v === 'function' ? v(prev.selectedStatuses) : v }));
+  const setSelectedSuccessStatuses = (v: string[] | ((p: string[]) => string[])) => setViewState((prev) => ({ ...prev, selectedSuccessStatuses: typeof v === 'function' ? v(prev.selectedSuccessStatuses) : v }));
+  const setSelectedSalesManagers = (v: string[] | ((p: string[]) => string[])) => setViewState((prev) => ({ ...prev, selectedSalesManagers: typeof v === 'function' ? v(prev.selectedSalesManagers) : v }));
+  const setMinQuantity = (v: string) => setViewState((prev) => ({ ...prev, minQuantity: v }));
+  const setMaxQuantity = (v: string) => setViewState((prev) => ({ ...prev, maxQuantity: v }));
+  const setMinAmount = (v: string) => setViewState((prev) => ({ ...prev, minAmount: v }));
+  const setMaxAmount = (v: string) => setViewState((prev) => ({ ...prev, maxAmount: v }));
+  const setSortField = (v: SalesViewState['sortField']) => setViewState((prev) => ({ ...prev, sortField: v }));
+  const setSortDirection = (v: SalesViewState['sortDirection']) => setViewState((prev) => ({ ...prev, sortDirection: v }));
   const [isAddingNewDeal, setIsAddingNewDeal] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
   // DB에서 딜 데이터 로드
@@ -256,18 +294,6 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 필터 상태
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedSuccessStatuses, setSelectedSuccessStatuses] = useState<string[]>([]);
-  const [selectedSalesManagers, setSelectedSalesManagers] = useState<string[]>([]);
-  const [minQuantity, setMinQuantity] = useState<string>('');
-  const [maxQuantity, setMaxQuantity] = useState<string>('');
-  const [minAmount, setMinAmount] = useState<string>('');
-  const [maxAmount, setMaxAmount] = useState<string>('');
-  
-  // 정렬 상태
-  const [sortField, setSortField] = useState<'registrationDate' | 'totalQuantity' | 'quotationAmount' | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // 헤더 필터 드롭다운 상태
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);

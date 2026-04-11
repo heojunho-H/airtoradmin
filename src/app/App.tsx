@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
-import { SalesPage, fetchDeals } from './components/SalesPage';
+import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
@@ -82,6 +82,12 @@ export default function App() {
   const [deals, setDeals] = useState<any[]>([]);
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [salesDateFilter, setSalesDateFilter] = useState({ startMonth: currentMonth, endMonth: currentMonth, activeDatePreset: '이번 달' });
+  const [salesViewState, setSalesViewState] = useState<SalesViewState>({
+    viewMode: 'list', searchTerm: '', showFilters: false,
+    selectedStatuses: [], selectedSuccessStatuses: [], selectedSalesManagers: [],
+    minQuantity: '', maxQuantity: '', minAmount: '', maxAmount: '',
+    sortField: null, sortDirection: 'asc',
+  });
   const [customers, setCustomers] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
@@ -487,7 +493,7 @@ export default function App() {
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
           {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} onNewCustomerFromDealProcessed={() => setNewCustomerFromDeal(null)} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
         </main>
       </div>
