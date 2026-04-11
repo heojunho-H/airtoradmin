@@ -80,6 +80,8 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [salesDateFilter, setSalesDateFilter] = useState({ startMonth: currentMonth, endMonth: currentMonth, activeDatePreset: '이번 달' });
   const [customers, setCustomers] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
@@ -485,7 +487,7 @@ export default function App() {
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
           {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} onNewCustomerFromDealProcessed={() => setNewCustomerFromDeal(null)} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
         </main>
       </div>

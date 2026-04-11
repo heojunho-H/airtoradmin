@@ -164,14 +164,17 @@ function summarizeDetailedQuantity(raw: string): string {
   return parts.length > 0 ? parts.join(', ') : '없음';
 }
 
+type DateFilter = { startMonth: string; endMonth: string; activeDatePreset: string };
+
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
+  externalDateFilterState?: [DateFilter, (s: DateFilter | ((prev: DateFilter) => DateFilter)) => void];
   customerManagerNames?: string[];
   onNotification?: (message: string) => void;
 }
 
-export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilterState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -185,10 +188,16 @@ export function SalesPage({ onDealSuccess, externalDealsState, customerManagerNa
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedDeal, setEditedDeal] = useState<Deal | null>(null);
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const [startMonth, setStartMonth] = useState(currentMonth);
-  const [endMonth, setEndMonth] = useState(currentMonth);
+  const [internalDateFilter, setInternalDateFilter] = useState<DateFilter>({ startMonth: currentMonth, endMonth: currentMonth, activeDatePreset: '이번 달' });
+  const dateFilter = externalDateFilterState ? externalDateFilterState[0] : internalDateFilter;
+  const setDateFilter = externalDateFilterState ? externalDateFilterState[1] : setInternalDateFilter;
+  const startMonth = dateFilter.startMonth;
+  const endMonth = dateFilter.endMonth;
+  const activeDatePreset = dateFilter.activeDatePreset;
+  const setStartMonth = (v: string) => setDateFilter((prev) => ({ ...prev, startMonth: v }));
+  const setEndMonth = (v: string) => setDateFilter((prev) => ({ ...prev, endMonth: v }));
+  const setActiveDatePreset = (v: string) => setDateFilter((prev) => ({ ...prev, activeDatePreset: v }));
   const [isAddingNewDeal, setIsAddingNewDeal] = useState(false);
-  const [activeDatePreset, setActiveDatePreset] = useState<string>('이번 달');
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
