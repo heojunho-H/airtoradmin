@@ -52,7 +52,7 @@ interface Deal {
   totalQuantity: number; // 총수량
   quotationAmount: string; // 견적금액
   salesManager: string; // 고객책임자
-  successStatus: 'in-progress' | 'success' | 'failed'; // 성공여부
+  successStatus: 'in-progress' | 'success' | 'failed' | 'no-quote'; // 성공여부
   isChecked: boolean; // 확인여부
   // 상세 정보
   address: string; // 주소
@@ -443,7 +443,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
       'schedule': '일정조율', 'confirmed': '수주확정',
     };
     const successMap: Record<string, string> = {
-      'in-progress': '진행중', 'success': '계약 성공', 'failed': '계약 실패',
+      'in-progress': '진행중', 'success': '계약 성공', 'failed': '계약 실패', 'no-quote': '미견적',
     };
 
     const exportData = sortedDeals.map((deal) => ({
@@ -677,7 +677,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
       setSelectedDeal(updatedDeal);
     }
 
-    const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : '진행중';
+    const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : newSuccessStatus === 'no-quote' ? '미견적' : '진행중';
     onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
 
     // 성공으로 변경 시 고객 관리 페이지에 자동 등록
@@ -1199,6 +1199,21 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                   />
                   <span className="text-[13px] text-slate-700">실패</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedSuccessStatuses.includes('no-quote')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSuccessStatuses([...selectedSuccessStatuses, 'no-quote']);
+                      } else {
+                        setSelectedSuccessStatuses(selectedSuccessStatuses.filter(s => s !== 'no-quote'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-[13px] text-slate-700">미견적</span>
+                </label>
               </div>
             </div>
 
@@ -1296,8 +1311,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
               {filteredDeals.map((deal) => (
                 <MobileCard key={deal.id} onClick={() => handleDealSelect(deal)}>
                   <MobileCardRow className="mb-2">
-                    <MobileCardBadge variant={deal.successStatus === 'success' ? 'success' : deal.successStatus === 'failed' ? 'danger' : 'default'}>
-                      {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : '진행중'}
+                    <MobileCardBadge variant={deal.successStatus === 'success' ? 'success' : deal.successStatus === 'failed' ? 'danger' : deal.successStatus === 'no-quote' ? 'warning' : 'default'}>
+                      {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : deal.successStatus === 'no-quote' ? '미견적' : '진행중'}
                     </MobileCardBadge>
                     <MobileCardBadge variant="primary">
                       {getStatusLabel(deal.status)}
@@ -1566,6 +1581,15 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                             />
                             <span className="text-sm text-slate-700">수주 실패</span>
                           </label>
+                          <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedSuccessStatuses.includes('no-quote')}
+                              onChange={() => toggleSuccessStatusFilter('no-quote')}
+                              className="rounded border-slate-300"
+                            />
+                            <span className="text-sm text-slate-700">미견적</span>
+                          </label>
                         </div>
                       </div>
                     )}
@@ -1756,6 +1780,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                               <option value="in-progress">진행중</option>
                               <option value="success">성공</option>
                               <option value="failed">실패</option>
+                              <option value="no-quote">미견적</option>
                             </select>
                           </div>
                         ) : (
@@ -1767,18 +1792,24 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                                   ? '#ecfdf5'
                                   : deal.successStatus === 'failed'
                                   ? '#fef2f2'
+                                  : deal.successStatus === 'no-quote'
+                                  ? '#fff7ed'
                                   : '#f0fdf4',
                               color:
                                 deal.successStatus === 'success'
                                   ? '#16a34a'
                                   : deal.successStatus === 'failed'
                                   ? '#dc2626'
+                                  : deal.successStatus === 'no-quote'
+                                  ? '#c2410c'
                                   : '#6b7280',
                               borderColor:
                                 deal.successStatus === 'success'
                                   ? '#a7f3d0'
                                   : deal.successStatus === 'failed'
                                   ? '#f87171'
+                                  : deal.successStatus === 'no-quote'
+                                  ? '#fdba74'
                                   : '#d1d5db',
                             }}
                             onClick={(e) => {
@@ -1786,7 +1817,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                               setEditingSuccessStatusId(deal.id);
                             }}
                           >
-                            {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : '진행중'}
+                            {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : deal.successStatus === 'no-quote' ? '미견적' : '진행중'}
                           </span>
                         )}
                       </div>
@@ -2403,6 +2434,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                     ) : selectedDeal.successStatus === 'failed' ? (
                       <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-red-100 text-red-800 border-2 border-red-300">
                         계약 실패
+                      </span>
+                    ) : selectedDeal.successStatus === 'no-quote' ? (
+                      <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-orange-100 text-orange-800 border-2 border-orange-300">
+                        미견적
                       </span>
                     ) : (
                       <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-slate-100 text-slate-700 border-2 border-slate-300">
