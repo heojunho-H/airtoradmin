@@ -1031,8 +1031,13 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
 
   // 정렬 로직
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
-    // 기본 정렬: id 내림차순 (최근 등록 순)
-    if (!sortColumn) return b.id - a.id;
+    // 기본 정렬: 최근 작업일 내림차순 (재구매 고객이 상단으로)
+    if (!sortColumn) {
+      const aDate = new Date(a.lastWorkDate).getTime();
+      const bDate = new Date(b.lastWorkDate).getTime();
+      if (bDate !== aDate) return bDate - aDate;
+      return b.id - a.id;
+    }
 
     let aValue: any;
     let bValue: any;
