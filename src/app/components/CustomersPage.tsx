@@ -718,8 +718,6 @@ export const initialCustomers: Customer[] = [
 ];
 
 interface CustomersPageProps {
-  newCustomerFromDeal?: Customer | null;
-  onNewCustomerFromDealProcessed?: () => void;
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
   subcontractorNames?: string[];
   customerManagerNames?: string[];
@@ -799,7 +797,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProcessed, externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -819,72 +817,8 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 영업 관리에서 성공한 딜이 넘어오면 고객 자동 등록 또는 기존 고객 업데이트
-  useEffect(() => {
-    if (!newCustomerFromDeal) return;
-
-    const existingIdx = customers.findIndex((c) => c.company === newCustomerFromDeal.company);
-
-    if (existingIdx === -1) {
-      // 신규 고객 — 즉시 UI 반영 후 DB 저장
-      const tempId = newCustomerFromDeal.id;
-      const { id, ...customerData } = newCustomerFromDeal;
-      setCustomers((prev) => [newCustomerFromDeal, ...prev]);
-      createCustomer(customerData)
-        .then((newId) => {
-          setCustomers((p) => p.map((c) => c.id === tempId ? { ...c, id: newId } : c));
-        })
-        .catch((err) => console.error('딜→고객 자동등록 API 실패:', err));
-    } else {
-      // 기존 고객 — 작업이력 병합 + 담당자 추가
-      const existing = customers[existingIdx];
-
-      // 1. 작업이력: 딜의 작업이력을 기존 히스토리에 추가
-      const newWorkEntries = newCustomerFromDeal.workHistory || [];
-      const mergedWorkHistory = [...(existing.workHistory || []), ...newWorkEntries];
-
-      // 2. 담당자: 이름 또는 전화번호가 일치하는 기존 담당자가 없으면 추가
-      const existingContacts = getContacts(existing);
-      const incomingContact: Contact = {
-        name: newCustomerFromDeal.contactName || '',
-        position: newCustomerFromDeal.contactPosition || '',
-        phone: newCustomerFromDeal.phone || '',
-        email: newCustomerFromDeal.email || '',
-      };
-      const hasContact = !incomingContact.name && !incomingContact.phone;
-      const contactAlreadyExists = existingContacts.some(
-        (c) =>
-          (incomingContact.name && c.name === incomingContact.name) ||
-          (incomingContact.phone && c.phone === incomingContact.phone)
-      );
-      const mergedContacts =
-        hasContact || contactAlreadyExists
-          ? existingContacts
-          : [...existingContacts, incomingContact];
-
-      // 3. 수치 업데이트
-      const updated: Customer = {
-        ...existing,
-        workHistory: mergedWorkHistory,
-        contacts: mergedContacts,
-        contactName: mergedContacts[0]?.name || existing.contactName,
-        contactPosition: mergedContacts[0]?.position || existing.contactPosition,
-        phone: mergedContacts[0]?.phone || existing.phone,
-        email: mergedContacts[0]?.email || existing.email,
-        deals: (existing.deals || 0) + 1,
-        lastWorkDate: newCustomerFromDeal.lastWorkDate || existing.lastWorkDate,
-        totalQuantity: (existing.totalQuantity || 0) + (newCustomerFromDeal.totalQuantity || 0),
-        totalAmount: (existing.totalAmount || 0) + (newCustomerFromDeal.totalAmount || 0),
-      };
-
-      setCustomers((prev) => prev.map((c) => c.id === existing.id ? updated : c));
-      updateCustomer(updated).catch((err) => console.error('딜→고객 병합 API 실패:', err));
-    }
-
-    // 처리 완료 후 초기화 (재진입 시 중복 처리 방지)
-    onNewCustomerFromDealProcessed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newCustomerFromDeal]);
+  // 딜→고객 자동 동기화는 서버측(api/deals_api.php)에서 처리됨
+  // App.tsx의 handleDealSuccess가 fetchCustomers()로 결과를 가져와 setCustomers 호출
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
   const [newNote, setNewNote] = useState('');
   const [showAddWorkForm, setShowAddWorkForm] = useState(false);
@@ -903,7 +837,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
     accountManager: '',
     phone: '',
     email: '',
-    managementCycle: 30,
+    managementCycle: 365,
     reminderStatus: '미발송',
   });
   const [newWork, setNewWork] = useState<WorkHistory>({
@@ -1286,7 +1220,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const nextManagementDate = calculateNextManagementDate(today, newCustomer.managementCycle || 30);
+    const nextManagementDate = calculateNextManagementDate(today, newCustomer.managementCycle || 365);
 
     const customerData: any = {
       company: newCustomer.company,
@@ -1298,7 +1232,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
       totalQuantity: 0,
       totalAmount: 0,
       deals: 0,
-      managementCycle: newCustomer.managementCycle || 30,
+      managementCycle: newCustomer.managementCycle || 365,
       nextManagementDate: nextManagementDate,
       reminderStatus: newCustomer.reminderStatus || '미발송',
       accountManager: newCustomer.accountManager || '',
@@ -1331,7 +1265,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
       accountManager: '',
       phone: '',
       email: '',
-      managementCycle: 30,
+      managementCycle: 365,
       reminderStatus: '미발송',
     });
   };
@@ -2895,7 +2829,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">관리 주기</label>
                       <select
-                        value={isPresetCycle(newCustomer.managementCycle || 30) ? (newCustomer.managementCycle || 30) : -1}
+                        value={isPresetCycle(newCustomer.managementCycle || 365) ? (newCustomer.managementCycle || 365) : -1}
                         onChange={(e) => {
                           const val = parseInt(e.target.value);
                           if (val !== -1) setNewCustomer({ ...newCustomer, managementCycle: val });
@@ -2907,7 +2841,7 @@ export function CustomersPage({ newCustomerFromDeal, onNewCustomerFromDealProces
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>
-                      {!isPresetCycle(newCustomer.managementCycle || 30) && (
+                      {!isPresetCycle(newCustomer.managementCycle || 365) && (
                         <div className="flex items-center gap-2 mt-2">
                           <input
                             type="number"

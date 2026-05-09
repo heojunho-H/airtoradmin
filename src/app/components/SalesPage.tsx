@@ -629,7 +629,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     updateDeal(updatedDeal).catch(err => console.error('확인 상태 저장 실패:', err));
   };
 
-  const handleStatusChange = (dealId: number, newStatus: Deal['status']) => {
+  const handleStatusChange = async (dealId: number, newStatus: Deal['status']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
 
@@ -639,9 +639,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
       successStatus: newStatus === 'confirmed' ? 'success' as const : targetDeal.successStatus
     };
 
-    // DB에 저장 (비동기, UI는 즉시 반영)
-    updateDeal(updatedDeal).catch((err) => console.error('상태 변경 저장 실패:', err));
-
+    // UI는 즉시 반영
     setDealsData((prevDeals) =>
       prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
     );
@@ -653,20 +651,26 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
 
     onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
 
-    // 수주확정 시 고객 관리 페이지에 자동 등록
-    if (newStatus === 'confirmed' && onDealSuccess) {
+    // DB 저장 (서버에서 status=confirmed 시 고객 자동 동기화)
+    try {
+      await updateDeal(updatedDeal);
+    } catch (err) {
+      console.error('상태 변경 저장 실패:', err);
+      return;
+    }
+
+    // 서버 동기화 완료 후 클라이언트 고객 목록 새로고침 트리거
+    const becameSuccess = newStatus === 'confirmed' || updatedDeal.successStatus === 'success';
+    if (becameSuccess && onDealSuccess) {
       onDealSuccess(updatedDeal);
     }
   };
 
-  const handleSuccessStatusChange = (dealId: number, newSuccessStatus: Deal['successStatus']) => {
+  const handleSuccessStatusChange = async (dealId: number, newSuccessStatus: Deal['successStatus']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
 
     const updatedDeal = { ...targetDeal, successStatus: newSuccessStatus };
-
-    // DB에 저장
-    updateDeal(updatedDeal).catch((err) => console.error('성공여부 변경 저장 실패:', err));
 
     setDealsData((prevDeals) =>
       prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
@@ -680,7 +684,13 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : newSuccessStatus === 'no-quote' ? '미견적' : '진행중';
     onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
 
-    // 성공으로 변경 시 고객 관리 페이지에 자동 등록
+    try {
+      await updateDeal(updatedDeal);
+    } catch (err) {
+      console.error('성공여부 변경 저장 실패:', err);
+      return;
+    }
+
     if (newSuccessStatus === 'success' && onDealSuccess) {
       onDealSuccess(updatedDeal);
     }
@@ -753,8 +763,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
           );
           setSelectedDeal(editedDeal);
           onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
-          // 모달에서 수주확정으로 저장 시 고객 자동 등록
-          if (editedDeal.status === 'confirmed' && onDealSuccess) {
+          // 모달에서 수주확정 또는 성공 상태로 저장 시 고객 자동 동기화 트리거
+          const becameSuccess = editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
+          if (becameSuccess && onDealSuccess) {
             onDealSuccess(editedDeal);
           }
         } catch (err) {

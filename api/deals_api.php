@@ -52,6 +52,205 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// ============================================================
+// 회사명 정규화 — 표기 변형 매칭용
+// "(주) 플리", "주식회사 플리", " 플리 " → "플리"
+// 영업관리/고객관리 양쪽에서 동일 규칙 적용 (TS 사본: src/lib/company.ts)
+// ============================================================
+function normalizeCompanyName($name) {
+    if (!$name) return '';
+    $name = trim($name);
+    $patterns = array(
+        '/주식회사\s*/u', '/\(주\)\s*/u',
+        '/유한회사\s*/u', '/\(유\)\s*/u',
+        '/사단법인\s*/u', '/\(사\)\s*/u',
+        '/재단법인\s*/u', '/\(재\)\s*/u',
+        '/의료법인\s*/u', '/\(의\)\s*/u',
+        '/학교법인\s*/u', '/\(학\)\s*/u',
+    );
+    foreach ($patterns as $p) {
+        $name = preg_replace($p, '', $name);
+    }
+    return preg_replace('/\s+/u', '', $name);
+}
+
+// 견적금액 문자열을 정수로 변환 ("₩790만"→7900000, "7900000"→7900000)
+function parseQuotationAmount($str) {
+    if (!$str) return 0;
+    $hasUk = strpos($str, '억') !== false;
+    $hasMan = strpos($str, '만') !== false;
+    $cleaned = preg_replace('/[^0-9.]/', '', $str);
+    if ($cleaned === '') return 0;
+    $num = floatval($cleaned);
+    if ($hasUk) return intval($num * 100000000);
+    if ($hasMan) return intval($num * 10000);
+    return intval($num);
+}
+
+// ============================================================
+// 딜 → 고객 자동 동기화
+// 트리거: status='confirmed' 또는 successStatus='success'
+// 매칭: 정규화된 회사명으로 기존 고객 검색
+//   - 신규 고객이면 INSERT (workHistory 1건 포함)
+//   - 기존 고객이면 workHistory를 dealId 기준으로 upsert + 집계 재계산
+// 멱등성: dealId 키로 중복 방지 (legacy 엔트리는 inquiryDate로 폴백 매칭)
+// ============================================================
+function syncDealToCustomer($conn, $deal) {
+    $isSuccess = (isset($deal['status']) && $deal['status'] === 'confirmed')
+              || (isset($deal['successStatus']) && $deal['successStatus'] === 'success');
+    if (!$isSuccess) return;
+
+    $company = isset($deal['company']) ? trim($deal['company']) : '';
+    if ($company === '') return;
+    $normalizedTarget = normalizeCompanyName($company);
+    if ($normalizedTarget === '') return;
+
+    $today = date('Y-m-d');
+    $dealId = intval($deal['id']);
+    $inquiryDate = !empty($deal['registrationDate']) ? $deal['registrationDate'] : $today;
+    $workDate = !empty($deal['confirmedWorkDate']) ? $deal['confirmedWorkDate'] : $today;
+    $amount = parseQuotationAmount(isset($deal['quotationAmount']) ? $deal['quotationAmount'] : '');
+    $totalQty = isset($deal['totalQuantity']) ? intval($deal['totalQuantity']) : 0;
+    $service = isset($deal['desiredService']) ? $deal['desiredService'] : '';
+    $detailedQty = isset($deal['detailedQuantity']) ? $deal['detailedQuantity'] : '';
+    $salesManager = isset($deal['salesManager']) ? $deal['salesManager'] : '';
+
+    $workEntry = array(
+        'dealId' => $dealId,
+        'inquiryDate' => $inquiryDate,
+        'projectName' => $service,
+        'totalQuantity' => $totalQty,
+        'detailedQuantity' => $detailedQty,
+        'quotationAmount' => $amount,
+        'accountManager' => $salesManager,
+        'workDate' => $workDate,
+        'subcontractorManager' => '',
+        'reportSent' => false,
+        'reminder1' => false,
+        'reminder2' => false,
+        'reminder3' => false,
+    );
+
+    // 정규화 매칭으로 기존 고객 검색 (전체 스캔, ~100건 규모)
+    $matched = null;
+    $res = $conn->query("SELECT id, company, work_history FROM airtor_customers");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            if (normalizeCompanyName($row['company']) === $normalizedTarget) {
+                $matched = $row;
+                break;
+            }
+        }
+        $res->free();
+    }
+
+    if (!$matched) {
+        // 신규 고객 INSERT
+        $nextDate = date('Y-m-d', strtotime('+365 days'));
+        $contactName = isset($deal['contactName']) ? $deal['contactName'] : '';
+        $contactPosition = isset($deal['contactPosition']) ? $deal['contactPosition'] : '';
+        $phone = isset($deal['phone']) ? $deal['phone'] : '';
+        $email = isset($deal['email']) ? $deal['email'] : '';
+        $address = isset($deal['address']) ? $deal['address'] : '';
+        $memo = isset($deal['managementMemo']) ? $deal['managementMemo'] : '';
+        $requirements = !empty($deal['requirements']) ? $deal['requirements'] : '없음';
+
+        $internalNotes = json_encode(array(array(
+            'id' => 1,
+            'author' => $salesManager,
+            'date' => $today,
+            'content' => '영업관리에서 자동 등록됨. 요구사항: ' . $requirements,
+        )), JSON_UNESCAPED_UNICODE);
+        $detailedQuantityJson = !empty($detailedQty)
+            ? json_encode(array(array('item' => $service, 'quantity' => $totalQty)), JSON_UNESCAPED_UNICODE)
+            : '[]';
+        $workHistoryJson = json_encode(array($workEntry), JSON_UNESCAPED_UNICODE);
+        $grade = '미설정';
+        $customerStatus = '신규';
+        $deals = 1;
+        $managementCycle = 365;
+        $reminderStatus = '미발송';
+        $fieldManager = '';
+        $emailHistory = '[]';
+
+        $sql = "INSERT INTO airtor_customers
+            (company, grade, customer_status, contact_name, contact_position,
+             deals, last_work_date, total_quantity, total_amount,
+             management_cycle, next_management_date, reminder_status,
+             account_manager, phone, email, address, field_manager, memo,
+             detailed_quantity, work_history, email_history, internal_notes,
+             created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) return;
+        $stmt->bind_param('ssssssssssssssssssssss',
+            $company, $grade, $customerStatus, $contactName, $contactPosition,
+            $deals, $workDate, $totalQty, $amount,
+            $managementCycle, $nextDate, $reminderStatus,
+            $salesManager, $phone, $email, $address, $fieldManager, $memo,
+            $detailedQuantityJson, $workHistoryJson, $emailHistory, $internalNotes
+        );
+        $stmt->execute();
+        $stmt->close();
+        return;
+    }
+
+    // 기존 고객: workHistory upsert (dealId → inquiryDate 폴백)
+    $existing = !empty($matched['work_history']) ? json_decode($matched['work_history'], true) : array();
+    if (!is_array($existing)) $existing = array();
+
+    $foundIdx = -1;
+    foreach ($existing as $i => $entry) {
+        if (isset($entry['dealId']) && intval($entry['dealId']) === $dealId) {
+            $foundIdx = $i;
+            break;
+        }
+    }
+    if ($foundIdx === -1) {
+        // legacy 엔트리: dealId 없는 것 중 inquiryDate 일치하는 첫 번째
+        foreach ($existing as $i => $entry) {
+            if (!isset($entry['dealId']) && isset($entry['inquiryDate']) && $entry['inquiryDate'] === $inquiryDate) {
+                $foundIdx = $i;
+                break;
+            }
+        }
+    }
+
+    if ($foundIdx >= 0) {
+        // 사용자가 편집했을 수 있는 워크플로우 필드는 보존
+        $preserved = array(
+            'subcontractorManager' => isset($existing[$foundIdx]['subcontractorManager']) ? $existing[$foundIdx]['subcontractorManager'] : '',
+            'reportSent' => isset($existing[$foundIdx]['reportSent']) ? $existing[$foundIdx]['reportSent'] : false,
+            'reminder1' => isset($existing[$foundIdx]['reminder1']) ? $existing[$foundIdx]['reminder1'] : false,
+            'reminder2' => isset($existing[$foundIdx]['reminder2']) ? $existing[$foundIdx]['reminder2'] : false,
+            'reminder3' => isset($existing[$foundIdx]['reminder3']) ? $existing[$foundIdx]['reminder3'] : false,
+        );
+        $existing[$foundIdx] = array_merge($workEntry, $preserved);
+    } else {
+        $existing[] = $workEntry;
+    }
+
+    // 집계 재계산
+    $sumQty = 0; $sumAmt = 0; $maxWorkDate = '';
+    foreach ($existing as $entry) {
+        $sumQty += isset($entry['totalQuantity']) ? intval($entry['totalQuantity']) : 0;
+        $sumAmt += isset($entry['quotationAmount']) ? intval($entry['quotationAmount']) : 0;
+        $wd = isset($entry['workDate']) ? $entry['workDate'] : '';
+        if ($wd > $maxWorkDate) $maxWorkDate = $wd;
+    }
+    $dealCount = count($existing);
+    $newJson = json_encode($existing, JSON_UNESCAPED_UNICODE);
+    $custId = intval($matched['id']);
+
+    $stmt = $conn->prepare("UPDATE airtor_customers
+        SET work_history = ?, deals = ?, total_quantity = ?, total_amount = ?, last_work_date = ?
+        WHERE id = ?");
+    if (!$stmt) return;
+    $stmt->bind_param('siiisi', $newJson, $dealCount, $sumQty, $sumAmt, $maxWorkDate, $custId);
+    $stmt->execute();
+    $stmt->close();
+}
+
 $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
 if ($conn->connect_error) {
     http_response_code(500);
@@ -101,7 +300,7 @@ if ($method === 'GET') {
         $rawStatus = ($row['on_option3'] !== '' && $row['on_option3'] !== null) ? $row['on_option3'] : '';
         $statusVal = in_array($rawStatus, $validStatuses) ? $rawStatus : 'new';
 
-        $validSuccess = array('in-progress','success','failed');
+        $validSuccess = array('in-progress','success','failed','no-quote');
         $rawSuccess = ($row['on_option4'] !== '' && $row['on_option4'] !== null) ? $row['on_option4'] : '';
         $successVal = in_array($rawSuccess, $validSuccess) ? $rawSuccess : 'in-progress';
 
@@ -217,6 +416,11 @@ if ($method === 'POST') {
     $newId = $conn->insert_id;
     $stmt->close();
 
+    // 새 딜이 처음부터 성공 상태로 추가되면 고객 자동 동기화
+    $dealForSync = $input;
+    $dealForSync['id'] = $newId;
+    syncDealToCustomer($conn, $dealForSync);
+
     echo json_encode(array('success' => true, 'id' => $newId));
     $conn->close();
     exit;
@@ -292,6 +496,12 @@ if ($method === 'PUT') {
     }
 
     $stmt->close();
+
+    // 딜이 성공/수주확정 상태로 저장되면 고객 자동 동기화
+    $dealForSync = $input;
+    $dealForSync['id'] = $id;
+    syncDealToCustomer($conn, $dealForSync);
+
     echo json_encode(array('success' => true));
     $conn->close();
     exit;

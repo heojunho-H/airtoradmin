@@ -6,79 +6,12 @@ import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPa
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
-// Deal 데이터를 Customer 형식으로 변환
-function convertDealToCustomer(deal: any) {
-  const today = new Date().toISOString().split('T')[0];
-  const nextDate = new Date();
-  nextDate.setDate(nextDate.getDate() + 30);
-
-  // 견적금액 문자열을 숫자로 변환 (예: "₩12,500만" → 125000000)
-  const parseAmount = (str: string): number => {
-    const num = parseFloat(str.replace(/[^0-9.]/g, ''));
-    if (str.includes('억')) return num * 100000000;
-    if (str.includes('만')) return num * 10000;
-    return num || 0;
-  };
-
-  const contacts = (deal.contactName || deal.phone || deal.email)
-    ? [{ name: deal.contactName || '', position: deal.contactPosition || '', phone: deal.phone || '', email: deal.email || '' }]
-    : [];
-
-  return {
-    id: Date.now(),
-    company: deal.company,
-    grade: '미설정',
-    customerStatus: '신규' as const,
-    contactName: deal.contactName,
-    contactPosition: deal.contactPosition,
-    contacts,
-    deals: 1,
-    lastWorkDate: deal.confirmedWorkDate || today,
-    totalQuantity: deal.totalQuantity,
-    totalAmount: parseAmount(deal.quotationAmount),
-    managementCycle: 30,
-    nextManagementDate: nextDate.toISOString().split('T')[0],
-    reminderStatus: '미발송' as const,
-    accountManager: deal.salesManager,
-    phone: deal.phone,
-    email: deal.email,
-    address: deal.address,
-    detailedQuantity: deal.detailedQuantity
-      ? [{ item: deal.desiredService, quantity: deal.totalQuantity }]
-      : [],
-    workHistory: [{
-      inquiryDate: deal.registrationDate,
-      projectName: deal.desiredService,
-      totalQuantity: deal.totalQuantity,
-      detailedQuantity: deal.detailedQuantity || '',
-      quotationAmount: parseAmount(deal.quotationAmount),
-      accountManager: deal.salesManager,
-      workDate: deal.confirmedWorkDate || today,
-      subcontractorManager: '',
-      reportSent: false,
-      reminder1: false,
-      reminder2: false,
-      reminder3: false,
-    }],
-    fieldManager: '',
-    emailHistory: [],
-    internalNotes: [{
-      id: 1,
-      author: deal.salesManager,
-      date: today,
-      content: `영업관리에서 자동 등록됨. 요구사항: ${deal.requirements || '없음'}`,
-    }],
-    memo: deal.managementMemo || '',
-  };
-}
-
 export default function App() {
   const navigate = useNavigate();
   const userName = localStorage.getItem('user_name') || '';
   const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain'>('sales');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const [newCustomerFromDeal, setNewCustomerFromDeal] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [salesDateFilter, setSalesDateFilter] = useState({ startMonth: currentMonth, endMonth: currentMonth, activeDatePreset: '이번 달' });
@@ -181,12 +114,17 @@ export default function App() {
     navigate('/login');
   };
 
-  // 영업에서 성공한 딜을 고객으로 변환
-  const handleDealSuccess = (deal: any) => {
-    const customer = convertDealToCustomer(deal);
-    setNewCustomerFromDeal(customer);
+  // 영업에서 성공한 딜은 서버(deals_api.php PUT 핸들러)에서 자동으로 고객 동기화됨
+  // 클라이언트는 알림 표시 + 고객 목록 새로고침만 담당
+  const handleDealSuccess = async (deal: any) => {
     addNotification('deal_success', `[${deal.company}] 딜이 수주확정되었습니다`);
     addNotification('customer_registered', `[${deal.company}] 고객이 자동 등록되었습니다`);
+    try {
+      const refreshed = await fetchCustomers();
+      setCustomers(refreshed);
+    } catch (err) {
+      console.error('고객 목록 새로고침 실패:', err);
+    }
   };
 
   // 고객관리 작업이력 → 공급망관리 고객책임자 작업히스토리 동기화
@@ -492,7 +430,7 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage newCustomerFromDeal={newCustomerFromDeal} onNewCustomerFromDealProcessed={() => setNewCustomerFromDeal(null)} externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
         </main>
