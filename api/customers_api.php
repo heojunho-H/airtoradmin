@@ -198,30 +198,31 @@ if ($method === 'PUT') {
         exit;
     }
 
-    // 키 → (DB 컬럼명, bind 타입, 값 변환) 매핑
+    // 키 → (DB 컬럼명, bind 타입, 값 변환종류 'str'|'int'|'json') 매핑
+    // 카페24 PHP 환경 호환성을 위해 클로저 대신 문자열 식별자 사용.
     $fields = array(
-        'company'             => array('company',               's', function($v){ return (string)$v; }),
-        'grade'               => array('grade',                 's', function($v){ return (string)$v; }),
-        'customerStatus'      => array('customer_status',       's', function($v){ return (string)$v; }),
-        'contactName'         => array('contact_name',          's', function($v){ return (string)$v; }),
-        'contactPosition'     => array('contact_position',      's', function($v){ return (string)$v; }),
-        'deals'               => array('deals',                 'i', function($v){ return intval($v); }),
-        'lastWorkDate'        => array('last_work_date',        's', function($v){ return (string)$v; }),
-        'totalQuantity'       => array('total_quantity',        'i', function($v){ return intval($v); }),
-        'totalAmount'         => array('total_amount',          'i', function($v){ return intval($v); }),
-        'managementCycle'     => array('management_cycle',      'i', function($v){ return intval($v); }),
-        'nextManagementDate'  => array('next_management_date',  's', function($v){ return (string)$v; }),
-        'reminderStatus'      => array('reminder_status',       's', function($v){ return (string)$v; }),
-        'accountManager'      => array('account_manager',       's', function($v){ return (string)$v; }),
-        'phone'               => array('phone',                 's', function($v){ return (string)$v; }),
-        'email'               => array('email',                 's', function($v){ return (string)$v; }),
-        'address'             => array('address',               's', function($v){ return (string)$v; }),
-        'fieldManager'        => array('field_manager',         's', function($v){ return (string)$v; }),
-        'memo'                => array('memo',                  's', function($v){ return (string)$v; }),
-        'detailedQuantity'    => array('detailed_quantity',     's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
-        'workHistory'         => array('work_history',          's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
-        'emailHistory'        => array('email_history',         's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
-        'internalNotes'       => array('internal_notes',        's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
+        'company'             => array('company',               's', 'str'),
+        'grade'               => array('grade',                 's', 'str'),
+        'customerStatus'      => array('customer_status',       's', 'str'),
+        'contactName'         => array('contact_name',          's', 'str'),
+        'contactPosition'     => array('contact_position',      's', 'str'),
+        'deals'               => array('deals',                 'i', 'int'),
+        'lastWorkDate'        => array('last_work_date',        's', 'str'),
+        'totalQuantity'       => array('total_quantity',        'i', 'int'),
+        'totalAmount'         => array('total_amount',          'i', 'int'),
+        'managementCycle'     => array('management_cycle',      'i', 'int'),
+        'nextManagementDate'  => array('next_management_date',  's', 'str'),
+        'reminderStatus'      => array('reminder_status',       's', 'str'),
+        'accountManager'      => array('account_manager',       's', 'str'),
+        'phone'               => array('phone',                 's', 'str'),
+        'email'               => array('email',                 's', 'str'),
+        'address'             => array('address',               's', 'str'),
+        'fieldManager'        => array('field_manager',         's', 'str'),
+        'memo'                => array('memo',                  's', 'str'),
+        'detailedQuantity'    => array('detailed_quantity',     's', 'json'),
+        'workHistory'         => array('work_history',          's', 'json'),
+        'emailHistory'        => array('email_history',         's', 'json'),
+        'internalNotes'       => array('internal_notes',        's', 'json'),
     );
 
     $setClauses = array();
@@ -232,7 +233,14 @@ if ($method === 'PUT') {
         list($col, $type, $conv) = $meta;
         $setClauses[] = "$col = ?";
         $types .= $type;
-        $values[] = $conv($input[$inKey]);
+        $raw = $input[$inKey];
+        if ($conv === 'int') {
+            $values[] = intval($raw);
+        } elseif ($conv === 'json') {
+            $values[] = json_encode($raw, JSON_UNESCAPED_UNICODE);
+        } else {
+            $values[] = (string)$raw;
+        }
     }
 
     if (empty($setClauses)) {
