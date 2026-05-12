@@ -147,6 +147,79 @@ export async function sendChatMessage(
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '응답을 생성할 수 없습니다.';
 }
 
+// ============================================================
+// 기업 정보 조회 — Gemini 2.5 Flash + Google Search 그라운딩
+// 별도 함수로 분리한 이유:
+//   - AI 비서 패널은 내부 DB 데이터 분석용이라 grounding 불필요 (pro 모델 유지)
+//   - 기업 정보 조회는 웹 검색 필수 + 응답에 출처 URL 함께 반환해야 함
+// ============================================================
+export interface CompanySource {
+  uri: string;
+  title?: string;
+}
+
+export interface CompanyInfoResult {
+  text: string;
+  sources: CompanySource[];
+}
+
+const COMPANY_INFO_SYSTEM = `당신은 기업 정보 조사 전문가입니다. 사용자가 기업명을 제공하면 Google 웹 검색으로 최신 정보를 조사한 뒤 정리해주세요.
+
+다음 항목을 포함하세요 (검색 결과에서 확인 가능한 범위 내에서):
+- 기업 개요 (업종, 설립연도, 규모 등)
+- 주요 사업 분야 및 제품/서비스
+- 본사 위치 및 주요 사업장
+- 최근 동향 또는 특이사항
+- 업계 내 위치 및 경쟁사
+
+한국어로 간결하게 답변하세요. 검색 결과에서 확인되지 않은 정보는 추측하지 말고, 알 수 없는 항목은 생략하세요.
+중소기업이나 정보가 부족한 경우 솔직하게 알려주세요. 검색에서 같은 이름의 다른 기업이 섞여 나오면 한국 B2B 맥락에 맞는 회사를 우선 채택하세요.`;
+
+export async function sendCompanyInfoQuery(companyName: string): Promise<CompanyInfoResult> {
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _model: 'gemini-2.5-flash',
+      systemInstruction: {
+        parts: [{ text: COMPANY_INFO_SYSTEM }],
+      },
+      contents: [{
+        role: 'user',
+        parts: [{ text: `"${companyName}" 기업에 대한 정보를 조사해주세요.` }],
+      }],
+      // Google Search 그라운딩 — 실시간 웹 검색 + 응답에 groundingMetadata 포함
+      tools: [{ google_search: {} }],
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 4096,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Gemini company info error:', errorText);
+    throw new Error(`AI 응답 오류 (${response.status})`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '응답을 생성할 수 없습니다.';
+
+  // 인용 URL 추출 (중복 제거)
+  const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const sources: CompanySource[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunks) {
+    const uri: string | undefined = chunk?.web?.uri;
+    if (!uri || seen.has(uri)) continue;
+    seen.add(uri);
+    sources.push({ uri, title: chunk?.web?.title });
+  }
+
+  return { text, sources };
+}
+
 // 공통 상수
 const statusMap: Record<string, string> = {
   'new': '신규', 'call': '유선상담', 'quote-sent': '견적서 발송',
