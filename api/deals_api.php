@@ -1,6 +1,14 @@
 <?php
+/**
+ * ⚠️ 카페24 PHP 5.2.x 호환 코드 — 모던 문법 금지
+ *    상세: api/COMPATIBILITY.md
+ *    - 클로저, 2-인자 json_encode, JSON_UNESCAPED_UNICODE 등 사용 금지
+ *    - prepare/execute 실패 시 반드시 error_log() + return false
+ */
 error_reporting(0);
 ini_set('display_errors', 0);
+// 에러 로그는 카페24 호스팅 기본 위치로 보냄 (디스플레이는 막되 기록은 남김).
+ini_set('log_errors', 1);
 
 /**
  * 영업(딜) 데이터 API — airtoradmin 전용
@@ -96,13 +104,16 @@ function parseQuotationAmount($str) {
 // 멱등성: dealId 키로 중복 방지 (legacy 엔트리는 inquiryDate로 폴백 매칭)
 // ============================================================
 function syncDealToCustomer($conn, $deal) {
+    // 반환값:
+    //   true  — 성공 (실제 sync 수행 또는 sync 조건 불충족으로 정상 skip)
+    //   false — DB 작업 중 실제 실패 발생 (이 경우 error_log에 사유 남김)
     $isSuccess = (isset($deal['status']) && $deal['status'] === 'confirmed')
               || (isset($deal['successStatus']) && $deal['successStatus'] === 'success');
 
     $company = isset($deal['company']) ? trim($deal['company']) : '';
-    if ($company === '') return;
+    if ($company === '') return true; // sync 대상 아님 — 정상
     $normalizedTarget = normalizeCompanyName($company);
-    if ($normalizedTarget === '') return;
+    if ($normalizedTarget === '') return true; // 정규화 후 비어버리면 sync 대상 아님
 
     $today = date('Y-m-d');
     $dealId = intval($deal['id']);
@@ -154,7 +165,7 @@ function syncDealToCustomer($conn, $deal) {
     }
 
     // 신규 고객 자동 생성은 여전히 success/confirmed 전이 시에만 발동
-    if (!$matched && !$isSuccess) return;
+    if (!$matched && !$isSuccess) return true; // 정상 skip
 
     if (!$matched) {
         // 신규 고객 INSERT
@@ -196,7 +207,10 @@ function syncDealToCustomer($conn, $deal) {
              created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
         $stmt = $conn->prepare($sql);
-        if (!$stmt) return;
+        if (!$stmt) {
+            error_log('[syncDealToCustomer] INSERT prepare failed (dealId=' . $dealId . ', company="' . $company . '"): ' . $conn->error);
+            return false;
+        }
         $stmt->bind_param('ssssssssssssssssssssss',
             $company, $grade, $customerStatus, $contactName, $contactPosition,
             $deals, $workDate, $totalQty, $amount,
@@ -204,9 +218,13 @@ function syncDealToCustomer($conn, $deal) {
             $salesManager, $phone, $email, $address, $fieldManager, $memo,
             $detailedQuantityJson, $workHistoryJson, $emailHistory, $internalNotes
         );
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            error_log('[syncDealToCustomer] INSERT execute failed (dealId=' . $dealId . ', company="' . $company . '"): ' . $stmt->error);
+            $stmt->close();
+            return false;
+        }
         $stmt->close();
-        return;
+        return true;
     }
 
     // ===== 기존 고객: 동적 UPDATE 빌드 =====
@@ -291,22 +309,30 @@ function syncDealToCustomer($conn, $deal) {
         $setClauses[] = 'customer_status = ?';  $types .= 's'; $values[] = $newStatus;
     }
 
-    if (empty($setClauses)) return; // 변경 사항 없음
+    if (empty($setClauses)) return true; // 변경 사항 없음 — 정상 skip
 
     $sql = "UPDATE airtor_customers SET " . implode(', ', $setClauses) . " WHERE id = ?";
     $types .= 'i';
     $values[] = $custId;
 
     $stmt = $conn->prepare($sql);
-    if (!$stmt) return;
+    if (!$stmt) {
+        error_log('[syncDealToCustomer] UPDATE prepare failed (dealId=' . $dealId . ', custId=' . $custId . '): ' . $conn->error);
+        return false;
+    }
     // mysqli bind_param은 reference 배열 요구
     $bindRefs = array($types);
     foreach ($values as $i => $_) {
         $bindRefs[] = &$values[$i];
     }
     call_user_func_array(array($stmt, 'bind_param'), $bindRefs);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        error_log('[syncDealToCustomer] UPDATE execute failed (dealId=' . $dealId . ', custId=' . $custId . '): ' . $stmt->error);
+        $stmt->close();
+        return false;
+    }
     $stmt->close();
+    return true;
 }
 
 $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
@@ -477,7 +503,20 @@ if ($method === 'POST') {
     // 새 딜이 처음부터 성공 상태로 추가되면 고객 자동 동기화
     $dealForSync = $input;
     $dealForSync['id'] = $newId;
-    syncDealToCustomer($conn, $dealForSync);
+    $syncOk = syncDealToCustomer($conn, $dealForSync);
+
+    if (!$syncOk) {
+        // 딜은 만들어졌으나 고객 동기화 실패 → 사용자/모니터링이 인지하도록 HTTP 500 + 상세 신호
+        http_response_code(500);
+        echo json_encode(array(
+            'success' => false,
+            'id' => $newId,
+            'error' => 'Deal created but customer sync failed. Check PHP error log.',
+            'deal_persisted' => true
+        ));
+        $conn->close();
+        exit;
+    }
 
     echo json_encode(array('success' => true, 'id' => $newId));
     $conn->close();
@@ -558,7 +597,19 @@ if ($method === 'PUT') {
     // 딜이 성공/수주확정 상태로 저장되면 고객 자동 동기화
     $dealForSync = $input;
     $dealForSync['id'] = $id;
-    syncDealToCustomer($conn, $dealForSync);
+    $syncOk = syncDealToCustomer($conn, $dealForSync);
+
+    if (!$syncOk) {
+        // 딜 수정은 됐지만 고객 동기화/미러링 실패 → HTTP 500으로 노출
+        http_response_code(500);
+        echo json_encode(array(
+            'success' => false,
+            'error' => 'Deal updated but customer sync failed. Check PHP error log.',
+            'deal_persisted' => true
+        ));
+        $conn->close();
+        exit;
+    }
 
     echo json_encode(array('success' => true));
     $conn->close();
