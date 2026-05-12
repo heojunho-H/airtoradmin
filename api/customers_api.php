@@ -184,7 +184,10 @@ if ($method === 'POST') {
 }
 
 // ============================================================
-// PUT — 고객 수정 (매핑 필드만 UPDATE, id 기준)
+// PUT — 고객 수정 (부분 업데이트 지원, id 기준)
+// 클라이언트가 보낸 키만 UPDATE에 포함시켜, 누락된 필드는 DB의 현재 값을 그대로 유지한다.
+// 핵심 안전 장치: workHistory를 보내지 않은 인라인 편집(grade/메모/리마인더 등)이 다른
+// 탭/세션에서 추가된 work_history를 클로버하지 않도록 보호한다.
 // ============================================================
 if ($method === 'PUT') {
     $input = json_decode(file_get_contents('php://input'), true);
@@ -195,17 +198,52 @@ if ($method === 'PUT') {
         exit;
     }
 
-    $sql = "UPDATE airtor_customers SET
-                company = ?, grade = ?, customer_status = ?,
-                contact_name = ?, contact_position = ?, deals = ?,
-                last_work_date = ?, total_quantity = ?, total_amount = ?,
-                management_cycle = ?, next_management_date = ?,
-                reminder_status = ?, account_manager = ?,
-                phone = ?, email = ?, address = ?,
-                field_manager = ?, memo = ?,
-                detailed_quantity = ?, work_history = ?,
-                email_history = ?, internal_notes = ?
-            WHERE id = ?";
+    // 키 → (DB 컬럼명, bind 타입, 값 변환) 매핑
+    $fields = array(
+        'company'             => array('company',               's', function($v){ return (string)$v; }),
+        'grade'               => array('grade',                 's', function($v){ return (string)$v; }),
+        'customerStatus'      => array('customer_status',       's', function($v){ return (string)$v; }),
+        'contactName'         => array('contact_name',          's', function($v){ return (string)$v; }),
+        'contactPosition'     => array('contact_position',      's', function($v){ return (string)$v; }),
+        'deals'               => array('deals',                 'i', function($v){ return intval($v); }),
+        'lastWorkDate'        => array('last_work_date',        's', function($v){ return (string)$v; }),
+        'totalQuantity'       => array('total_quantity',        'i', function($v){ return intval($v); }),
+        'totalAmount'         => array('total_amount',          'i', function($v){ return intval($v); }),
+        'managementCycle'     => array('management_cycle',      'i', function($v){ return intval($v); }),
+        'nextManagementDate'  => array('next_management_date',  's', function($v){ return (string)$v; }),
+        'reminderStatus'      => array('reminder_status',       's', function($v){ return (string)$v; }),
+        'accountManager'      => array('account_manager',       's', function($v){ return (string)$v; }),
+        'phone'               => array('phone',                 's', function($v){ return (string)$v; }),
+        'email'               => array('email',                 's', function($v){ return (string)$v; }),
+        'address'             => array('address',               's', function($v){ return (string)$v; }),
+        'fieldManager'        => array('field_manager',         's', function($v){ return (string)$v; }),
+        'memo'                => array('memo',                  's', function($v){ return (string)$v; }),
+        'detailedQuantity'    => array('detailed_quantity',     's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
+        'workHistory'         => array('work_history',          's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
+        'emailHistory'        => array('email_history',         's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
+        'internalNotes'       => array('internal_notes',        's', function($v){ return json_encode($v, JSON_UNESCAPED_UNICODE); }),
+    );
+
+    $setClauses = array();
+    $types = '';
+    $values = array();
+    foreach ($fields as $inKey => $meta) {
+        if (!array_key_exists($inKey, $input)) continue; // omit된 필드는 그대로 유지
+        list($col, $type, $conv) = $meta;
+        $setClauses[] = "$col = ?";
+        $types .= $type;
+        $values[] = $conv($input[$inKey]);
+    }
+
+    if (empty($setClauses)) {
+        echo json_encode(array('success' => true, 'note' => 'no fields to update'));
+        $conn->close();
+        exit;
+    }
+
+    $sql = "UPDATE airtor_customers SET " . implode(', ', $setClauses) . " WHERE id = ?";
+    $types .= 'i';
+    $values[] = intval($input['id']);
 
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
@@ -215,42 +253,12 @@ if ($method === 'PUT') {
         exit;
     }
 
-    $company = isset($input['company']) ? $input['company'] : '';
-    $grade = isset($input['grade']) ? $input['grade'] : '';
-    $customerStatus = isset($input['customerStatus']) ? $input['customerStatus'] : '';
-    $contactName = isset($input['contactName']) ? $input['contactName'] : '';
-    $contactPosition = isset($input['contactPosition']) ? $input['contactPosition'] : '';
-    $deals = isset($input['deals']) ? intval($input['deals']) : 0;
-    $lastWorkDate = isset($input['lastWorkDate']) ? $input['lastWorkDate'] : '';
-    $totalQuantity = isset($input['totalQuantity']) ? intval($input['totalQuantity']) : 0;
-    $totalAmount = isset($input['totalAmount']) ? intval($input['totalAmount']) : 0;
-    $managementCycle = isset($input['managementCycle']) ? intval($input['managementCycle']) : 0;
-    $nextManagementDate = isset($input['nextManagementDate']) ? $input['nextManagementDate'] : '';
-    $reminderStatus = isset($input['reminderStatus']) ? $input['reminderStatus'] : '';
-    $accountManager = isset($input['accountManager']) ? $input['accountManager'] : '';
-    $phone = isset($input['phone']) ? $input['phone'] : '';
-    $email = isset($input['email']) ? $input['email'] : '';
-    $address = isset($input['address']) ? $input['address'] : '';
-    $fieldManager = isset($input['fieldManager']) ? $input['fieldManager'] : '';
-    $memo = isset($input['memo']) ? $input['memo'] : '';
-    $detailedQuantity = isset($input['detailedQuantity']) ? json_encode($input['detailedQuantity']) : '[]';
-    $workHistory = isset($input['workHistory']) ? json_encode($input['workHistory']) : '[]';
-    $emailHistory = isset($input['emailHistory']) ? json_encode($input['emailHistory']) : '[]';
-    $internalNotes = isset($input['internalNotes']) ? json_encode($input['internalNotes']) : '[]';
-    $id = intval($input['id']);
-
-    $stmt->bind_param('ssssssssssssssssssssssi',
-        $company, $grade, $customerStatus,
-        $contactName, $contactPosition, $deals,
-        $lastWorkDate, $totalQuantity, $totalAmount,
-        $managementCycle, $nextManagementDate,
-        $reminderStatus, $accountManager,
-        $phone, $email, $address,
-        $fieldManager, $memo,
-        $detailedQuantity, $workHistory,
-        $emailHistory, $internalNotes,
-        $id
-    );
+    // mysqli bind_param은 reference 배열을 요구
+    $bindRefs = array($types);
+    foreach ($values as $i => $_) {
+        $bindRefs[] = &$values[$i];
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $bindRefs);
 
     if (!$stmt->execute()) {
         http_response_code(500);
@@ -261,7 +269,7 @@ if ($method === 'PUT') {
     }
 
     $stmt->close();
-    echo json_encode(array('success' => true));
+    echo json_encode(array('success' => true, 'updated_fields' => array_keys(array_intersect_key($input, $fields))));
     $conn->close();
     exit;
 }

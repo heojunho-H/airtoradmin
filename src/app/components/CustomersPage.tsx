@@ -130,7 +130,26 @@ export async function createCustomer(customer: Omit<Customer, 'id'>): Promise<nu
   return result.id;
 }
 
-// API에 고객 데이터를 수정
+// workHistory 합계로 customer 집계(totalAmount/totalQuantity/deals/lastWorkDate)를 재계산.
+// "작업 추가"·"작업 삭제"·"작업 편집" 직후 PUT 전에 반드시 호출해 정수배 누적 잔재를 막는다.
+export function recomputeCustomerTotals<T extends Pick<Customer, 'workHistory' | 'lastWorkDate'>>(customer: T): T {
+  const wh = Array.isArray(customer.workHistory) ? customer.workHistory : [];
+  const totalAmount = wh.reduce((s, w) => s + (Number(w?.quotationAmount) || 0), 0);
+  const totalQuantity = wh.reduce((s, w) => s + (Number(w?.totalQuantity) || 0), 0);
+  const lastWorkDate = wh.reduce((latest, w) => {
+    const d = w?.workDate || '';
+    return d && d > latest ? d : latest;
+  }, '');
+  return {
+    ...customer,
+    totalAmount,
+    totalQuantity,
+    deals: wh.length,
+    lastWorkDate: lastWorkDate || customer.lastWorkDate,
+  } as T;
+}
+
+// API에 고객 데이터를 수정 (workHistory 포함, 전체 갱신)
 export async function updateCustomer(customer: Customer): Promise<void> {
   const response = await fetch('/api/customers', {
     method: 'PUT',
@@ -138,6 +157,17 @@ export async function updateCustomer(customer: Customer): Promise<void> {
     body: JSON.stringify(customer),
   });
   if (!response.ok) throw new Error('고객 수정 실패');
+}
+
+// workHistory를 건드리지 않는 부분 업데이트 (인라인 편집·메모·등급·담당자 등).
+// 서버는 omit된 필드를 그대로 유지하므로 다른 탭/세션에서 workHistory를 추가했더라도 클로버되지 않는다.
+export async function updateCustomerFields(id: number, fields: Partial<Omit<Customer, 'id' | 'workHistory'>>): Promise<void> {
+  const response = await fetch('/api/customers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...fields }),
+  });
+  if (!response.ok) throw new Error('고객 부분 수정 실패');
 }
 
 // API에 고객 데이터를 삭제
@@ -1073,22 +1103,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     }
   };
 
-  // 고객 정보 업데이트 핸들러
+  // 고객 정보 업데이트 핸들러 — workHistory 미포함 부분 업데이트로 변경 (레이스 클로버 방지)
   const updateCustomerField = (customerId: any, field: string, value: any) => {
     const updated = customers.map(customer =>
       customer.id === customerId ? { ...customer, [field]: value } : customer
     );
     setCustomers(updated);
 
-    // 선택된 고객이 업데이트된 경우 상세 정보도 업데이트
     if (selectedCustomer && selectedCustomer.id === customerId) {
       setSelectedCustomer({ ...selectedCustomer, [field]: value });
     }
 
     setEditingCell(null);
-    // DB에 업데이트
-    const target = updated.find(c => c.id === customerId);
-    if (target) updateCustomer(target).catch(err => console.error('고객 수정 API 실패:', err));
+    updateCustomerFields(Number(customerId), { [field]: value } as any).catch(err => console.error('고객 수정 API 실패:', err));
   };
 
   // 고객 삭제 핸들러
@@ -1151,20 +1178,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     setEditedCustomer(null);
   };
 
-  // 수정 저장
+  // 수정 저장 — workHistory 편집 가능하므로 totals 재계산 후 저장
   const handleSaveEdit = () => {
     if (!editedCustomer || !selectedCustomer) return;
 
-    // 첫 번째 담당자를 레거시 필드에 동기화 (API 하위 호환)
     const contacts = editedCustomer.contacts || [];
-    const saved: Customer = {
+    const saved: Customer = recomputeCustomerTotals({
       ...editedCustomer,
       contacts,
       contactName: contacts[0]?.name || '',
       contactPosition: contacts[0]?.position || '',
       phone: contacts[0]?.phone || '',
       email: contacts[0]?.email || '',
-    };
+    });
 
     setCustomers(customers.map(c => c.id === selectedCustomer.id ? saved : c));
     setSelectedCustomer(saved);
@@ -2063,7 +2089,6 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         value={selectedCustomer.memo}
                         onChange={(e) => {
                           const updatedMemo = e.target.value;
-                          // customers 배열 업데이트
                           setCustomers((prevCustomers) =>
                             prevCustomers.map((customer) =>
                               customer.id === selectedCustomer.id
@@ -2071,16 +2096,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 : customer
                             )
                           );
-                          // selectedCustomer도 업데이트
-                          setSelectedCustomer({
-                            ...selectedCustomer,
-                            memo: updatedMemo,
-                          });
+                          setSelectedCustomer({ ...selectedCustomer, memo: updatedMemo });
                         }}
                         onBlur={() => {
-                          // 포커스 해제 시 DB에 저장
-                          const target = customers.find(c => c.id === selectedCustomer.id);
-                          if (target) updateCustomer({ ...target, memo: selectedCustomer.memo }).catch(err => console.error('메모 저장 API 실패:', err));
+                          // 포커스 해제 시 DB에 저장 — workHistory를 보내지 않아 다른 탭 변경분 보호
+                          updateCustomerFields(selectedCustomer.id, { memo: selectedCustomer.memo }).catch(err => console.error('메모 저장 API 실패:', err));
                         }}
                         placeholder="메모를 입력하세요..."
                         className="flex-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none leading-relaxed"
@@ -2310,30 +2330,18 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         <button
                           onClick={() => {
                             if (newWork.inquiryDate && newWork.projectName && selectedCustomer) {
-                              // 새 작업을 workHistory에 추가
+                              // 새 작업을 workHistory에 추가하고 totalAmount/totalQuantity/deals/lastWorkDate를 재계산
                               const updatedWorkHistory = [...selectedCustomer.workHistory, newWork];
-                              
-                              // customers 배열 업데이트
-                              setCustomers((prevCustomers) =>
-                                prevCustomers.map((customer) =>
-                                  customer.id === selectedCustomer.id
-                                    ? {
-                                        ...customer,
-                                        workHistory: updatedWorkHistory,
-                                        deals: updatedWorkHistory.length,
-                                        lastWorkDate: newWork.workDate || selectedCustomer.lastWorkDate,
-                                      }
-                                    : customer
-                                )
-                              );
-                              
-                              // selectedCustomer도 업데이트
-                              const updatedCustomer = {
+                              const updatedCustomer = recomputeCustomerTotals({
                                 ...selectedCustomer,
                                 workHistory: updatedWorkHistory,
-                                deals: updatedWorkHistory.length,
-                                lastWorkDate: newWork.workDate || selectedCustomer.lastWorkDate,
-                              };
+                              });
+
+                              setCustomers((prevCustomers) =>
+                                prevCustomers.map((customer) =>
+                                  customer.id === selectedCustomer.id ? updatedCustomer : customer
+                                )
+                              );
                               setSelectedCustomer(updatedCustomer);
 
                               // DB에 저장
@@ -2611,40 +2619,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (selectedCustomer && window.confirm('이 작업을 삭제하시겠습니까?')) {
-                                        // 해당 작업을 제거한 새 배열 생성
                                         const updatedWorkHistory = selectedCustomer.workHistory.filter((_, i) => i !== index);
-                                        
-                                        // 최근 작업일자 계산 (작업이 남아있으면 가장 최근 것, 없으면 기존값 유지)
-                                        const newLastWorkDate = updatedWorkHistory.length > 0
-                                          ? updatedWorkHistory.reduce((latest, w) => {
-                                              return new Date(w.workDate) > new Date(latest) ? w.workDate : latest;
-                                            }, updatedWorkHistory[0].workDate)
-                                          : selectedCustomer.lastWorkDate;
-                                        
-                                        // customers 배열 업데이트
-                                        setCustomers((prevCustomers) =>
-                                          prevCustomers.map((customer) =>
-                                            customer.id === selectedCustomer.id
-                                              ? {
-                                                  ...customer,
-                                                  workHistory: updatedWorkHistory,
-                                                  deals: updatedWorkHistory.length,
-                                                  lastWorkDate: newLastWorkDate,
-                                                }
-                                              : customer
-                                          )
-                                        );
-                                        
-                                        // selectedCustomer도 업데이트
-                                        const updatedCustomer = {
+                                        const updatedCustomer = recomputeCustomerTotals({
                                           ...selectedCustomer,
                                           workHistory: updatedWorkHistory,
-                                          deals: updatedWorkHistory.length,
-                                          lastWorkDate: newLastWorkDate,
-                                        };
+                                        });
+
+                                        setCustomers((prevCustomers) =>
+                                          prevCustomers.map((customer) =>
+                                            customer.id === selectedCustomer.id ? updatedCustomer : customer
+                                          )
+                                        );
                                         setSelectedCustomer(updatedCustomer);
 
-                                        // DB에 저장
                                         updateCustomer(updatedCustomer).catch(err => console.error('작업 삭제 API 실패:', err));
                                       }
                                     }}
