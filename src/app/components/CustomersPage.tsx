@@ -130,9 +130,20 @@ export async function createCustomer(customer: Omit<Customer, 'id'>): Promise<nu
   return result.id;
 }
 
-// workHistory 합계로 customer 집계(totalAmount/totalQuantity/deals/lastWorkDate)를 재계산.
-// "작업 추가"·"작업 삭제"·"작업 편집" 직후 PUT 전에 반드시 호출해 정수배 누적 잔재를 막는다.
-export function recomputeCustomerTotals<T extends Pick<Customer, 'workHistory' | 'lastWorkDate'>>(customer: T): T {
+// 작업횟수(deals) → customerStatus 자동 라벨 규칙.
+// - deals >= 3 → '충성고객'
+// - deals === 2 → '재구매'
+// - deals 0 또는 1 → 기존 값 유지 (수기 분류 '신규'·'재구매' 등을 임의로 덮지 않음)
+export function deriveCustomerStatus(currentStatus: string | undefined, dealCount: number): Customer['customerStatus'] {
+  if (dealCount >= 3) return '충성고객';
+  if (dealCount === 2) return '재구매';
+  return (currentStatus as Customer['customerStatus']) || '신규';
+}
+
+// workHistory 합계로 customer 집계(totalAmount/totalQuantity/deals/lastWorkDate/customerStatus)를 재계산.
+// "작업 추가"·"작업 삭제"·"작업 편집" 직후 PUT 전에 반드시 호출해 정수배 누적 잔재를 막고
+// 작업횟수 기반 자동 라벨링도 함께 갱신한다.
+export function recomputeCustomerTotals<T extends Pick<Customer, 'workHistory' | 'lastWorkDate' | 'customerStatus'>>(customer: T): T {
   const wh = Array.isArray(customer.workHistory) ? customer.workHistory : [];
   const totalAmount = wh.reduce((s, w) => s + (Number(w?.quotationAmount) || 0), 0);
   const totalQuantity = wh.reduce((s, w) => s + (Number(w?.totalQuantity) || 0), 0);
@@ -146,6 +157,7 @@ export function recomputeCustomerTotals<T extends Pick<Customer, 'workHistory' |
     totalQuantity,
     deals: wh.length,
     lastWorkDate: lastWorkDate || customer.lastWorkDate,
+    customerStatus: deriveCustomerStatus(customer.customerStatus, wh.length),
   } as T;
 }
 

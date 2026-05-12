@@ -133,7 +133,7 @@ function syncDealToCustomer($conn, $deal) {
 
     // 정규화 매칭으로 기존 고객 검색 (전체 스캔, ~100건 규모)
     $matched = null;
-    $res = $conn->query("SELECT id, company, work_history FROM airtor_customers");
+    $res = $conn->query("SELECT id, company, work_history, customer_status FROM airtor_customers");
     if ($res) {
         while ($row = $res->fetch_assoc()) {
             if (normalizeCompanyName($row['company']) === $normalizedTarget) {
@@ -242,11 +242,22 @@ function syncDealToCustomer($conn, $deal) {
     $newJson = json_encode($existing, JSON_UNESCAPED_UNICODE);
     $custId = intval($matched['id']);
 
+    // 작업횟수 → 고객상태 자동 라벨링 규칙
+    // deals >= 3 → 충성고객, deals === 2 → 재구매, deals 0/1 → 기존 값 유지
+    $currentStatus = isset($matched['customer_status']) ? $matched['customer_status'] : '';
+    if ($dealCount >= 3) {
+        $newStatus = '충성고객';
+    } elseif ($dealCount === 2) {
+        $newStatus = '재구매';
+    } else {
+        $newStatus = ($currentStatus !== '' && $currentStatus !== null) ? $currentStatus : '신규';
+    }
+
     $stmt = $conn->prepare("UPDATE airtor_customers
-        SET work_history = ?, deals = ?, total_quantity = ?, total_amount = ?, last_work_date = ?
+        SET work_history = ?, deals = ?, total_quantity = ?, total_amount = ?, last_work_date = ?, customer_status = ?
         WHERE id = ?");
     if (!$stmt) return;
-    $stmt->bind_param('siiisi', $newJson, $dealCount, $sumQty, $sumAmt, $maxWorkDate, $custId);
+    $stmt->bind_param('siiissi', $newJson, $dealCount, $sumQty, $sumAmt, $maxWorkDate, $newStatus, $custId);
     $stmt->execute();
     $stmt->close();
 }
