@@ -962,8 +962,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   };
 
   // 다음 관리 예정일 계산 함수 (월 단위 정확 계산)
+  // lastWorkDate가 비어있거나 파싱 실패 시 'NaN-NaN-NaN' 대신 '-' 반환
   const calculateNextManagementDate = (lastWorkDate: string, managementCycle: number): string => {
+    if (!lastWorkDate) return '-';
     const lastDate = new Date(lastWorkDate);
+    if (isNaN(lastDate.getTime())) return '-';
     const monthsMap: Record<number, number> = { 30: 1, 90: 3, 180: 6, 365: 12, 730: 24 };
     const months = monthsMap[managementCycle];
     if (months) {
@@ -978,8 +981,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   };
 
   // 리마인드 발송 예정일 계산 함수 (작업일 + 개월 수)
+  // workDate가 비어있거나 파싱 실패 시 'NaN-NaN-NaN' 대신 '-' 반환
   const calculateReminderDate = (workDate: string, months: number): string => {
+    if (!workDate) return '-';
     const date = new Date(workDate);
+    if (isNaN(date.getTime())) return '-';
     date.setMonth(date.getMonth() + months);
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
