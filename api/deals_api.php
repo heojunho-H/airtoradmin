@@ -98,7 +98,6 @@ function parseQuotationAmount($str) {
 function syncDealToCustomer($conn, $deal) {
     $isSuccess = (isset($deal['status']) && $deal['status'] === 'confirmed')
               || (isset($deal['successStatus']) && $deal['successStatus'] === 'success');
-    if (!$isSuccess) return;
 
     $company = isset($deal['company']) ? trim($deal['company']) : '';
     if ($company === '') return;
@@ -114,6 +113,16 @@ function syncDealToCustomer($conn, $deal) {
     $service = isset($deal['desiredService']) ? $deal['desiredService'] : '';
     $detailedQty = isset($deal['detailedQuantity']) ? $deal['detailedQuantity'] : '';
     $salesManager = isset($deal['salesManager']) ? $deal['salesManager'] : '';
+
+    // 영업관리 → 고객관리 미러링 필드 (deal에 값이 있을 때만 customer에 반영)
+    // 빈 값은 customer의 기존 값을 보존한다.
+    $mirrorMap = array(
+        'contact_name'     => isset($deal['contactName'])     ? $deal['contactName']     : '',
+        'contact_position' => isset($deal['contactPosition']) ? $deal['contactPosition'] : '',
+        'phone'            => isset($deal['phone'])           ? $deal['phone']           : '',
+        'email'            => isset($deal['email'])           ? $deal['email']           : '',
+        'address'          => isset($deal['address'])         ? $deal['address']         : '',
+    );
 
     $workEntry = array(
         'dealId' => $dealId,
@@ -143,6 +152,9 @@ function syncDealToCustomer($conn, $deal) {
         }
         $res->free();
     }
+
+    // 신규 고객 자동 생성은 여전히 success/confirmed 전이 시에만 발동
+    if (!$matched && !$isSuccess) return;
 
     if (!$matched) {
         // 신규 고객 INSERT
@@ -197,70 +209,102 @@ function syncDealToCustomer($conn, $deal) {
         return;
     }
 
-    // 기존 고객: workHistory upsert (dealId → inquiryDate 폴백)
-    $existing = !empty($matched['work_history']) ? json_decode($matched['work_history'], true) : array();
-    if (!is_array($existing)) $existing = array();
+    // ===== 기존 고객: 동적 UPDATE 빌드 =====
+    // (a) 항상: 연락처/주소 미러링 (deal 값이 있을 때만)
+    // (b) success/confirmed 한정: work_history upsert + 집계 재계산 + customer_status 라벨링
+    $custId = intval($matched['id']);
+    $setClauses = array();
+    $types = '';
+    $values = array();
 
-    $foundIdx = -1;
-    foreach ($existing as $i => $entry) {
-        if (isset($entry['dealId']) && intval($entry['dealId']) === $dealId) {
-            $foundIdx = $i;
-            break;
+    // (a) 미러링 필드
+    foreach ($mirrorMap as $col => $val) {
+        if ($val !== '' && $val !== null) {
+            $setClauses[] = "$col = ?";
+            $types .= 's';
+            $values[] = $val;
         }
     }
-    if ($foundIdx === -1) {
-        // legacy 엔트리: dealId 없는 것 중 inquiryDate 일치하는 첫 번째
+
+    // (b) workHistory + 집계 + customerStatus (success 한정)
+    if ($isSuccess) {
+        $existing = !empty($matched['work_history']) ? json_decode($matched['work_history'], true) : array();
+        if (!is_array($existing)) $existing = array();
+
+        $foundIdx = -1;
         foreach ($existing as $i => $entry) {
-            if (!isset($entry['dealId']) && isset($entry['inquiryDate']) && $entry['inquiryDate'] === $inquiryDate) {
+            if (isset($entry['dealId']) && intval($entry['dealId']) === $dealId) {
                 $foundIdx = $i;
                 break;
             }
         }
+        if ($foundIdx === -1) {
+            // legacy 엔트리: dealId 없는 것 중 inquiryDate 일치하는 첫 번째
+            foreach ($existing as $i => $entry) {
+                if (!isset($entry['dealId']) && isset($entry['inquiryDate']) && $entry['inquiryDate'] === $inquiryDate) {
+                    $foundIdx = $i;
+                    break;
+                }
+            }
+        }
+
+        if ($foundIdx >= 0) {
+            // 사용자가 편집했을 수 있는 워크플로우 필드는 보존
+            $preserved = array(
+                'subcontractorManager' => isset($existing[$foundIdx]['subcontractorManager']) ? $existing[$foundIdx]['subcontractorManager'] : '',
+                'reportSent' => isset($existing[$foundIdx]['reportSent']) ? $existing[$foundIdx]['reportSent'] : false,
+                'reminder1' => isset($existing[$foundIdx]['reminder1']) ? $existing[$foundIdx]['reminder1'] : false,
+                'reminder2' => isset($existing[$foundIdx]['reminder2']) ? $existing[$foundIdx]['reminder2'] : false,
+                'reminder3' => isset($existing[$foundIdx]['reminder3']) ? $existing[$foundIdx]['reminder3'] : false,
+            );
+            $existing[$foundIdx] = array_merge($workEntry, $preserved);
+        } else {
+            $existing[] = $workEntry;
+        }
+
+        // 집계 재계산
+        $sumQty = 0; $sumAmt = 0; $maxWorkDate = '';
+        foreach ($existing as $entry) {
+            $sumQty += isset($entry['totalQuantity']) ? intval($entry['totalQuantity']) : 0;
+            $sumAmt += isset($entry['quotationAmount']) ? intval($entry['quotationAmount']) : 0;
+            $wd = isset($entry['workDate']) ? $entry['workDate'] : '';
+            if ($wd > $maxWorkDate) $maxWorkDate = $wd;
+        }
+        $dealCount = count($existing);
+        $newJson = json_encode($existing); // flag 인자 없이
+
+        // 작업횟수 → 고객상태 자동 라벨링 규칙
+        $currentStatus = isset($matched['customer_status']) ? $matched['customer_status'] : '';
+        if ($dealCount >= 3) {
+            $newStatus = '충성고객';
+        } elseif ($dealCount === 2) {
+            $newStatus = '재구매';
+        } else {
+            $newStatus = ($currentStatus !== '' && $currentStatus !== null) ? $currentStatus : '신규';
+        }
+
+        $setClauses[] = 'work_history = ?';     $types .= 's'; $values[] = $newJson;
+        $setClauses[] = 'deals = ?';            $types .= 'i'; $values[] = $dealCount;
+        $setClauses[] = 'total_quantity = ?';   $types .= 'i'; $values[] = $sumQty;
+        $setClauses[] = 'total_amount = ?';     $types .= 'i'; $values[] = $sumAmt;
+        $setClauses[] = 'last_work_date = ?';   $types .= 's'; $values[] = $maxWorkDate;
+        $setClauses[] = 'customer_status = ?';  $types .= 's'; $values[] = $newStatus;
     }
 
-    if ($foundIdx >= 0) {
-        // 사용자가 편집했을 수 있는 워크플로우 필드는 보존
-        $preserved = array(
-            'subcontractorManager' => isset($existing[$foundIdx]['subcontractorManager']) ? $existing[$foundIdx]['subcontractorManager'] : '',
-            'reportSent' => isset($existing[$foundIdx]['reportSent']) ? $existing[$foundIdx]['reportSent'] : false,
-            'reminder1' => isset($existing[$foundIdx]['reminder1']) ? $existing[$foundIdx]['reminder1'] : false,
-            'reminder2' => isset($existing[$foundIdx]['reminder2']) ? $existing[$foundIdx]['reminder2'] : false,
-            'reminder3' => isset($existing[$foundIdx]['reminder3']) ? $existing[$foundIdx]['reminder3'] : false,
-        );
-        $existing[$foundIdx] = array_merge($workEntry, $preserved);
-    } else {
-        $existing[] = $workEntry;
-    }
+    if (empty($setClauses)) return; // 변경 사항 없음
 
-    // 집계 재계산
-    $sumQty = 0; $sumAmt = 0; $maxWorkDate = '';
-    foreach ($existing as $entry) {
-        $sumQty += isset($entry['totalQuantity']) ? intval($entry['totalQuantity']) : 0;
-        $sumAmt += isset($entry['quotationAmount']) ? intval($entry['quotationAmount']) : 0;
-        $wd = isset($entry['workDate']) ? $entry['workDate'] : '';
-        if ($wd > $maxWorkDate) $maxWorkDate = $wd;
-    }
-    $dealCount = count($existing);
-    // flag 인자 없이 1-인자 호출 (카페24 PHP 호환).
-    $newJson = json_encode($existing);
-    $custId = intval($matched['id']);
+    $sql = "UPDATE airtor_customers SET " . implode(', ', $setClauses) . " WHERE id = ?";
+    $types .= 'i';
+    $values[] = $custId;
 
-    // 작업횟수 → 고객상태 자동 라벨링 규칙
-    // deals >= 3 → 충성고객, deals === 2 → 재구매, deals 0/1 → 기존 값 유지
-    $currentStatus = isset($matched['customer_status']) ? $matched['customer_status'] : '';
-    if ($dealCount >= 3) {
-        $newStatus = '충성고객';
-    } elseif ($dealCount === 2) {
-        $newStatus = '재구매';
-    } else {
-        $newStatus = ($currentStatus !== '' && $currentStatus !== null) ? $currentStatus : '신규';
-    }
-
-    $stmt = $conn->prepare("UPDATE airtor_customers
-        SET work_history = ?, deals = ?, total_quantity = ?, total_amount = ?, last_work_date = ?, customer_status = ?
-        WHERE id = ?");
+    $stmt = $conn->prepare($sql);
     if (!$stmt) return;
-    $stmt->bind_param('siiissi', $newJson, $dealCount, $sumQty, $sumAmt, $maxWorkDate, $newStatus, $custId);
+    // mysqli bind_param은 reference 배열 요구
+    $bindRefs = array($types);
+    foreach ($values as $i => $_) {
+        $bindRefs[] = &$values[$i];
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $bindRefs);
     $stmt->execute();
     $stmt->close();
 }
