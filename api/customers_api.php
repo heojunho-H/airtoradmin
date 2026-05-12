@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-require_once __DIR__ . '/db_config.php';
+require_once dirname(__FILE__) . '/db_config.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
