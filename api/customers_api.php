@@ -250,7 +250,9 @@ if ($method === 'PUT') {
         if ($conv === 'int') {
             $values[] = intval($raw);
         } elseif ($conv === 'json') {
-            $values[] = json_encode($raw, JSON_UNESCAPED_UNICODE);
+            // 카페24 PHP는 json_encode flag 인자를 지원하지 않으므로 1-인자만 사용.
+            // unicode는 \uXXXX로 escape되지만 디코드 결과는 동일.
+            $values[] = json_encode($raw);
         } else {
             $values[] = (string)$raw;
         }
