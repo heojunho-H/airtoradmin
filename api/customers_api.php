@@ -47,7 +47,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-require_once dirname(__FILE__) . '/db_config.php';
+// db_config.php는 .gitignore에 있어 서버별로 존재 상황이 달라질 수 있음.
+// 있으면 사용, 없으면 deals_api.php와 동일하게 인라인 자격증명으로 폴백.
+$_dbConfigPath = dirname(__FILE__) . '/db_config.php';
+if (file_exists($_dbConfigPath)) {
+    require_once $_dbConfigPath;
+} else {
+    $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
+    if ($conn->connect_error) {
+        http_response_code(500);
+        echo json_encode(array('error' => 'DB connection failed'));
+        exit;
+    }
+    $conn->set_charset('utf8');
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 
