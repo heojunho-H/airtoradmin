@@ -155,16 +155,18 @@ function syncDealToCustomer($conn, $deal) {
         $memo = isset($deal['managementMemo']) ? $deal['managementMemo'] : '';
         $requirements = !empty($deal['requirements']) ? $deal['requirements'] : '없음';
 
+        // 카페24 PHP는 json_encode flag 인자를 거부하므로 1-인자만 사용.
+        // unicode는 \uXXXX로 escape되지만 decode 결과는 동일.
         $internalNotes = json_encode(array(array(
             'id' => 1,
             'author' => $salesManager,
             'date' => $today,
             'content' => '영업관리에서 자동 등록됨. 요구사항: ' . $requirements,
-        )), JSON_UNESCAPED_UNICODE);
+        )));
         $detailedQuantityJson = !empty($detailedQty)
-            ? json_encode(array(array('item' => $service, 'quantity' => $totalQty)), JSON_UNESCAPED_UNICODE)
+            ? json_encode(array(array('item' => $service, 'quantity' => $totalQty)))
             : '[]';
-        $workHistoryJson = json_encode(array($workEntry), JSON_UNESCAPED_UNICODE);
+        $workHistoryJson = json_encode(array($workEntry));
         $grade = '미설정';
         $customerStatus = '신규';
         $deals = 1;
@@ -239,7 +241,8 @@ function syncDealToCustomer($conn, $deal) {
         if ($wd > $maxWorkDate) $maxWorkDate = $wd;
     }
     $dealCount = count($existing);
-    $newJson = json_encode($existing, JSON_UNESCAPED_UNICODE);
+    // flag 인자 없이 1-인자 호출 (카페24 PHP 호환).
+    $newJson = json_encode($existing);
     $custId = intval($matched['id']);
 
     // 작업횟수 → 고객상태 자동 라벨링 규칙
