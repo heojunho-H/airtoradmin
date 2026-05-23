@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, Sparkles, TrendingUp, Users, Package, RotateCcw } from 'lucide-react';
+import { X, Send, Sparkles, TrendingUp, Users, Package, Calculator, RotateCcw } from 'lucide-react';
 import { AiChatMessage } from './AiChatMessage';
 import {
   sendChatMessage,
@@ -18,6 +18,8 @@ interface AiChatPanelProps {
   customers: any[];
   managers: any[];
   subcontractors: any[];
+  projects?: any[];
+  laborRates?: any[];
 }
 
 const EXPERT_STYLES: Record<ExpertType, {
@@ -95,9 +97,24 @@ const EXPERT_STYLES: Record<ExpertType, {
     promptText: 'text-slate-600',
     ring: 'focus:ring-orange-500',
   },
+  profit: {
+    icon: Calculator,
+    active: 'bg-teal-600 text-white',
+    inactive: 'bg-teal-50 text-teal-600',
+    hover: 'hover:bg-teal-100',
+    send: 'bg-teal-600 hover:bg-teal-700',
+    headerGradient: 'from-teal-50 to-cyan-50',
+    iconColor: 'text-teal-500',
+    emptyBg: 'bg-teal-100',
+    emptyIcon: 'text-teal-500',
+    promptHover: 'hover:bg-teal-50 hover:border-teal-200 hover:text-teal-700',
+    promptBorder: 'border-slate-200',
+    promptText: 'text-slate-600',
+    ring: 'focus:ring-teal-500',
+  },
 };
 
-export function AiChatPanel({ isOpen, onClose, deals, customers, managers, subcontractors }: AiChatPanelProps) {
+export function AiChatPanel({ isOpen, onClose, deals, customers, managers, subcontractors, projects, laborRates }: AiChatPanelProps) {
   const [expertType, setExpertType] = useState<ExpertType>('assistant');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -106,8 +123,8 @@ export function AiChatPanel({ isOpen, onClose, deals, customers, managers, subco
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const dataContext = useMemo(
-    () => buildDataContext(deals, customers, managers, subcontractors, expertType),
-    [deals, customers, managers, subcontractors, expertType]
+    () => buildDataContext(deals, customers, managers, subcontractors, projects ?? [], laborRates ?? [], expertType),
+    [deals, customers, managers, subcontractors, projects, laborRates, expertType]
   );
 
   const style = EXPERT_STYLES[expertType];

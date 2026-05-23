@@ -47,6 +47,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// ============================================================
+// 고객 workHistory의 reportSent: false→true 전환 감지 시
+// 대응하는 airtor_projects 행을 'completed'로 자동 전환.
+// 멱등성: WHERE status='in-progress' 조건으로 이미 completed인 행은 skip.
+// 호출 위치: PUT 핸들러의 UPDATE 성공 직후 — best-effort (실패해도 PUT 응답엔 영향 없음).
+// 매칭 키: customers.workHistory[].dealId  ↔  airtor_projects.work_history_dealid
+// ============================================================
+function syncReportSentToProject($conn, $customerId, $oldWorkHistory, $newWorkHistory) {
+    // 기존 workHistory의 dealId → reportSent 맵
+    $oldMap = array();
+    foreach ($oldWorkHistory as $entry) {
+        if (isset($entry['dealId'])) {
+            $oldMap[intval($entry['dealId'])] = !empty($entry['reportSent']);
+        }
+    }
+
+    // 새 workHistory에서 reportSent가 false→true로 전환된 dealId 수집
+    $transitioned = array();
+    foreach ($newWorkHistory as $entry) {
+        if (!isset($entry['dealId'])) continue;
+        $did = intval($entry['dealId']);
+        $newReportSent = !empty($entry['reportSent']);
+        $oldReportSent = isset($oldMap[$did]) ? $oldMap[$did] : false;
+        if ($newReportSent && !$oldReportSent) {
+            $transitioned[] = $did;
+        }
+    }
+
+    if (count($transitioned) === 0) return true;
+
+    // 각 dealId에 대해 UPDATE — status='in-progress'인 행만 (멱등; manual 전환 보존)
+    foreach ($transitioned as $did) {
+        $stmt = $conn->prepare(
+            "UPDATE airtor_projects " .
+            "SET status='completed', completed_at=NOW(), completed_reason='report_sent' " .
+            "WHERE work_history_dealid = ? AND status='in-progress'"
+        );
+        if (!$stmt) {
+            error_log('[syncReportSentToProject] prepare failed (customerId=' . $customerId . ', dealId=' . $did . '): ' . $conn->error);
+            continue;
+        }
+        $stmt->bind_param('i', $did);
+        if (!$stmt->execute()) {
+            error_log('[syncReportSentToProject] execute failed (customerId=' . $customerId . ', dealId=' . $did . '): ' . $stmt->error);
+        }
+        $stmt->close();
+    }
+
+    return true;
+}
+
 // db_config.php는 .gitignore에 있어 서버별로 존재 상황이 달라질 수 있음.
 // 있으면 사용, 없으면 deals_api.php와 동일하게 인라인 자격증명으로 폴백.
 $_dbConfigPath = dirname(__FILE__) . '/db_config.php';
@@ -211,6 +262,33 @@ if ($method === 'PUT') {
         exit;
     }
 
+    // workHistory가 PUT input에 있으면 기존 값을 미리 조회 — syncReportSentToProject 비교용.
+    // 카페24 PHP는 mysqlnd 미장착 가능성이 있어 get_result() 대신 bind_result 사용.
+    $oldWorkHistory = null;
+    if (array_key_exists('workHistory', $input)) {
+        $oldStmt = $conn->prepare("SELECT work_history FROM airtor_customers WHERE id = ?");
+        if ($oldStmt) {
+            $custIdForOld = intval($input['id']);
+            $oldStmt->bind_param('i', $custIdForOld);
+            if ($oldStmt->execute()) {
+                $oldJson = null;
+                $oldStmt->bind_result($oldJson);
+                if ($oldStmt->fetch()) {
+                    if (!empty($oldJson)) {
+                        $oldWorkHistory = json_decode($oldJson, true);
+                        if (!is_array($oldWorkHistory)) $oldWorkHistory = array();
+                    } else {
+                        $oldWorkHistory = array();
+                    }
+                } else {
+                    // 행 자체가 없으면 빈 배열 — UPDATE는 0행 영향 받겠지만 sync 로직은 안전하게 skip
+                    $oldWorkHistory = array();
+                }
+            }
+            $oldStmt->close();
+        }
+    }
+
     // 키 → (DB 컬럼명, bind 타입, 값 변환종류 'str'|'int'|'json') 매핑
     // 카페24 PHP 환경 호환성을 위해 클로저 대신 문자열 식별자 사용.
     $fields = array(
@@ -292,6 +370,14 @@ if ($method === 'PUT') {
     }
 
     $stmt->close();
+
+    // workHistory가 PUT에 포함됐으면 reportSent 전환을 projects 테이블에 best-effort 반영.
+    // 실패해도 PUT 응답에는 영향 없음 — error_log로만 기록.
+    if ($oldWorkHistory !== null && array_key_exists('workHistory', $input)) {
+        $newWorkHistory = is_array($input['workHistory']) ? $input['workHistory'] : array();
+        syncReportSentToProject($conn, intval($input['id']), $oldWorkHistory, $newWorkHistory);
+    }
+
     echo json_encode(array('success' => true, 'updated_fields' => array_keys(array_intersect_key($input, $fields))));
     $conn->close();
     exit;

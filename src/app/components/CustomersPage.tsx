@@ -33,12 +33,14 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  Calculator,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 
 interface WorkHistory {
+  dealId?: number; // 영업관리 딜 ID — syncDealToCustomer가 채움 (legacy 엔트리는 없을 수 있음)
   inquiryDate: string; // 문의 등록일
   projectName: string; // 프로젝트명
   totalQuantity: number; // 총수량
@@ -764,6 +766,9 @@ interface CustomersPageProps {
   subcontractorNames?: string[];
   customerManagerNames?: string[];
   onNotification?: (message: string) => void;
+  // 작업이력 행에서 "손익 보기" 클릭 시 프로젝트 관리 탭으로 이동
+  // dealId 인자는 향후 ProfitPage에서 해당 프로젝트 자동 스크롤/하이라이트할 때 활용
+  onNavigateToProfit?: (dealId: number) => void;
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -839,7 +844,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -2633,31 +2638,47 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   </div>
                                 </td>
                                 <td className="px-3 py-3 text-center">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (selectedCustomer && window.confirm('이 작업을 삭제하시겠습니까?')) {
-                                        const updatedWorkHistory = selectedCustomer.workHistory.filter((_, i) => i !== index);
-                                        const updatedCustomer = recomputeCustomerTotals({
-                                          ...selectedCustomer,
-                                          workHistory: updatedWorkHistory,
-                                        });
+                                  <div className="flex items-center justify-center gap-1">
+                                    {/* 손익 보기 — dealId가 있고 부모가 핸들러를 전달했을 때만 노출 */}
+                                    {work.dealId && onNavigateToProfit && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onNavigateToProfit(work.dealId!);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors whitespace-nowrap"
+                                        title="프로젝트 관리에서 손익 보기"
+                                      >
+                                        <Calculator className="w-3 h-3" />
+                                        손익 보기
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (selectedCustomer && window.confirm('이 작업을 삭제하시겠습니까?')) {
+                                          const updatedWorkHistory = selectedCustomer.workHistory.filter((_, i) => i !== index);
+                                          const updatedCustomer = recomputeCustomerTotals({
+                                            ...selectedCustomer,
+                                            workHistory: updatedWorkHistory,
+                                          });
 
-                                        setCustomers((prevCustomers) =>
-                                          prevCustomers.map((customer) =>
-                                            customer.id === selectedCustomer.id ? updatedCustomer : customer
-                                          )
-                                        );
-                                        setSelectedCustomer(updatedCustomer);
+                                          setCustomers((prevCustomers) =>
+                                            prevCustomers.map((customer) =>
+                                              customer.id === selectedCustomer.id ? updatedCustomer : customer
+                                            )
+                                          );
+                                          setSelectedCustomer(updatedCustomer);
 
-                                        updateCustomer(updatedCustomer).catch(err => console.error('작업 삭제 API 실패:', err));
-                                      }
-                                    }}
-                                    className="p-1.5 hover:bg-red-50 rounded transition-colors group"
-                                    title="작업 삭제"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
-                                  </button>
+                                          updateCustomer(updatedCustomer).catch(err => console.error('작업 삭제 API 실패:', err));
+                                        }
+                                      }}
+                                      className="p-1.5 hover:bg-red-50 rounded transition-colors group"
+                                      title="작업 삭제"
+                                    >
+                                      <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}

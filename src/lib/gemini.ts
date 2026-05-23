@@ -5,16 +5,17 @@ export interface ChatMessage {
   parts: { text: string }[];
 }
 
-export type ExpertType = 'assistant' | 'sales' | 'crm' | 'supply';
+export type ExpertType = 'assistant' | 'sales' | 'crm' | 'supply' | 'profit';
 
 export const EXPERT_CONFIGS: Record<ExpertType, { label: string; buttonLabel: string; description: string }> = {
   assistant: { label: 'AI 비서',       buttonLabel: 'AI 비서', description: '전체 데이터 종합 분석' },
   sales:     { label: 'B2B 영업전문가', buttonLabel: 'B2B 영업', description: '영업 파이프라인 전문 컨설팅' },
   crm:       { label: 'CRM 전문가',    buttonLabel: 'CRM',      description: '고객관계 관리 전문 컨설팅' },
   supply:    { label: '공급망전문가',   buttonLabel: '공급망',   description: '협력사·매니저 관리 전문 컨설팅' },
+  profit:    { label: '손익전문가',     buttonLabel: '손익',     description: '프로젝트 손익 분석 전문 컨설팅' },
 };
 
-export const EXPERT_TYPES: ExpertType[] = ['assistant', 'sales', 'crm', 'supply'];
+export const EXPERT_TYPES: ExpertType[] = ['assistant', 'sales', 'crm', 'supply', 'profit'];
 
 export const EXPERT_SUGGESTED_PROMPTS: Record<ExpertType, string[]> = {
   assistant: [
@@ -40,6 +41,12 @@ export const EXPERT_SUGGESTED_PROMPTS: Record<ExpertType, string[]> = {
     '작업팀장 등급과 역량을 분석해줘',
     '협력사 리스크를 진단해줘',
     '수요 대비 공급 역량 매칭 현황은?',
+  ],
+  profit: [
+    '이번 달 순이익률이 낮은 프로젝트는?',
+    '서비스별 평균 순익률을 비교해줘',
+    '인건비율이 50%를 넘는 프로젝트와 원인은?',
+    '다음 달 단가 인상 시 마진 영향 분석',
   ],
 };
 
@@ -110,6 +117,25 @@ SCM(공급망관리)과 SRM(Supplier Relationship Management) 방법론을 바�
 - SCM/SRM 방법론 용어를 적절히 활용하되 실무적으로 설명하세요
 - 데이터에 기반한 구체적인 수치와 실행 가능한 액션 아이템을 제시하세요
 - 표나 목록 형식을 적극 활용하세요
+- 데이터에 없는 내용은 추측하지 마세요`,
+
+  profit: `당신은 에어터(Airtor)의 프로젝트 손익 및 마진 관리 전문 컨설턴트입니다.
+에어터의 프로젝트 손익 구조: 견적금액 → 부가세 역산 → 순매출 → 인건비(역할별 일당 × 인원 × 일수) + 변동비(식비/교통비/기타) 차감 → 순이익 산출.
+Contribution Margin Analysis, ABC(Activity-Based Costing), Margin Optimization 방법론을 바탕으로 전문적인 컨설팅을 제공하세요.
+
+전문 영역:
+- 프로젝트별 순익률 진단 및 적자/저마진 원인 분석
+- 인건비율(labor_cost_ratio) 분석 및 역할 구성(팀장/팀원/보조) 최적화
+- 단가표(airtor_labor_rates) 인상/인하 시뮬레이션 및 마진 영향 분석
+- 서비스 카테고리별 손익 패턴 비교 및 가격 정책 제안
+- AI 인력배치 제안의 채택률·효과성 추적 (aiApplied 플래그 기반)
+
+규칙:
+- 한국어로 답변하세요
+- 손익 관리 용어(공헌이익, 손익분기점, 마진율 등)를 적절히 활용하되 실무적으로 설명하세요
+- 데이터에 기반한 구체적인 수치(원/만원/억원, 퍼센트)와 실행 가능한 액션 아이템을 제시하세요
+- 표나 목록 형식을 적극 활용하세요
+- ratio 값은 fraction(0~1)으로 저장되어 있으니 답변 시 *100으로 퍼센트 변환해 표시하세요
 - 데이터에 없는 내용은 추측하지 마세요`,
 };
 
@@ -389,17 +415,212 @@ ${subcontractors.map((s: any) => `  · ${s.name} | ${s.company} | ${s.grade}등�
 `.trim();
 }
 
+// ============================================================
+// buildProfitContext — 프로젝트 손익 컨텍스트
+// ratio 값(profitRatio, laborCostRatio)은 fraction (0~1) 형태로 저장되어 있어 *100으로 퍼센트 표시.
+// ============================================================
+function buildProfitContext(
+  deals: any[], customers: any[], managers: any[],
+  subcontractors: any[], projects: any[], laborRates: any[]
+): string {
+  const today = new Date().toISOString().split('T')[0];
+
+  const inProgress = projects.filter((p: any) => p.status === 'in-progress');
+  const completed = projects.filter((p: any) => p.status === 'completed');
+
+  const totalRevenue = projects.reduce((s, p) => s + (p.netRevenue || 0), 0);
+  const totalCost = projects.reduce((s, p) => s + (p.totalCost || 0), 0);
+  const totalProfit = totalRevenue - totalCost;
+  const avgProfitRatio = projects.length > 0
+    ? (projects.reduce((s, p) => s + (p.profitRatio || 0), 0) / projects.length * 100).toFixed(1)
+    : '-';
+
+  // 서비스별 집계
+  const byService: Record<string, { count: number; revenue: number; profit: number }> = {};
+  for (const p of projects) {
+    const svc = p.serviceType || '기타';
+    if (!byService[svc]) byService[svc] = { count: 0, revenue: 0, profit: 0 };
+    byService[svc].count++;
+    byService[svc].revenue += p.netRevenue || 0;
+    byService[svc].profit += p.netProfit || 0;
+  }
+
+  return `
+## 오늘 날짜: ${today}
+
+## 프로젝트 전체 (총 ${projects.length}건, 진행중 ${inProgress.length}, 완료 ${completed.length})
+- 누적 순매출: ${(totalRevenue / 100000000).toFixed(2)}억원
+- 누적 비용: ${(totalCost / 100000000).toFixed(2)}억원
+- 누적 순이익: ${(totalProfit / 100000000).toFixed(2)}억원
+- 평균 순익률: ${avgProfitRatio}%
+
+## 진행중 프로젝트 목록 (상위 20건, work_date DESC)
+${inProgress.slice(0, 20).map((p: any) => `  · ${p.projectName} | 서비스:${p.serviceType} | 작업일:${p.workDate || '-'} | 순매출:${((p.netRevenue||0)/10000).toFixed(0)}만 | 인건비:${((p.laborCost||0)/10000).toFixed(0)}만 (${((p.laborCostRatio||0)*100).toFixed(0)}%) | 순이익:${((p.netProfit||0)/10000).toFixed(0)}만 (${((p.profitRatio||0)*100).toFixed(0)}%)`).join('\n')}
+
+## 완료 프로젝트 (최근 15건)
+${completed.slice(0, 15).map((p: any) => `  · ${p.projectName} | ${p.completedAt?.substring(0,10) || '-'} | 사유:${p.completedReason} | 순매출:${((p.netRevenue||0)/10000).toFixed(0)}만 | 순이익:${((p.netProfit||0)/10000).toFixed(0)}만 (${((p.profitRatio||0)*100).toFixed(0)}%)${p.aiApplied ? ' [AI채택]' : ''}`).join('\n')}
+
+## 서비스별 손익 집계
+${Object.entries(byService).map(([svc, s]) => {
+  const ratio = s.revenue > 0 ? ((s.profit / s.revenue) * 100).toFixed(1) : '-';
+  return `  · ${svc} | ${s.count}건 | 순매출:${(s.revenue/10000).toFixed(0)}만 | 순이익:${(s.profit/10000).toFixed(0)}만 (${ratio}%)`;
+}).join('\n')}
+
+## 현재 단가표 (최근 3개월, 최대 9행)
+${laborRates.slice(0, 9).map((r: any) => `  · ${r.yearMonth} ${r.role} ${(r.dailyRate || 0).toLocaleString()}원/일`).join('\n')}
+`.trim();
+}
+
+// 인자 순서: deals, customers, managers, subcontractors, projects, laborRates, expertType.
+// projects/laborRates는 기본값 빈 배열 — profit 외 expert는 사용 안 함.
 export function buildDataContext(
   deals: any[],
   customers: any[],
   managers: any[],
   subcontractors: any[],
+  projects: any[] = [],
+  laborRates: any[] = [],
   expertType: ExpertType = 'assistant'
 ): string {
   switch (expertType) {
     case 'sales':  return buildSalesContext(deals, customers, managers, subcontractors);
     case 'crm':    return buildCrmContext(deals, customers, managers, subcontractors);
     case 'supply': return buildSupplyContext(deals, customers, managers, subcontractors);
+    case 'profit': return buildProfitContext(deals, customers, managers, subcontractors, projects, laborRates);
     default:       return buildFullContext(deals, customers, managers, subcontractors);
   }
+}
+
+// ============================================================
+// AI 인력배치 제안 — suggestProjectStaffing
+// 별도 함수로 분리한 이유:
+//   - 응답이 JSON 스키마 강제 (sendChatMessage는 자유 텍스트)
+//   - gemini-2.5-pro 사용 (추론 품질이 staffing 결정에 직접 영향)
+//   - 자체 시스템 프롬프트 (4단계 추론 강제)
+// ============================================================
+export interface StaffingSuggestion {
+  assignments: { lead: number; member: number; support: number; days: number };
+  estimatedLaborCost: number;
+  estimatedNetProfit: number;
+  estimatedProfitRatio: number; // fraction (0~1)
+  rationale: string;
+  warnings: string[];
+}
+
+export interface StaffingInput {
+  service: string;
+  totalQuantity: number;
+  detailedQuantity?: string;
+  netRevenue: number;
+  laborRates: { lead: number; member: number; support: number };
+  similarProjects: Array<{
+    service: string;
+    quantity: number;
+    assignments: { lead: number; member: number; support: number; days: number };
+    profitRatio: number; // fraction (0~1)
+  }>;
+  availableSubcontractors: Array<{
+    name: string;
+    grade: 'S' | 'A' | 'B' | 'C';
+    cooperationScore: number;
+    ongoingProjects: number;
+  }>;
+  targetProfitRatio: number; // fraction (0~1)
+}
+
+const STAFFING_SYSTEM_PROMPT = `당신은 에어터(Airtor)의 프로젝트 손익 최적화 컨설턴트입니다.
+B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을 제안합니다.
+
+[추론 4단계 — 반드시 이 순서로 따르세요]
+1. 수량 → 필요 인원 산정
+   - service와 totalQuantity로 1차 인원수 추정
+   - 예: 에어컨세척 50대 = 팀장 1, 팀원 3~4, 1.5~2일
+
+2. 유사 프로젝트 패턴 참조
+   - similarProjects에서 같은 service + 수량 ±30% 범위
+   - 평균 배치 + 평균 순익률 확인
+   - 평균 순익률이 targetProfitRatio 미달이면 인력 줄이는 방향 검토
+
+3. 가용 인력 매칭
+   - availableSubcontractors의 등급 분포 확인
+   - ongoingProjects 적은 인력 우선
+   - 매칭 결과를 rationale에 반영
+
+4. 캡 검증
+   - 인건비 = (lead*rateLead + member*rateMember + support*rateSupport) * days
+   - profitRatio = (netRevenue - laborCost) / netRevenue
+   - profitRatio < targetProfitRatio면 warnings에 경고 추가하고 인력 줄임
+
+[출력 형식 — 엄수]
+반드시 다음 스키마의 JSON만 출력. 마크다운 펜스 금지, 설명 금지, 코드 블록 금지.
+{
+  "assignments": {"lead": int, "member": int, "support": int, "days": int},
+  "estimatedLaborCost": int,
+  "estimatedNetProfit": int,
+  "estimatedProfitRatio": float (0~1),
+  "rationale": "한국어 3~5문장으로 추론 근거",
+  "warnings": ["문자열 배열, 없으면 빈 배열"]
+}`;
+
+export async function suggestProjectStaffing(input: StaffingInput): Promise<StaffingSuggestion> {
+  const userContent = `
+서비스: ${input.service}
+총수량: ${input.totalQuantity}
+${input.detailedQuantity ? `상세수량: ${input.detailedQuantity}` : ''}
+순매출(부가세 제외): ${input.netRevenue.toLocaleString()}원
+목표 순익률: ${(input.targetProfitRatio * 100).toFixed(0)}%
+
+[역할별 일당]
+팀장: ${input.laborRates.lead.toLocaleString()}원
+팀원: ${input.laborRates.member.toLocaleString()}원
+보조: ${input.laborRates.support.toLocaleString()}원
+
+[과거 유사 프로젝트 (최근 ${input.similarProjects.length}건)]
+${input.similarProjects.map((p, i) => `${i+1}. ${p.service} ${p.quantity}대 | 팀장${p.assignments.lead}/팀원${p.assignments.member}/보조${p.assignments.support}/${p.assignments.days}일 | 순익률${(p.profitRatio*100).toFixed(0)}%`).join('\n')}
+
+[가용 작업팀장 풀]
+${input.availableSubcontractors.map(s => `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`).join('\n')}
+
+위 데이터를 바탕으로 4단계 추론을 거쳐 인력 배치 JSON을 제안하세요.
+`.trim();
+
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _model: 'gemini-2.5-pro', // staffing은 추론 품질 중요
+      systemInstruction: { parts: [{ text: STAFFING_SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: userContent }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1024,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI 응답 오류 (${response.status})`);
+  }
+
+  const data = await response.json();
+  let text: string = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  // 마크다운 펜스 제거 — 모델이 시스템 프롬프트를 가끔 무시하고 ```json ... ``` 로 감쌀 때 대비
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
+  let parsed: StaffingSuggestion;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    console.error('AI staffing JSON parse failed:', text);
+    throw new Error('AI 응답 형식 오류 — 다시 시도해주세요');
+  }
+
+  // 최소 필드 검증
+  if (!parsed.assignments || typeof parsed.assignments.lead !== 'number') {
+    throw new Error('AI 응답 스키마 불일치');
+  }
+  if (!parsed.warnings) parsed.warnings = [];
+
+  return parsed;
 }
