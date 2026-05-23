@@ -258,9 +258,9 @@ export default function App() {
 
   const navigation = [
     { id: 'sales' as const, name: '영업 관리', icon: TrendingUp },
+    { id: 'profit' as const, name: '프로젝트 관리', icon: Calculator },
     { id: 'customers' as const, name: '고객 관리', icon: Users },
     { id: 'supplychain' as const, name: '공급망 관리', icon: Package },
-    { id: 'profit' as const, name: '프로젝트 관리', icon: Calculator },
   ];
 
   return (
