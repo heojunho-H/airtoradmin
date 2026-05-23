@@ -1,6 +1,5 @@
-// 손익 관리 (프로젝트 관리) 페이지 — Phase 10
-// SalesPage/CustomersPage 구조 답습. 단가표 카드 + KPI 5장 + 검색·필터 + 테이블/모바일 카드 + 행 펼침
-// 색상 토큰: teal (crm의 emerald와 구분)
+// 손익 관리 (프로젝트 관리) 페이지
+// SalesPage/CustomersPage 디자인 패턴 채택: p-4 md:p-8 space-y-, KPI 32px, uppercase 헤더, blue 강조
 
 import { useState, useEffect } from 'react';
 import {
@@ -17,9 +16,11 @@ import {
   Sparkles,
   Briefcase,
   AlertCircle,
+  Calendar,
+  Building2,
+  Package,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { LaborRateCard, type LaborRate, type LaborRole } from './LaborRateCard';
 import {
   type AvailableSubcontractor,
@@ -120,7 +121,6 @@ export async function updateLaborRate(
   dailyRate: number,
   updatedBy?: string,
 ): Promise<void> {
-  // PHP API: POST + ON DUPLICATE KEY UPDATE (멱등)
   const response = await fetch(LABOR_RATES_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -146,7 +146,11 @@ export async function copyPrevMonthRates(
 // ============================================================
 // 포맷 헬퍼
 // ============================================================
-function formatKRW(n: number): string {
+function formatAmount(amount: number): string {
+  return amount.toLocaleString('ko-KR');
+}
+
+function formatKRWShort(n: number): string {
   if (n >= 100000000) return (n / 100000000).toFixed(2) + '억';
   if (n >= 10000) return (n / 10000).toFixed(0) + '만';
   return n.toLocaleString();
@@ -157,7 +161,7 @@ function formatPct(fraction: number): string {
 }
 
 function ratioColorClass(fraction: number): string {
-  if (fraction >= 0.3) return 'text-teal-700';
+  if (fraction >= 0.3) return 'text-blue-700';
   if (fraction >= 0.1) return 'text-amber-600';
   if (fraction >= 0) return 'text-orange-600';
   return 'text-red-600';
@@ -175,8 +179,8 @@ interface ProfitPageProps {
     LaborRate[],
     (r: LaborRate[] | ((prev: LaborRate[]) => LaborRate[])) => void,
   ];
-  customers?: any[]; // 회사명/workHistory 룩업
-  subcontractors?: any[]; // AI 추천용 가용 인력 풀
+  customers?: any[];
+  subcontractors?: any[];
   onNotification?: (msg: string) => void;
 }
 
@@ -222,7 +226,7 @@ export function ProfitPage({
         setIsLoading(false);
       })
       .catch((err) => {
-        console.error('손익관리 데이터 로드 실패:', err);
+        console.error('프로젝트 관리 데이터 로드 실패:', err);
         onNotification?.('데이터 로드 실패 — 새로고침 후 다시 시도해주세요');
         setIsLoading(false);
       });
@@ -240,8 +244,6 @@ export function ProfitPage({
   // ============================================================
   // 핸들러
   // ============================================================
-
-  // 1. 프로젝트 부분 저장 — 낙관적 UI 업데이트 + 서버 응답 후 refetch (파생지표 동기화)
   const handleUpdateProject = async (id: number, updates: Partial<Project>) => {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
     try {
@@ -255,12 +257,10 @@ export function ProfitPage({
     }
   };
 
-  // 2. 수동 완료 — 서버에서 completed_at NOW() + completed_reason='manual' 자동 셋
   const handleCompleteProject = async (id: number) => {
     await handleUpdateProject(id, { status: 'completed', completedReason: 'manual' });
   };
 
-  // 3. AI 추천 채택 — workerAssignments prefill + aiSuggestion/aiApplied 마킹
   const handleAdoptAiSuggestion = async (projectId: number, suggestion: StaffingSuggestion) => {
     await handleUpdateProject(projectId, {
       workerAssignments: suggestion.assignments,
@@ -269,7 +269,6 @@ export function ProfitPage({
     });
   };
 
-  // 4. 단가 저장
   const handleUpdateLaborRate = async (yearMonth: string, role: LaborRole, dailyRate: number) => {
     try {
       await updateLaborRate(yearMonth, role, dailyRate, updatedBy);
@@ -282,7 +281,6 @@ export function ProfitPage({
     }
   };
 
-  // 5. 전월 단가 복사
   const handleCopyPrevRates = async (yearMonth: string) => {
     try {
       const result = await copyPrevMonthRates(yearMonth, updatedBy);
@@ -299,12 +297,10 @@ export function ProfitPage({
     }
   };
 
-  // 6. 수동 추가 — 영업관리에서 수주확정한 딜만 자동 등록되므로 안내만
   const handleAddManualProject = () => {
     onNotification?.('수동 추가는 미지원 — 영업관리에서 수주확정한 딜만 자동 등록됩니다');
   };
 
-  // 7. Excel 다운로드
   const handleExport = () => {
     const data = filteredProjects.map((p) => {
       const base: Record<string, any> = {
@@ -336,15 +332,15 @@ export function ProfitPage({
     });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '손익관리');
+    XLSX.utils.book_append_sheet(wb, ws, '프로젝트관리');
     const tabLabel = activeTab === 'in-progress' ? '진행중' : '완료';
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `손익관리_${tabLabel}_${date}.xlsx`);
+    XLSX.writeFile(wb, `프로젝트관리_${tabLabel}_${date}.xlsx`);
     onNotification?.(`Excel 다운로드 — ${data.length}건`);
   };
 
   // ============================================================
-  // 룩업 헬퍼 (customer/subcontractor 데이터)
+  // 룩업 헬퍼
   // ============================================================
   const getCustomerName = (customerId: number | null): string => {
     if (!customerId) return '—';
@@ -368,7 +364,6 @@ export function ProfitPage({
     return entry?.detailedQuantity || undefined;
   };
 
-  // 유사 프로젝트: 같은 service + 완료 + 자기 제외 (최대 5건)
   const getSimilarProjects = (project: Project): SimilarProjectRef[] => {
     return projects
       .filter(
@@ -387,7 +382,6 @@ export function ProfitPage({
       }));
   };
 
-  // 가용 작업팀장 — SupplyChainPage subcontractors prop 가공
   const availableSubs: AvailableSubcontractor[] = subcontractors.map((s: any) => ({
     name: s.name || '',
     grade: (s.grade as 'S' | 'A' | 'B' | 'C') || 'B',
@@ -401,7 +395,6 @@ export function ProfitPage({
   const inProgressProjects = projects.filter((p) => p.status === 'in-progress');
   const completedProjects = projects.filter((p) => p.status === 'completed');
 
-  // KPI는 현재 탭 기준
   const tabProjects = activeTab === 'in-progress' ? inProgressProjects : completedProjects;
   const tabRevenue = tabProjects.reduce((s, p) => s + p.netRevenue, 0);
   const tabProfit = tabProjects.reduce((s, p) => s + p.netProfit, 0);
@@ -412,12 +405,17 @@ export function ProfitPage({
   const tabAiAdopted = tabProjects.filter((p) => p.aiApplied).length;
   const tabAiAdoptionRate = tabProjects.length > 0 ? tabAiAdopted / tabProjects.length : 0;
 
-  // 서비스 목록 — 필터 select 옵션
   const serviceOptions = Array.from(
     new Set(projects.map((p) => p.serviceType).filter(Boolean)),
   );
 
-  // 필터링
+  const activeFiltersCount =
+    (serviceFilter !== 'all' ? 1 : 0) +
+    (dateFilter.start ? 1 : 0) +
+    (dateFilter.end ? 1 : 0) +
+    (profitFilter.min ? 1 : 0) +
+    (profitFilter.max ? 1 : 0);
+
   const filteredProjects = tabProjects.filter((p) => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -441,48 +439,50 @@ export function ProfitPage({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-10 h-10 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin" />
+        <div className="w-10 h-10 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-[1400px] mx-auto">
-      {/* 헤더 */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">프로젝트 관리</h1>
-          <p className="text-sm text-slate-500 mt-1">수주확정 딜의 인력 배치·비용·순이익 추적</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">프로젝트 관리</h1>
+          <p className="text-[15px] text-slate-500 mt-1.5">
+            {filteredProjects.length}건의 프로젝트 — 수주확정 딜의 인력 배치·비용·순이익 추적
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-5 py-2.5 bg-white text-green-700 border border-green-300 rounded-xl hover:bg-green-50 transition-all shadow-sm hover:shadow flex items-center gap-2"
           >
-            <Download className="w-3.5 h-3.5" />
-            Excel
+            <Download className="w-[18px] h-[18px]" />
+            <span className="text-[14px] font-semibold">내보내기</span>
           </button>
           <button
             onClick={handleAddManualProject}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
           >
-            <Plus className="w-3.5 h-3.5" />
-            수동 추가
+            <Plus className="w-[18px] h-[18px]" />
+            <span className="text-[14px] font-semibold">수동 추가</span>
           </button>
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-2 mb-4">
+      {/* Tab Filter Buttons (CustomersPage 등급 필터 패턴) */}
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => {
             setActiveTab('in-progress');
             setExpandedRowId(null);
           }}
-          className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'in-progress'
-              ? 'bg-teal-600 text-white shadow-sm'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
           진행중 ({inProgressProjects.length})
@@ -492,151 +492,214 @@ export function ProfitPage({
             setActiveTab('completed');
             setExpandedRowId(null);
           }}
-          className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'completed'
-              ? 'bg-teal-600 text-white shadow-sm'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'bg-slate-900 text-white'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
           완료 ({completedProjects.length})
         </button>
       </div>
 
-      {/* 진행중 탭: 단가표 카드 */}
-      {activeTab === 'in-progress' && (
-        <div className="mb-4">
-          <LaborRateCard
-            laborRates={laborRates}
-            currentYearMonth={currentYearMonth}
-            onRateUpdate={handleUpdateLaborRate}
-            onCopyPrev={handleCopyPrevRates}
-            onNotification={onNotification}
-          />
+      {/* KPI Cards — SalesPage/CustomersPage 동일 패턴 (p-6, 32px value, icon tile) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[13px] text-slate-500 font-medium font-bold">
+                {activeTab === 'in-progress' ? '진행중 프로젝트' : '완료 프로젝트'}
+              </p>
+              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+                {tabProjects.length}
+              </p>
+            </div>
+            <div className="p-3 bg-blue-50 rounded-xl">
+              <Briefcase className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* KPI 5장 */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-        <KpiCard
-          icon={<Briefcase className="w-4 h-4" />}
-          label={activeTab === 'in-progress' ? '진행중 프로젝트' : '완료 프로젝트'}
-          value={`${tabProjects.length}건`}
-          accent="teal"
-        />
-        <KpiCard
-          icon={<DollarSign className="w-4 h-4" />}
-          label="누적 순매출"
-          value={`${formatKRW(tabRevenue)}원`}
-          accent="slate"
-        />
-        <KpiCard
-          icon={<TrendingUp className="w-4 h-4" />}
-          label="누적 순이익"
-          value={`${formatKRW(tabProfit)}원`}
-          accent={tabProfit >= 0 ? 'teal' : 'red'}
-        />
-        <KpiCard
-          icon={<Percent className="w-4 h-4" />}
-          label="평균 순익률"
-          value={formatPct(tabAvgRatio)}
-          accent={tabAvgRatio >= 0.2 ? 'teal' : tabAvgRatio >= 0 ? 'amber' : 'red'}
-        />
-        <KpiCard
-          icon={<Sparkles className="w-4 h-4" />}
-          label="AI 채택률"
-          value={`${tabAiAdopted}건 (${formatPct(tabAiAdoptionRate)})`}
-          accent="slate"
-        />
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[13px] text-slate-500 font-medium font-bold">누적 순매출</p>
+              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+                ₩{formatKRWShort(tabRevenue)}
+              </p>
+            </div>
+            <div className="p-3 bg-cyan-50 rounded-xl">
+              <DollarSign className="w-6 h-6 text-cyan-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[13px] text-slate-500 font-medium font-bold">누적 순이익</p>
+              <p
+                className={`text-[32px] font-bold mt-2 tracking-tight ${
+                  tabProfit >= 0 ? 'text-slate-900' : 'text-red-700'
+                }`}
+              >
+                ₩{formatKRWShort(tabProfit)}
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50 rounded-xl">
+              <TrendingUp className="w-6 h-6 text-emerald-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[13px] text-slate-500 font-medium font-bold">평균 순익률</p>
+              <p
+                className={`text-[32px] font-bold mt-2 tracking-tight ${
+                  tabAvgRatio >= 0.2
+                    ? 'text-slate-900'
+                    : tabAvgRatio >= 0
+                      ? 'text-amber-700'
+                      : 'text-red-700'
+                }`}
+              >
+                {formatPct(tabAvgRatio)}
+              </p>
+            </div>
+            <div className="p-3 bg-purple-50 rounded-xl">
+              <Percent className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[13px] text-slate-500 font-medium font-bold">AI 채택률</p>
+              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+                {formatPct(tabAiAdoptionRate)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">{tabAiAdopted}건 채택</p>
+            </div>
+            <div className="p-3 bg-orange-50 rounded-xl">
+              <Sparkles className="w-6 h-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* 검색·필터 */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 space-y-3">
-        <div className="flex flex-col md:flex-row gap-2">
-          <div className="relative flex-1">
+      {/* Labor Rate Card — 진행중 탭에서만 노출 */}
+      {activeTab === 'in-progress' && (
+        <LaborRateCard
+          laborRates={laborRates}
+          currentYearMonth={currentYearMonth}
+          onRateUpdate={handleUpdateLaborRate}
+          onCopyPrev={handleCopyPrevRates}
+          onNotification={onNotification}
+        />
+      )}
+
+      {/* Search & Filter — SalesPage 패턴 */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="기업명 또는 프로젝트명 검색"
+              placeholder="기업명 또는 프로젝트명으로 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              className="w-full pl-10 pr-3 py-2 text-[14px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
             />
           </div>
-          <select
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-            className="px-3 py-2 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
-          >
-            <option value="all">전체 서비스</option>
-            {serviceOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+            className={`px-4 py-2 border rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm ${
+              activeFiltersCount > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'
+            }`}
           >
-            <Filter className="w-3.5 h-3.5" />
-            상세 필터
-            {showFilters ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
+            <Filter className="w-4 h-4" />
+            <span className="text-[13px] font-semibold">필터</span>
+            {activeFiltersCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-[11px] font-bold rounded-full">
+                {activeFiltersCount}
+              </span>
             )}
           </button>
         </div>
+
         {showFilters && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+          <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* 서비스 */}
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">작업일 시작</label>
-              <input
-                type="date"
-                value={dateFilter.start}
-                onChange={(e) => setDateFilter((prev) => ({ ...prev, start: e.target.value }))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
+              <label className="block text-[13px] font-semibold text-slate-700 mb-2">서비스</label>
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
+                className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">전체 서비스</option>
+                {serviceOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* 작업일 범위 */}
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">작업일 끝</label>
-              <input
-                type="date"
-                value={dateFilter.end}
-                onChange={(e) => setDateFilter((prev) => ({ ...prev, end: e.target.value }))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
+              <label className="block text-[13px] font-semibold text-slate-700 mb-2">작업일 범위</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFilter.start}
+                  onChange={(e) => setDateFilter((prev) => ({ ...prev, start: e.target.value }))}
+                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <span className="text-slate-400 text-sm">~</span>
+                <input
+                  type="date"
+                  value={dateFilter.end}
+                  onChange={(e) => setDateFilter((prev) => ({ ...prev, end: e.target.value }))}
+                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
+
+            {/* 순익률 범위 */}
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1">순익률 최소(%)</label>
-              <input
-                type="number"
-                placeholder="예: 10"
-                value={profitFilter.min}
-                onChange={(e) => setProfitFilter((prev) => ({ ...prev, min: e.target.value }))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-1">순익률 최대(%)</label>
-              <input
-                type="number"
-                placeholder="예: 50"
-                value={profitFilter.max}
-                onChange={(e) => setProfitFilter((prev) => ({ ...prev, max: e.target.value }))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
+              <label className="block text-[13px] font-semibold text-slate-700 mb-2">순익률(%) 범위</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="최소"
+                  value={profitFilter.min}
+                  onChange={(e) => setProfitFilter((prev) => ({ ...prev, min: e.target.value }))}
+                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <span className="text-slate-400 text-sm">~</span>
+                <input
+                  type="number"
+                  placeholder="최대"
+                  value={profitFilter.max}
+                  onChange={(e) => setProfitFilter((prev) => ({ ...prev, max: e.target.value }))}
+                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
           </div>
         )}
-        <div className="text-[11px] text-slate-500">조회 결과: {filteredProjects.length}건</div>
       </div>
 
-      {/* 테이블 / 모바일 카드 */}
+      {/* Table / Mobile Cards */}
       {filteredProjects.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl py-16 text-center">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm py-16 text-center">
           <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
-          <p className="mt-3 text-[13px] text-slate-500">조건에 맞는 프로젝트가 없습니다</p>
+          <p className="mt-3 text-[15px] text-slate-500">조건에 맞는 프로젝트가 없습니다</p>
+          <p className="text-[13px] text-slate-400 mt-2">다른 검색어나 필터를 시도해보세요.</p>
         </div>
       ) : isMobile ? (
         <div className="space-y-3">
@@ -661,29 +724,49 @@ export function ProfitPage({
           ))}
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
-                <tr className="text-left text-slate-600 font-medium">
-                  <th className="px-3 py-3">작업일자</th>
-                  <th className="px-3 py-3">기업명</th>
-                  <th className="px-3 py-3">서비스</th>
-                  <th className="px-3 py-3 text-right">순매출</th>
-                  <th className="px-3 py-3 text-right">인건비</th>
-                  <th className="px-3 py-3 text-right">매출대비 인건비</th>
-                  <th className="px-3 py-3 text-right">순이익</th>
-                  <th className="px-3 py-3 text-right">순익률</th>
+                <tr>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    작업일자
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    기업명
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    서비스
+                  </th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    순매출
+                  </th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    인건비
+                  </th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    매출대비 인건비
+                  </th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    순이익
+                  </th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    순익률
+                  </th>
                   {activeTab === 'completed' && (
                     <>
-                      <th className="px-3 py-3">완료일자</th>
-                      <th className="px-3 py-3">완료사유</th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        완료일자
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        완료사유
+                      </th>
                     </>
                   )}
-                  <th className="px-3 py-3 w-10"></th>
+                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider w-10"></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-200">
                 {filteredProjects.map((p) => {
                   const colCount = activeTab === 'completed' ? 11 : 9;
                   return (
@@ -719,44 +802,7 @@ export function ProfitPage({
 }
 
 // ============================================================
-// 보조 컴포넌트 — KPI 카드
-// ============================================================
-function KpiCard({
-  icon,
-  label,
-  value,
-  accent,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  accent: 'teal' | 'slate' | 'amber' | 'red';
-}) {
-  const accentBg: Record<typeof accent, string> = {
-    teal: 'bg-teal-100 text-teal-700',
-    slate: 'bg-slate-100 text-slate-700',
-    amber: 'bg-amber-100 text-amber-700',
-    red: 'bg-red-100 text-red-700',
-  } as Record<typeof accent, string>;
-  const valueColor: Record<typeof accent, string> = {
-    teal: 'text-teal-700',
-    slate: 'text-slate-900',
-    amber: 'text-amber-700',
-    red: 'text-red-700',
-  } as Record<typeof accent, string>;
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`p-1.5 rounded-lg ${accentBg[accent]}`}>{icon}</div>
-        <p className="text-[11px] text-slate-500">{label}</p>
-      </div>
-      <p className={`text-[16px] md:text-[18px] font-bold ${valueColor[accent]}`}>{value}</p>
-    </div>
-  );
-}
-
-// ============================================================
-// 테이블 행 (데스크톱)
+// 테이블 행 (데스크톱) — SalesPage/CustomersPage 스타일
 // ============================================================
 interface RowProps {
   project: Project;
@@ -796,44 +842,92 @@ function ProjectTableRow({
   return (
     <>
       <tr
-        className={`border-b border-slate-100 hover:bg-teal-50/30 transition-colors cursor-pointer ${
-          isExpanded ? 'bg-teal-50/50' : ''
+        className={`hover:bg-slate-50 transition-colors cursor-pointer ${
+          isExpanded ? 'bg-blue-50/40' : ''
         }`}
         onClick={onToggleExpand}
       >
-        <td className="px-3 py-3 text-slate-700">{p.workDate || '-'}</td>
-        <td className="px-3 py-3 font-medium text-slate-900">{companyName}</td>
-        <td className="px-3 py-3 text-slate-700">{p.serviceType || '-'}</td>
-        <td className="px-3 py-3 text-right text-slate-700">{formatKRW(p.netRevenue)}원</td>
-        <td className="px-3 py-3 text-right text-slate-700">{formatKRW(p.laborCost)}원</td>
-        <td className="px-3 py-3 text-right text-slate-600">{formatPct(p.laborCostRatio)}</td>
-        <td
-          className={`px-3 py-3 text-right font-medium ${
-            p.netProfit >= 0 ? 'text-slate-900' : 'text-red-600'
-          }`}
-        >
-          {formatKRW(p.netProfit)}원
+        <td className="px-4 py-4">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            {p.workDate || '-'}
+          </div>
         </td>
-        <td className={`px-3 py-3 text-right font-semibold ${ratioColorClass(p.profitRatio)}`}>
-          {formatPct(p.profitRatio)}
-          {p.aiApplied && <Sparkles className="inline w-3 h-3 ml-1 text-teal-500" />}
+        <td className="px-4 py-4">
+          <div className="flex items-center gap-2 text-sm text-slate-900 font-medium">
+            <Building2 className="w-4 h-4 text-slate-400" />
+            {companyName}
+          </div>
+        </td>
+        <td className="px-4 py-4">
+          <span className="text-sm text-slate-700">{p.serviceType || '-'}</span>
+        </td>
+        <td className="px-4 py-4 text-right">
+          <span className="text-sm font-semibold text-slate-900">
+            ₩{formatAmount(p.netRevenue)}
+          </span>
+        </td>
+        <td className="px-4 py-4 text-right">
+          <span className="text-sm text-slate-700">₩{formatAmount(p.laborCost)}</span>
+        </td>
+        <td className="px-4 py-4 text-right">
+          <span className="text-sm text-slate-600">{formatPct(p.laborCostRatio)}</span>
+        </td>
+        <td className="px-4 py-4 text-right">
+          <span
+            className={`text-sm font-semibold ${
+              p.netProfit >= 0 ? 'text-slate-900' : 'text-red-600'
+            }`}
+          >
+            ₩{formatAmount(p.netProfit)}
+          </span>
+        </td>
+        <td className="px-4 py-4 text-right">
+          <span
+            className={`inline-flex items-center gap-1 text-sm font-bold ${ratioColorClass(
+              p.profitRatio,
+            )}`}
+          >
+            {formatPct(p.profitRatio)}
+            {p.aiApplied && <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
+          </span>
         </td>
         {isCompleted && (
           <>
-            <td className="px-3 py-3 text-slate-600">{p.completedAt?.substring(0, 10) || '-'}</td>
-            <td className="px-3 py-3 text-slate-600">
+            <td className="px-4 py-4">
+              <span className="text-sm text-slate-600">
+                {p.completedAt?.substring(0, 10) || '-'}
+              </span>
+            </td>
+            <td className="px-4 py-4">
               {p.completedReason === 'report_sent' ? (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                  <CheckCircle2 className="w-3 h-3" />
+                <span
+                  className="px-2.5 py-1 rounded-full text-xs font-medium border"
+                  style={{
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    borderColor: '#bfdbfe',
+                  }}
+                >
+                  <CheckCircle2 className="w-3 h-3 inline mr-1" />
                   리포트전송
                 </span>
               ) : (
-                <span className="text-[11px] text-slate-500">수동</span>
+                <span
+                  className="px-2.5 py-1 rounded-full text-xs font-medium border"
+                  style={{
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    borderColor: '#cbd5e1',
+                  }}
+                >
+                  수동
+                </span>
               )}
             </td>
           </>
         )}
-        <td className="px-3 py-3 text-right">
+        <td className="px-4 py-4 text-right">
           {isExpanded ? (
             <ChevronUp className="w-4 h-4 text-slate-400 inline" />
           ) : (
@@ -864,7 +958,7 @@ function ProjectTableRow({
 }
 
 // ============================================================
-// 모바일 카드
+// 모바일 카드 — CustomersPage MobileCard 패턴 채택
 // ============================================================
 function ProjectMobileCard({
   project: p,
@@ -885,50 +979,63 @@ function ProjectMobileCard({
   return (
     <div
       className={`bg-white rounded-xl border ${
-        isExpanded ? 'border-teal-300' : 'border-slate-200'
-      } overflow-hidden`}
+        isExpanded ? 'border-blue-300 shadow-md' : 'border-slate-200 shadow-sm'
+      } overflow-hidden transition-all`}
     >
-      <button onClick={onToggleExpand} className="w-full p-4 text-left hover:bg-teal-50/30">
-        <div className="flex items-start justify-between gap-2">
+      <button
+        onClick={onToggleExpand}
+        className="w-full p-4 text-left hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-semibold text-slate-900 truncate">{companyName}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              {p.serviceType || '-'} · {p.workDate || '-'}
-            </p>
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <p className="text-[15px] font-semibold text-slate-900 truncate">{companyName}</p>
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-slate-500">
+              <Package className="w-3.5 h-3.5" />
+              <span>{p.serviceType || '-'}</span>
+              <span className="text-slate-300">·</span>
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{p.workDate || '-'}</span>
+            </div>
           </div>
           {p.aiApplied && (
-            <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded">
+            <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
               <Sparkles className="w-3 h-3" />
               AI
             </span>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-3">
+
+        <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-100">
           <div>
-            <p className="text-[10px] text-slate-500">순매출</p>
-            <p className="text-[13px] font-medium text-slate-900 mt-0.5">
-              {formatKRW(p.netRevenue)}
+            <p className="text-[11px] text-slate-500 font-medium">순매출</p>
+            <p className="text-[14px] font-semibold text-slate-900 mt-1">
+              ₩{formatKRWShort(p.netRevenue)}
             </p>
           </div>
           <div>
-            <p className="text-[10px] text-slate-500">순이익</p>
+            <p className="text-[11px] text-slate-500 font-medium">순이익</p>
             <p
-              className={`text-[13px] font-medium mt-0.5 ${
+              className={`text-[14px] font-semibold mt-1 ${
                 p.netProfit >= 0 ? 'text-slate-900' : 'text-red-600'
               }`}
             >
-              {formatKRW(p.netProfit)}
+              ₩{formatKRWShort(p.netProfit)}
             </p>
           </div>
           <div>
-            <p className="text-[10px] text-slate-500">순익률</p>
-            <p className={`text-[13px] font-semibold mt-0.5 ${ratioColorClass(p.profitRatio)}`}>
+            <p className="text-[11px] text-slate-500 font-medium">순익률</p>
+            <p className={`text-[14px] font-bold mt-1 ${ratioColorClass(p.profitRatio)}`}>
               {formatPct(p.profitRatio)}
             </p>
           </div>
         </div>
+
         {isCompleted && (
-          <div className="flex items-center gap-1.5 mt-2 text-[10px] text-slate-500">
+          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
+            <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
             완료 {p.completedAt?.substring(0, 10) || '-'} ·{' '}
             {p.completedReason === 'report_sent' ? '리포트전송' : '수동'}
           </div>

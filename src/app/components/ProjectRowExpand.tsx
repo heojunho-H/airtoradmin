@@ -183,13 +183,13 @@ export function ProjectRowExpand({
   };
 
   return (
-    <div className="bg-teal-50/30 border-t border-teal-100 px-6 py-5 space-y-4">
+    <div className="bg-slate-50 border-t border-slate-200 px-6 py-5 space-y-4">
       {/* AI 추천 버튼 */}
       <div className="flex items-center justify-between">
         <h4 className="text-[13px] font-semibold text-slate-800">손익 입력</h4>
         <button
           onClick={() => setAiModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg hover:from-teal-600 hover:to-teal-700 transition-colors shadow-sm"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors shadow-sm"
         >
           <Sparkles className="w-3.5 h-3.5" />
           AI 인력 초안 추천 받기
@@ -197,7 +197,7 @@ export function ProjectRowExpand({
       </div>
 
       {/* 인력 input 4개 + 자동 계산 박스 */}
-      <div className="bg-white rounded-xl p-4 border border-teal-100">
+      <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-3">
           인력 배치
         </p>
@@ -217,7 +217,7 @@ export function ProjectRowExpand({
                 min={0}
                 value={value}
                 onChange={(e) => setter(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           ))}
@@ -229,7 +229,7 @@ export function ProjectRowExpand({
               step="0.5"
               value={days}
               onChange={(e) => setDays(Math.max(0, parseFloat(e.target.value) || 0))}
-              className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              className="w-full px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
         </div>
@@ -248,8 +248,8 @@ export function ProjectRowExpand({
             );
           })}
           <div className="text-[11px]">
-            <span className="text-teal-600 font-medium">합계 인건비</span>
-            <div className="font-semibold text-teal-700 mt-0.5">
+            <span className="text-blue-600 font-medium">합계 인건비</span>
+            <div className="font-semibold text-blue-700 mt-0.5">
               {(laborCost / 10000).toFixed(0)}만원
               <span className="text-slate-400 ml-1">
                 ({(laborCostRatio * 100).toFixed(0)}%)
@@ -260,7 +260,7 @@ export function ProjectRowExpand({
       </div>
 
       {/* 변동비 input 3개 */}
-      <div className="bg-white rounded-xl p-4 border border-teal-100">
+      <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-3">
           변동비
         </p>
@@ -277,7 +277,7 @@ export function ProjectRowExpand({
                 min={0}
                 value={value}
                 onChange={(e) => setter(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-2 py-1.5 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           ))}
@@ -285,7 +285,7 @@ export function ProjectRowExpand({
       </div>
 
       {/* 결과 박스 */}
-      <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-4 border border-teal-200">
+      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-[11px] text-slate-500">비용 총합</p>
@@ -298,7 +298,7 @@ export function ProjectRowExpand({
             <p className="text-[11px] text-slate-500">순이익</p>
             <p
               className={`text-[18px] font-bold mt-1 ${
-                netProfit >= 0 ? 'text-teal-700' : 'text-red-600'
+                netProfit >= 0 ? 'text-blue-700' : 'text-red-600'
               }`}
             >
               {(netProfit / 10000).toFixed(0)}
@@ -310,7 +310,7 @@ export function ProjectRowExpand({
             <p
               className={`text-[18px] font-bold mt-1 ${
                 profitRatio >= 0.2
-                  ? 'text-teal-700'
+                  ? 'text-blue-700'
                   : profitRatio >= 0
                     ? 'text-amber-600'
                     : 'text-red-600'
@@ -330,7 +330,7 @@ export function ProjectRowExpand({
           onChange={(e) => setMemo(e.target.value)}
           rows={3}
           placeholder="프로젝트 메모..."
-          className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       ) : (
         <button
@@ -343,10 +343,10 @@ export function ProjectRowExpand({
       )}
 
       {/* 하단 액션 */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-teal-100">
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
         <button
           onClick={handleSave}
-          className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Save className="w-3.5 h-3.5" />
           저장
@@ -354,7 +354,7 @@ export function ProjectRowExpand({
         {project.status === 'in-progress' && (
           <button
             onClick={handleComplete}
-            className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium border border-teal-300 text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
           >
             <CheckCircle className="w-3.5 h-3.5" />
             완료 처리

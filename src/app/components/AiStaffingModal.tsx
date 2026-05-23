@@ -122,8 +122,8 @@ export function AiStaffingModal({
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-teal-100 rounded-lg">
-              <Sparkles className="w-4 h-4 text-teal-600" />
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Sparkles className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h3 className="text-[15px] font-semibold text-slate-900">AI 인력 배치 제안</h3>
@@ -142,7 +142,7 @@ export function AiStaffingModal({
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {state === 'loading' && (
             <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-10 h-10 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin" />
+              <div className="w-10 h-10 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
               <p className="mt-4 text-[13px] text-slate-600">유사 프로젝트 분석 중...</p>
               <p className="mt-1 text-[11px] text-slate-400">최대 30초 정도 소요됩니다</p>
             </div>
@@ -155,7 +155,7 @@ export function AiStaffingModal({
               <p className="mt-1 text-[12px] text-slate-500 max-w-md">{error}</p>
               <button
                 onClick={handleRequest}
-                className="mt-4 flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                className="mt-4 flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 다시 시도
@@ -166,8 +166,8 @@ export function AiStaffingModal({
           {state === 'result' && suggestion && (
             <div className="space-y-4">
               {/* 추천 인력 배치 */}
-              <div className="bg-teal-50 rounded-xl p-4">
-                <h4 className="text-[12px] font-semibold text-teal-700 uppercase tracking-wide mb-3">
+              <div className="bg-blue-50 rounded-xl p-4">
+                <h4 className="text-[12px] font-semibold text-blue-700 uppercase tracking-wide mb-3">
                   추천 인력 배치
                 </h4>
                 <div className="grid grid-cols-4 gap-3">
@@ -209,7 +209,7 @@ export function AiStaffingModal({
                   <p
                     className={`text-[14px] font-semibold mt-1 ${
                       suggestion.estimatedProfitRatio >= targetProfitRatio
-                        ? 'text-teal-700'
+                        ? 'text-blue-700'
                         : 'text-amber-600'
                     }`}
                   >
@@ -262,13 +262,13 @@ export function AiStaffingModal({
             </button>
             <button
               onClick={handleAdopt}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium border border-teal-200 text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
             >
               수정해서 채택
             </button>
             <button
               onClick={handleAdopt}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
             >
               <Check className="w-3.5 h-3.5" />
               채택

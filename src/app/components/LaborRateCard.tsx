@@ -107,14 +107,14 @@ export function LaborRateCard({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-teal-100 shadow-sm">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
       {/* 헤더 — 토글 */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-teal-50/50 transition-colors rounded-xl"
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors rounded-xl"
       >
         <div className="flex flex-col items-start gap-1">
-          <span className="text-[13px] font-medium text-teal-700">
+          <span className="text-[13px] font-semibold text-slate-700">
             이번 달 역할별 단가 ({currentYearMonth})
           </span>
           {!expanded && <span className="text-[12px] text-slate-500">{summary}</span>}
@@ -128,7 +128,7 @@ export function LaborRateCard({
 
       {/* 펼친 상태 */}
       {expanded && (
-        <div className="px-5 pb-5 pt-2 space-y-3 border-t border-teal-50">
+        <div className="px-5 pb-5 pt-2 space-y-3 border-t border-slate-100">
           {ROLES.map((role) => {
             const cascaded = ratesCascaded[role];
             const isFallback = cascaded && cascaded.sourceMonth !== currentYearMonth;
@@ -148,7 +148,7 @@ export function LaborRateCard({
                     onChange={(e) =>
                       setDrafts((prev) => ({ ...prev, [role]: e.target.value }))
                     }
-                    className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   {isFallback && (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 pointer-events-none">
@@ -164,7 +164,7 @@ export function LaborRateCard({
                 <button
                   onClick={() => handleSave(role)}
                   disabled={!drafts[role].trim()}
-                  className="flex items-center gap-1 px-3 py-2 text-[12px] font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-1 px-3 py-2 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
                 >
                   <Save className="w-3.5 h-3.5" />
                   저장
@@ -174,10 +174,10 @@ export function LaborRateCard({
           })}
 
           {/* 전월 복사 */}
-          <div className="pt-2 border-t border-teal-50">
+          <div className="pt-2 border-t border-slate-100">
             <button
               onClick={() => onCopyPrev(currentYearMonth)}
-              className="flex items-center gap-2 px-3 py-2 text-[12px] font-medium text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-[12px] font-medium text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
             >
               <Copy className="w-3.5 h-3.5" />
               전월 단가 복사
