@@ -13,6 +13,8 @@
  *   1) success/confirmed 딜인데 정규화 매칭되는 customer가 없음 (자동등록 실패 시그니처)
  *   2) customer.deals >= 1 인데 workHistory가 빈 배열 (JSON 손실 시그니처)
  *   3) customer.customerStatus가 deals 카운트 규칙과 어긋남 (라벨 부정합)
+ *   4) success/confirmed 딜인데 airtor_projects에 대응 행 없음 (syncDealToProject 실패 시그니처)
+ *   5) project.status='completed (report_sent)'인데 customer.workHistory.reportSent=false (역방향 부정합)
  *
  * 의도된 사용:
  *   - 배포 직후 수동 호출로 빠르게 정합 확인
@@ -127,6 +129,37 @@ if (count($missing_customers) > 0) {
 }
 
 // ============================================================
+// 검사 4: success/confirmed 딜인데 airtor_projects에 대응 행 없음
+//   (syncDealToProject 실행 실패 또는 backfill 누락 시그니처)
+// ============================================================
+$project_dealids = array();
+$res = $conn->query("SELECT deal_id FROM airtor_projects");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $project_dealids[intval($row['deal_id'])] = true;
+    }
+    $res->free();
+}
+
+$missing_projects = array();
+foreach ($success_deals as $d) {
+    if (!isset($project_dealids[$d['id']])) {
+        $missing_projects[] = $d;
+    }
+}
+
+if (count($missing_projects) > 0) {
+    $issues[] = array(
+        'type' => 'success_deal_no_project',
+        'severity' => 'high',
+        'description' => '수주확정/성공 딜인데 airtor_projects에 대응 행 없음 (syncDealToProject 실패 시그니처)',
+        'count' => count($missing_projects),
+        'samples' => array_slice($missing_projects, 0, 10),
+        'remediation' => '해당 딜을 PUT 재트리거 또는 api/migrations/002_backfill_projects.php 재실행',
+    );
+}
+
+// ============================================================
 // 검사 2: customer.deals >= 1 인데 workHistory가 비어있음
 // ============================================================
 $empty_wh = array();
@@ -203,6 +236,55 @@ if (count($status_violations) > 0) {
 }
 
 // ============================================================
+// 검사 5: project.status='completed' (reason=report_sent)인데
+//   customer.workHistory의 해당 dealId가 reportSent=false
+//   (역방향 부정합 — 거의 발생 안 하지만 안전망)
+// ============================================================
+$completed_violations = array();
+$res = $conn->query(
+    "SELECT p.id, p.deal_id, p.customer_id, p.completed_reason, c.company, c.work_history " .
+    "FROM airtor_projects p " .
+    "LEFT JOIN airtor_customers c ON c.id = p.customer_id " .
+    "WHERE p.status='completed' AND p.completed_reason='report_sent'"
+);
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $wh = array();
+        if (!empty($row['work_history'])) {
+            $decoded = json_decode($row['work_history'], true);
+            if (is_array($decoded)) $wh = $decoded;
+        }
+        // 대응 workHistory 항목 찾기 (dealId 기준)
+        $reportSent = null;
+        foreach ($wh as $entry) {
+            if (isset($entry['dealId']) && intval($entry['dealId']) === intval($row['deal_id'])) {
+                $reportSent = !empty($entry['reportSent']);
+                break;
+            }
+        }
+        if ($reportSent === false) {
+            $completed_violations[] = array(
+                'projectId' => intval($row['id']),
+                'dealId' => intval($row['deal_id']),
+                'company' => $row['company'],
+            );
+        }
+    }
+    $res->free();
+}
+
+if (count($completed_violations) > 0) {
+    $issues[] = array(
+        'type' => 'completed_project_not_reportsent',
+        'severity' => 'low',
+        'description' => "프로젝트는 'completed (report_sent)'인데 고객.workHistory.reportSent=false",
+        'count' => count($completed_violations),
+        'samples' => array_slice($completed_violations, 0, 10),
+        'remediation' => '수동 검토 — 고객관리에서 reportSent 체크 또는 프로젝트 status 되돌리기',
+    );
+}
+
+// ============================================================
 // 결과 직렬화 및 응답
 // ============================================================
 $total = 0;
@@ -216,7 +298,7 @@ echo json_encode(array(
     'healthy' => $healthy,
     'timestamp' => date('Y-m-d H:i:s'),
     'total_issues' => $total,
-    'checks_run' => 3,
+    'checks_run' => 5,
     'issues' => $issues,
 ));
 

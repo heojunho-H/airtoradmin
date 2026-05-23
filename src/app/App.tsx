@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
+import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
 import { AiChatPanel } from './components/AiChatPanel';
 
 export default function App() {
   const navigate = useNavigate();
   const userName = localStorage.getItem('user_name') || '';
-  const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain'>('sales');
+  const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain' | 'profit'>('sales');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
@@ -24,6 +25,8 @@ export default function App() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [laborRates, setLaborRates] = useState<LaborRate[]>([]);
 
   // DB에서 데이터 로드
   useEffect(() => {
@@ -39,6 +42,12 @@ export default function App() {
     fetchSubcontractors()
       .then((data) => setSubcontractors(data))
       .catch((err) => console.error('작업팀장 데이터 로드 실패:', err));
+    fetchProjects()
+      .then((data) => setProjects(data))
+      .catch((err) => console.error('프로젝트 데이터 로드 실패:', err));
+    fetchLaborRates()
+      .then((data) => setLaborRates(data))
+      .catch((err) => console.error('단가표 데이터 로드 실패:', err));
   }, []);
 
   // 알림 시스템
@@ -114,16 +123,23 @@ export default function App() {
     navigate('/login');
   };
 
-  // 영업에서 성공한 딜은 서버(deals_api.php PUT 핸들러)에서 자동으로 고객 동기화됨
-  // 클라이언트는 알림 표시 + 고객 목록 새로고침만 담당
+  // 영업에서 성공한 딜은 서버(deals_api.php PUT 핸들러)에서 자동으로
+  //   1) airtor_customers (syncDealToCustomer)
+  //   2) airtor_projects (syncDealToProject)  ← Phase 4부터
+  // 두 곳에 동기화됨. 클라이언트는 알림 + 두 목록 모두 새로고침.
   const handleDealSuccess = async (deal: any) => {
     addNotification('deal_success', `[${deal.company}] 딜이 수주확정되었습니다`);
     addNotification('customer_registered', `[${deal.company}] 고객이 자동 등록되었습니다`);
+    addNotification('admin_action', `[${deal.company}] 프로젝트 관리에 자동 등록되었습니다`);
     try {
-      const refreshed = await fetchCustomers();
-      setCustomers(refreshed);
+      const [refreshedCustomers, refreshedProjects] = await Promise.all([
+        fetchCustomers(),
+        fetchProjects(),
+      ]);
+      setCustomers(refreshedCustomers);
+      setProjects(refreshedProjects);
     } catch (err) {
-      console.error('고객 목록 새로고침 실패:', err);
+      console.error('데이터 새로고침 실패:', err);
     }
   };
 
@@ -244,6 +260,7 @@ export default function App() {
     { id: 'sales' as const, name: '영업 관리', icon: TrendingUp },
     { id: 'customers' as const, name: '고객 관리', icon: Users },
     { id: 'supplychain' as const, name: '공급망 관리', icon: Package },
+    { id: 'profit' as const, name: '프로젝트 관리', icon: Calculator },
   ];
 
   return (
@@ -430,9 +447,10 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
+          {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} />}
         </main>
       </div>
 
@@ -477,6 +495,8 @@ export default function App() {
         customers={customers}
         managers={managers}
         subcontractors={subcontractors}
+        projects={projects}
+        laborRates={laborRates}
       />
     </div>
   );

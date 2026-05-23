@@ -335,6 +335,95 @@ function syncDealToCustomer($conn, $deal) {
     return true;
 }
 
+// ============================================================
+// 딜 → 프로젝트 자동 동기화
+// 트리거: status='confirmed' OR successStatus='success'
+// 매칭: deal.id를 deal_id로 사용 (UNIQUE KEY uk_deal로 중복 차단)
+// 멱등성: INSERT IGNORE — 이미 있으면 silent skip (race 안전)
+// 호출 순서: syncDealToCustomer 직후에 호출 — customer가 먼저 존재해야 customer_id 매칭 가능
+//
+// 반환값:
+//   true  — 성공 (실제 INSERT 또는 정상 skip)
+//   false — DB 작업 중 실제 실패 (error_log 기록 후)
+// ============================================================
+function syncDealToProject($conn, $deal) {
+    $isSuccess = (isset($deal['status']) && $deal['status'] === 'confirmed')
+              || (isset($deal['successStatus']) && $deal['successStatus'] === 'success');
+
+    if (!$isSuccess) return true; // 동기화 대상 아님 — 정상
+
+    $dealId = intval($deal['id']);
+    if ($dealId <= 0) return true;
+
+    $company = isset($deal['company']) ? trim($deal['company']) : '';
+    if ($company === '') return true;
+
+    $normalizedTarget = normalizeCompanyName($company);
+    if ($normalizedTarget === '') return true;
+
+    // customer_id 매칭 — syncDealToCustomer가 이미 호출되어 customer가 존재해야 함
+    $customerId = 0;
+    $workHistoryDealId = 0;
+    $res = $conn->query("SELECT id, company FROM airtor_customers");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            if (normalizeCompanyName($row['company']) === $normalizedTarget) {
+                $customerId = intval($row['id']);
+                $workHistoryDealId = $dealId; // customers.workHistory[].dealId와 동일 키
+                break;
+            }
+        }
+        $res->free();
+    }
+
+    if ($customerId === 0) {
+        // syncDealToCustomer가 실패했거나 호출 누락 — 모니터링에 노출
+        error_log('[syncDealToProject] customer not found for dealId=' . $dealId . ' company="' . $company . '"');
+        return false;
+    }
+
+    // 매출 계산 — 부가세 역산
+    $quotation = parseQuotationAmount(isset($deal['quotationAmount']) ? $deal['quotationAmount'] : '');
+    $tax = intval(round($quotation * 10 / 110));
+    $netRevenue = $quotation - $tax;
+
+    $service = isset($deal['desiredService']) ? $deal['desiredService'] : '';
+    // workDate가 빈 문자열이면 PHP null로 강제 — mysqli bind_param 's'는 PHP null을 SQL NULL로 정상 전달.
+    // (projects_api.php POST 및 002_backfill_projects.php와 동일 패턴)
+    $workDate = !empty($deal['confirmedWorkDate']) ? $deal['confirmedWorkDate'] : null;
+
+    $projectName = $service !== '' ? $service : ('딜 #' . $dealId);
+
+    // INSERT IGNORE — UNIQUE KEY uk_deal 위반 시 silent skip (이미 등록된 딜은 그대로 둠;
+    // 매출/메타 갱신은 별도 PUT 경로 또는 projects_api.php가 담당)
+    $sql = "INSERT IGNORE INTO airtor_projects
+            (deal_id, customer_id, work_history_dealid, project_name,
+             service_type, work_date, status,
+             quotation_amount, tax_amount, net_revenue)
+            VALUES (?, ?, ?, ?, ?, ?, 'in-progress', ?, ?, ?)";
+
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        error_log('[syncDealToProject] prepare failed (dealId=' . $dealId . '): ' . $conn->error);
+        return false;
+    }
+    // 9 vars: i,i,i,s,s,s,i,i,i = 'iiisssiii'
+    $stmt->bind_param(
+        'iiisssiii',
+        $dealId, $customerId, $workHistoryDealId, $projectName,
+        $service, $workDate, $quotation, $tax, $netRevenue
+    );
+
+    if (!$stmt->execute()) {
+        error_log('[syncDealToProject] execute failed (dealId=' . $dealId . '): ' . $stmt->error);
+        $stmt->close();
+        return false;
+    }
+
+    $stmt->close();
+    return true;
+}
+
 $conn = new mysqli('localhost', 'airtor2014', 'aesd1122!', 'airtor2014');
 if ($conn->connect_error) {
     http_response_code(500);
@@ -518,6 +607,21 @@ if ($method === 'POST') {
         exit;
     }
 
+    // 고객 동기화 성공 → 프로젝트도 동기화 (status=confirmed 또는 successStatus=success일 때만 실제 INSERT)
+    $projectSyncOk = syncDealToProject($conn, $dealForSync);
+    if (!$projectSyncOk) {
+        http_response_code(500);
+        echo json_encode(array(
+            'success' => false,
+            'id' => $newId,
+            'error' => 'Deal created and customer synced, but project sync failed. Check PHP error log.',
+            'deal_persisted' => true,
+            'customer_synced' => true
+        ));
+        $conn->close();
+        exit;
+    }
+
     echo json_encode(array('success' => true, 'id' => $newId));
     $conn->close();
     exit;
@@ -606,6 +710,20 @@ if ($method === 'PUT') {
             'success' => false,
             'error' => 'Deal updated but customer sync failed. Check PHP error log.',
             'deal_persisted' => true
+        ));
+        $conn->close();
+        exit;
+    }
+
+    // 고객 동기화 성공 → 프로젝트도 동기화
+    $projectSyncOk = syncDealToProject($conn, $dealForSync);
+    if (!$projectSyncOk) {
+        http_response_code(500);
+        echo json_encode(array(
+            'success' => false,
+            'error' => 'Deal updated and customer synced, but project sync failed. Check PHP error log.',
+            'deal_persisted' => true,
+            'customer_synced' => true
         ));
         $conn->close();
         exit;
