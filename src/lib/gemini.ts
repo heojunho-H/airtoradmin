@@ -1,5 +1,7 @@
 // Gemini AI 서비스 — API 호출 및 데이터 컨텍스트 빌더
 
+import { ROLE_ORDER, ROLE_LABELS, type RoleCode, type RoleAssignments, emptyRoleAssignments } from './roles';
+
 export interface ChatMessage {
   role: 'user' | 'model';
   parts: { text: string }[];
@@ -435,14 +437,42 @@ function buildProfitContext(
     ? (projects.reduce((s, p) => s + (p.profitRatio || 0), 0) / projects.length * 100).toFixed(1)
     : '-';
 
-  // 서비스별 집계
-  const byService: Record<string, { count: number; revenue: number; profit: number }> = {};
+  // 서비스별 집계 + 역할별 인력 평균 (5개 역할, src/lib/roles.ts 기준)
+  const byService: Record<string, {
+    count: number;
+    revenue: number;
+    profit: number;
+    roleTotals: Record<RoleCode, number>;
+    daysTotal: number;
+    withAssignments: number;
+  }> = {};
+  const roleAvgEmpty = (): Record<RoleCode, number> =>
+    ROLE_ORDER.reduce((acc, r) => { acc[r] = 0; return acc; }, {} as Record<RoleCode, number>);
+
   for (const p of projects) {
     const svc = p.serviceType || '기타';
-    if (!byService[svc]) byService[svc] = { count: 0, revenue: 0, profit: 0 };
+    if (!byService[svc]) {
+      byService[svc] = {
+        count: 0, revenue: 0, profit: 0,
+        roleTotals: roleAvgEmpty(), daysTotal: 0, withAssignments: 0,
+      };
+    }
     byService[svc].count++;
     byService[svc].revenue += p.netRevenue || 0;
     byService[svc].profit += p.netProfit || 0;
+    const wa = p.workerAssignments;
+    if (wa && typeof wa === 'object') {
+      let hasAny = false;
+      for (const r of ROLE_ORDER) {
+        const v = Number(wa[r]) || 0;
+        if (v > 0) hasAny = true;
+        byService[svc].roleTotals[r] += v;
+      }
+      const d = Number(wa.days) || 0;
+      if (d > 0) hasAny = true;
+      byService[svc].daysTotal += d;
+      if (hasAny) byService[svc].withAssignments++;
+    }
   }
 
   return `
@@ -460,14 +490,19 @@ ${inProgress.slice(0, 20).map((p: any) => `  · ${p.projectName} | 서비스:${p
 ## 완료 프로젝트 (최근 15건)
 ${completed.slice(0, 15).map((p: any) => `  · ${p.projectName} | ${p.completedAt?.substring(0,10) || '-'} | 사유:${p.completedReason} | 순매출:${((p.netRevenue||0)/10000).toFixed(0)}만 | 순이익:${((p.netProfit||0)/10000).toFixed(0)}만 (${((p.profitRatio||0)*100).toFixed(0)}%)${p.aiApplied ? ' [AI채택]' : ''}`).join('\n')}
 
-## 서비스별 손익 집계
+## 서비스별 손익 + 역할별 인력 평균
 ${Object.entries(byService).map(([svc, s]) => {
   const ratio = s.revenue > 0 ? ((s.profit / s.revenue) * 100).toFixed(1) : '-';
-  return `  · ${svc} | ${s.count}건 | 순매출:${(s.revenue/10000).toFixed(0)}만 | 순이익:${(s.profit/10000).toFixed(0)}만 (${ratio}%)`;
+  const n = s.withAssignments;
+  const roleAvgStr = n > 0
+    ? ROLE_ORDER.map((r) => `${ROLE_LABELS[r]}${(s.roleTotals[r] / n).toFixed(1)}`).join('/')
+      + `/${(s.daysTotal / n).toFixed(1)}일`
+    : '인력 미입력';
+  return `  · ${svc} | ${s.count}건 | 순매출:${(s.revenue / 10000).toFixed(0)}만 | 순이익:${(s.profit / 10000).toFixed(0)}만 (${ratio}%) | 평균배치: ${roleAvgStr}`;
 }).join('\n')}
 
-## 현재 단가표 (최근 3개월, 최대 9행)
-${laborRates.slice(0, 9).map((r: any) => `  · ${r.yearMonth} ${r.role} ${(r.dailyRate || 0).toLocaleString()}원/일`).join('\n')}
+## 현재 단가표 (최근 3개월, 최대 15행 — 5역할 × 3월)
+${laborRates.slice(0, 15).map((r: any) => `  · ${r.yearMonth} ${r.role}(${ROLE_LABELS[(r.role as RoleCode)] ?? r.role}) ${(r.dailyRate || 0).toLocaleString()}원/일`).join('\n')}
 `.trim();
 }
 
@@ -498,8 +533,9 @@ export function buildDataContext(
 //   - gemini-2.5-pro 사용 (추론 품질이 staffing 결정에 직접 영향)
 //   - 자체 시스템 프롬프트 (4단계 추론 강제)
 // ============================================================
+// 5개 역할 + days. RoleAssignments는 roles.ts 단일 진실원.
 export interface StaffingSuggestion {
-  assignments: { lead: number; member: number; support: number; days: number };
+  assignments: RoleAssignments & { days: number };
   estimatedLaborCost: number;
   estimatedNetProfit: number;
   estimatedProfitRatio: number; // fraction (0~1)
@@ -512,11 +548,11 @@ export interface StaffingInput {
   totalQuantity: number;
   detailedQuantity?: string;
   netRevenue: number;
-  laborRates: { lead: number; member: number; support: number };
+  laborRates: RoleAssignments;          // 역할별 일당 (5개)
   similarProjects: Array<{
     service: string;
     quantity: number;
-    assignments: { lead: number; member: number; support: number; days: number };
+    assignments: RoleAssignments & { days: number };
     profitRatio: number; // fraction (0~1)
   }>;
   availableSubcontractors: Array<{
@@ -531,30 +567,51 @@ export interface StaffingInput {
 const STAFFING_SYSTEM_PROMPT = `당신은 에어터(Airtor)의 프로젝트 손익 최적화 컨설턴트입니다.
 B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을 제안합니다.
 
+[역할 정의 — 5개 역할의 일반적 책임]
+a_grade   (A급 분조): 숙련 작업자, 분조 작업의 메인 — 고난도/대형 현장 담당
+b_grade   (B급 분조): 일반 작업자, 분조 작업 보조 — 표준 현장 담당
+pin_wash  (핀세척):   에어컨 핀(Fin) 정밀 세척 전담 — 세척 품질 핵심
+dely      (딜리):     이동·운반·부대 작업 — 현장 지원
+parts_wash(부품세척): 분해된 부품의 별도 세척 — 분해/조립 동반 시 필수
+
+(역할별 정확한 책임은 프로젝트 종류에 따라 달라질 수 있으니
+similarProjects 패턴을 참조해서 유연하게 판단)
+
 [추론 4단계 — 반드시 이 순서로 따르세요]
-1. 수량 → 필요 인원 산정
-   - service와 totalQuantity로 1차 인원수 추정
-   - 예: 에어컨세척 50대 = 팀장 1, 팀원 3~4, 1.5~2일
 
-2. 유사 프로젝트 패턴 참조
-   - similarProjects에서 같은 service + 수량 ±30% 범위
-   - 평균 배치 + 평균 순익률 확인
-   - 평균 순익률이 targetProfitRatio 미달이면 인력 줄이는 방향 검토
+1. 서비스 + 수량 → 필요 역할 조합 추정
+   - 에어컨세척: a_grade + b_grade + pin_wash가 주축, 부품 분해 시 parts_wash 추가
+   - 청소·소독·방제: a_grade + b_grade 위주, 대형/이동 많으면 dely 추가
+   - 어떤 역할도 0명일 수 있음 (서비스 특성에 맞지 않으면)
 
-3. 가용 인력 매칭
-   - availableSubcontractors의 등급 분포 확인
-   - ongoingProjects 적은 인력 우선
-   - 매칭 결과를 rationale에 반영
+2. 유사 프로젝트 패턴 매칭
+   - similarProjects 중 동일 service + 수량 차이 ±30% 우선
+   - 수량이 가까운 프로젝트일수록 가중치 ↑ (단순 평균 금지)
+   - 가중 평균 결과의 평균 순익률이 targetProfitRatio 미달이면 인력·일수 줄이는 방향 검토
 
-4. 캡 검증
-   - 인건비 = (lead*rateLead + member*rateMember + support*rateSupport) * days
+3. 작업일수 · 인건비 → 목표 순익률 역산
+   - 인건비 = Σ(role별 인원 × laborRates[role]) × days
    - profitRatio = (netRevenue - laborCost) / netRevenue
-   - profitRatio < targetProfitRatio면 warnings에 경고 추가하고 인력 줄임
+   - profitRatio < targetProfitRatio면 days 또는 인원을 줄여 비용/매출비 조정
+   - estimatedLaborCost / estimatedNetProfit / estimatedProfitRatio 정확히 계산해 출력
+
+4. 가용 인력 검증 + 경고 작성
+   - availableSubcontractors의 등급(S>A>B>C)과 cooperationScore로 충원 가능성 확인
+   - ongoingProjects 적은 인력 우선 매칭, rationale에 반영
+   - 등급 부족/협력점수 낮음/현재 부하 높음이면 warnings에 명시
+   - profitRatio가 여전히 targetProfitRatio 미달이면 warnings에 경고 추가
 
 [출력 형식 — 엄수]
 반드시 다음 스키마의 JSON만 출력. 마크다운 펜스 금지, 설명 금지, 코드 블록 금지.
 {
-  "assignments": {"lead": int, "member": int, "support": int, "days": int},
+  "assignments": {
+    "a_grade": int,
+    "b_grade": int,
+    "pin_wash": int,
+    "dely": int,
+    "parts_wash": int,
+    "days": int
+  },
   "estimatedLaborCost": int,
   "estimatedNetProfit": int,
   "estimatedProfitRatio": float (0~1),
@@ -563,6 +620,17 @@ B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을
 }`;
 
 export async function suggestProjectStaffing(input: StaffingInput): Promise<StaffingSuggestion> {
+  const ratesLines = ROLE_ORDER.map(
+    (r) => `${ROLE_LABELS[r]} (${r}): ${(input.laborRates[r] ?? 0).toLocaleString()}원/일`,
+  ).join('\n');
+
+  const similarLines = input.similarProjects.map((p, i) => {
+    const assignParts = ROLE_ORDER.map(
+      (r) => `${ROLE_LABELS[r]}${p.assignments[r] ?? 0}`,
+    ).join('/');
+    return `${i + 1}. ${p.service} ${p.quantity}대 | ${assignParts}/${p.assignments.days}일 | 순익률${(p.profitRatio * 100).toFixed(0)}%`;
+  }).join('\n');
+
   const userContent = `
 서비스: ${input.service}
 총수량: ${input.totalQuantity}
@@ -570,16 +638,14 @@ ${input.detailedQuantity ? `상세수량: ${input.detailedQuantity}` : ''}
 순매출(부가세 제외): ${input.netRevenue.toLocaleString()}원
 목표 순익률: ${(input.targetProfitRatio * 100).toFixed(0)}%
 
-[역할별 일당]
-팀장: ${input.laborRates.lead.toLocaleString()}원
-팀원: ${input.laborRates.member.toLocaleString()}원
-보조: ${input.laborRates.support.toLocaleString()}원
+[역할별 일당 (5개)]
+${ratesLines}
 
 [과거 유사 프로젝트 (최근 ${input.similarProjects.length}건)]
-${input.similarProjects.map((p, i) => `${i+1}. ${p.service} ${p.quantity}대 | 팀장${p.assignments.lead}/팀원${p.assignments.member}/보조${p.assignments.support}/${p.assignments.days}일 | 순익률${(p.profitRatio*100).toFixed(0)}%`).join('\n')}
+${similarLines}
 
 [가용 작업팀장 풀]
-${input.availableSubcontractors.map(s => `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`).join('\n')}
+${input.availableSubcontractors.map((s) => `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`).join('\n')}
 
 위 데이터를 바탕으로 4단계 추론을 거쳐 인력 배치 JSON을 제안하세요.
 `.trim();
@@ -588,7 +654,7 @@ ${input.availableSubcontractors.map(s => `· ${s.name} (${s.grade}등급, 협력
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      _model: 'gemini-2.5-pro', // staffing은 추론 품질 중요
+      _model: 'gemini-2.5-pro',
       systemInstruction: { parts: [{ text: STAFFING_SYSTEM_PROMPT }] },
       contents: [{ role: 'user', parts: [{ text: userContent }] }],
       generationConfig: {
@@ -616,10 +682,17 @@ ${input.availableSubcontractors.map(s => `· ${s.name} (${s.grade}등급, 협력
     throw new Error('AI 응답 형식 오류 — 다시 시도해주세요');
   }
 
-  // 최소 필드 검증
-  if (!parsed.assignments || typeof parsed.assignments.lead !== 'number') {
-    throw new Error('AI 응답 스키마 불일치');
+  // 최소 필드 검증 — 5개 역할 모두 number 인지 확인
+  if (!parsed.assignments || typeof (parsed.assignments as any).a_grade !== 'number') {
+    throw new Error('AI 응답 스키마 불일치 (a_grade 필드 누락)');
   }
+  // 누락 키는 0으로 보강 (모델이 일부 역할만 출력했을 때 방어)
+  const safe = emptyRoleAssignments();
+  for (const r of ROLE_ORDER) {
+    const v = (parsed.assignments as any)[r];
+    safe[r] = typeof v === 'number' && v >= 0 ? Math.floor(v) : 0;
+  }
+  parsed.assignments = { ...safe, days: typeof parsed.assignments.days === 'number' ? parsed.assignments.days : 0 };
   if (!parsed.warnings) parsed.warnings = [];
 
   return parsed;

@@ -9,7 +9,7 @@
  * [컬럼 매핑]
  * id          → id
  * year_month  → yearMonth (YYYY-MM)
- * role        → role ('lead'|'member'|'support')
+ * role        → role ('a_grade'|'b_grade'|'pin_wash'|'dely'|'parts_wash')
  * daily_rate  → dailyRate (원, INT)
  * updated_by  → updatedBy
  * updated_at  → updatedAt
@@ -84,7 +84,8 @@ if ($method === 'GET') {
     }
     if (isset($_GET['role'])) {
         $r = $_GET['role'];
-        if ($r === 'lead' || $r === 'member' || $r === 'support') {
+        $validRoles = array('a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash');
+        if (in_array($r, $validRoles)) {
             $where[] = "role = '" . $conn->real_escape_string($r) . "'";
         }
     }
@@ -126,7 +127,7 @@ if ($method === 'GET') {
 //      ON DUPLICATE KEY UPDATE로 멱등 (uk_month_role)
 //      응답에 mode: 'inserted'|'updated'|'unchanged'
 //   2) 직전 월 복사 (?action=copy_prev): {yearMonth, updatedBy}
-//      prevMonth의 3개 역할 단가를 INSERT IGNORE — 기존 (target, role)은 보존
+//      prevMonth의 5개 역할 단가를 INSERT IGNORE — 기존 (target, role)은 보존
 // ============================================================
 if ($method === 'POST') {
     $action = isset($_GET['action']) ? $_GET['action'] : '';
@@ -236,7 +237,7 @@ if ($method === 'POST') {
         exit;
     }
     $role = isset($input['role']) ? $input['role'] : '';
-    $validRoles = array('lead', 'member', 'support');
+    $validRoles = array('a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash');
     if (!in_array($role, $validRoles)) {
         http_response_code(400);
         echo json_encode(array('error' => 'Invalid role'));
@@ -331,7 +332,8 @@ if ($method === 'PUT') {
             $conn->close();
             exit;
         }
-        if ($roleLookup !== 'lead' && $roleLookup !== 'member' && $roleLookup !== 'support') {
+        $validRoles = array('a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash');
+        if (!in_array($roleLookup, $validRoles)) {
             http_response_code(400);
             echo json_encode(array('error' => 'Invalid role'));
             $conn->close();
@@ -363,7 +365,8 @@ if ($method === 'PUT') {
     }
 
     // ENUM/format sanitize — 잘못된 값은 unset (omit과 동등)
-    if (isset($input['role']) && $input['role'] !== 'lead' && $input['role'] !== 'member' && $input['role'] !== 'support') {
+    $validRolesPut = array('a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash');
+    if (isset($input['role']) && !in_array($input['role'], $validRolesPut)) {
         unset($input['role']);
     }
     if (isset($input['yearMonth']) && !preg_match('/^\d{4}-\d{2}$/', $input['yearMonth'])) {

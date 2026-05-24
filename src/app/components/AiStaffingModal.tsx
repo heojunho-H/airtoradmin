@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { X, Sparkles, AlertCircle, RefreshCw, Check } from 'lucide-react';
 import { suggestProjectStaffing, type StaffingInput, type StaffingSuggestion } from '../../lib/gemini';
+import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments } from '../../lib/roles';
 
 // AI 추천 호출에 필요한 Project 최소 필드
 export interface ProjectRefForStaffing {
@@ -14,11 +15,11 @@ export interface ProjectRefForStaffing {
   netRevenue: number;
 }
 
-// 유사 프로젝트 ref (완료된 프로젝트 중)
+// 유사 프로젝트 ref (완료된 프로젝트 중) — 5개 역할
 export interface SimilarProjectRef {
   serviceType: string;
   totalQuantity: number;
-  workerAssignments: { lead: number; member: number; support: number; days: number };
+  workerAssignments: RoleAssignments & { days: number };
   profitRatio: number; // fraction (0~1)
 }
 
@@ -36,7 +37,7 @@ interface AiStaffingModalProps {
   project: ProjectRefForStaffing;
   totalQuantity: number; // workHistory[].totalQuantity 또는 deal 참조
   detailedQuantity?: string;
-  laborRates: { lead: number; member: number; support: number }; // 캐스케이드 적용된 현재 단가
+  laborRates: RoleAssignments; // 캐스케이드 적용된 현재 5역할 단가
   similarProjects: SimilarProjectRef[];
   availableSubcontractors: AvailableSubcontractor[];
   targetProfitRatio?: number; // fraction, 기본 0.30
@@ -165,24 +166,28 @@ export function AiStaffingModal({
 
           {state === 'result' && suggestion && (
             <div className="space-y-4">
-              {/* 추천 인력 배치 */}
+              {/* 추천 인력 배치 — 5역할 + 작업일수 = 6장 */}
               <div className="bg-blue-50 rounded-xl p-4">
                 <h4 className="text-[12px] font-semibold text-blue-700 uppercase tracking-wide mb-3">
                   추천 인력 배치
                 </h4>
-                <div className="grid grid-cols-4 gap-3">
-                  {[
-                    { label: '팀장', value: suggestion.assignments.lead, unit: '명' },
-                    { label: '팀원', value: suggestion.assignments.member, unit: '명' },
-                    { label: '보조', value: suggestion.assignments.support, unit: '명' },
-                    { label: '작업일수', value: suggestion.assignments.days, unit: '일' },
-                  ].map(({ label, value, unit }) => (
-                    <div key={label} className="bg-white rounded-lg p-3 text-center">
-                      <p className="text-[10px] text-slate-500">{label}</p>
-                      <p className="text-[22px] font-semibold text-slate-900 mt-1">{value}</p>
-                      <p className="text-[10px] text-slate-400">{unit}</p>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                  {ROLE_ORDER.map((role) => (
+                    <div key={role} className="bg-white rounded-lg p-3 text-center">
+                      <p className="text-[10px] text-slate-500">{ROLE_LABELS[role]}</p>
+                      <p className="text-[22px] font-semibold text-slate-900 mt-1">
+                        {suggestion.assignments[role] ?? 0}
+                      </p>
+                      <p className="text-[10px] text-slate-400">명</p>
                     </div>
                   ))}
+                  <div className="bg-white rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-slate-500">작업일수</p>
+                    <p className="text-[22px] font-semibold text-slate-900 mt-1">
+                      {suggestion.assignments.days ?? 0}
+                    </p>
+                    <p className="text-[10px] text-slate-400">일</p>
+                  </div>
                 </div>
               </div>
 

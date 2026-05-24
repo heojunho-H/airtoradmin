@@ -28,6 +28,7 @@ import {
 } from './AiStaffingModal';
 import { ProjectRowExpand } from './ProjectRowExpand';
 import type { StaffingSuggestion } from '../../lib/gemini';
+import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments } from '../../lib/roles';
 
 // ============================================================
 // 타입
@@ -46,7 +47,7 @@ export interface Project {
   quotationAmount: number;
   taxAmount: number;
   netRevenue: number;
-  workerAssignments: { lead: number; member: number; support: number; days: number } | null;
+  workerAssignments: (RoleAssignments & { days: number }) | null;
   laborBreakdown: Record<LaborRole, { rate: number; count: number; days: number; subtotal: number }> | null;
   laborCost: number;
   mealCost: number;
@@ -307,23 +308,24 @@ export function ProfitPage({
         작업일자: p.workDate || '-',
         기업명: getCustomerName(p.customerId),
         서비스: p.serviceType,
-        팀장: p.workerAssignments?.lead || 0,
-        팀원: p.workerAssignments?.member || 0,
-        보조: p.workerAssignments?.support || 0,
-        작업일수: p.workerAssignments?.days || 0,
-        견적금액: p.quotationAmount,
-        세액: p.taxAmount,
-        순매출: p.netRevenue,
-        인건비: p.laborCost,
-        '매출대비인건비(%)': (p.laborCostRatio * 100).toFixed(1),
-        식비: p.mealCost,
-        교통비: p.transportCost,
-        기타: p.otherCost,
-        비용합: p.totalCost,
-        순이익: p.netProfit,
-        '순익률(%)': (p.profitRatio * 100).toFixed(1),
-        AI채택: p.aiApplied ? 'Y' : 'N',
       };
+      // 5개 역할 (ROLE_ORDER 기준, 한글 라벨로 컬럼명)
+      for (const role of ROLE_ORDER) {
+        base[ROLE_LABELS[role]] = p.workerAssignments?.[role] ?? 0;
+      }
+      base['작업일수'] = p.workerAssignments?.days ?? 0;
+      base['견적금액'] = p.quotationAmount;
+      base['세액'] = p.taxAmount;
+      base['순매출'] = p.netRevenue;
+      base['인건비'] = p.laborCost;
+      base['매출대비인건비(%)'] = (p.laborCostRatio * 100).toFixed(1);
+      base['식비'] = p.mealCost;
+      base['교통비'] = p.transportCost;
+      base['기타'] = p.otherCost;
+      base['비용합'] = p.totalCost;
+      base['순이익'] = p.netProfit;
+      base['순익률(%)'] = (p.profitRatio * 100).toFixed(1);
+      base['AI채택'] = p.aiApplied ? 'Y' : 'N';
       if (activeTab === 'completed') {
         base['완료일자'] = p.completedAt?.substring(0, 10) || '-';
         base['완료사유'] = p.completedReason === 'report_sent' ? '리포트전송' : p.completedReason === 'manual' ? '수동' : '-';

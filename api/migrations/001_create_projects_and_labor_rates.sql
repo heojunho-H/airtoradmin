@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS airtor_projects (
   tax_amount            INT               NOT NULL DEFAULT 0,
   net_revenue           INT               NOT NULL DEFAULT 0,
 
-  -- 인력 (JSON TEXT: {"lead":N,"member":M,"support":K,"days":D})
+  -- 인력 (JSON TEXT: {"a_grade":N,"b_grade":N,"pin_wash":N,"dely":N,"parts_wash":N,"days":D})
   worker_assignments    TEXT              DEFAULT NULL,
 
   -- 인건비
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS airtor_projects (
 CREATE TABLE IF NOT EXISTS airtor_labor_rates (
   id            INT UNSIGNED   NOT NULL AUTO_INCREMENT,
   `year_month`  VARCHAR(7)     NOT NULL,
-  role          ENUM('lead','member','support') NOT NULL,
+  role          ENUM('a_grade','b_grade','pin_wash','dely','parts_wash') NOT NULL,
   daily_rate    INT            NOT NULL DEFAULT 0,
   updated_by    VARCHAR(100)   NOT NULL DEFAULT '',
   updated_at    TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -100,10 +100,13 @@ CREATE TABLE IF NOT EXISTS airtor_labor_rates (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- ============================================================
--- 초기 단가 — 현재 월에 lead/member/support 3행 삽입.
+-- 초기 단가 — 현재 월에 5개 역할 행 삽입.
 -- 이미 같은 (월, 역할) 행이 있으면 IGNORE 되어 안전하게 재실행 가능.
+-- 초기값은 합리적 시작점이며 사용자(Jun)가 UI에서 ▲/▼로 조정.
 -- ============================================================
 INSERT IGNORE INTO airtor_labor_rates (`year_month`, role, daily_rate, updated_by) VALUES
-  (DATE_FORMAT(NOW(), '%Y-%m'), 'lead',    250000, 'migration'),
-  (DATE_FORMAT(NOW(), '%Y-%m'), 'member',  180000, 'migration'),
-  (DATE_FORMAT(NOW(), '%Y-%m'), 'support', 120000, 'migration');
+  (DATE_FORMAT(NOW(), '%Y-%m'), 'a_grade',    250000, 'migration'),
+  (DATE_FORMAT(NOW(), '%Y-%m'), 'b_grade',    200000, 'migration'),
+  (DATE_FORMAT(NOW(), '%Y-%m'), 'pin_wash',   180000, 'migration'),
+  (DATE_FORMAT(NOW(), '%Y-%m'), 'dely',       150000, 'migration'),
+  (DATE_FORMAT(NOW(), '%Y-%m'), 'parts_wash', 170000, 'migration');

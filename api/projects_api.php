@@ -153,15 +153,24 @@ function recomputeProjectDerived($conn, $projectId) {
     }
     $stmt->close();
 
-    // 2) workerAssignments 파싱
-    $assignments = array('lead' => 0, 'member' => 0, 'support' => 0, 'days' => 0);
+    // 2) workerAssignments 파싱 — 5개 역할 (src/lib/roles.ts와 동기화)
+    $assignments = array(
+        'a_grade'    => 0,
+        'b_grade'    => 0,
+        'pin_wash'   => 0,
+        'dely'       => 0,
+        'parts_wash' => 0,
+        'days'       => 0,
+    );
     if ($workerJson) {
         $parsed = json_decode($workerJson, true);
         if (is_array($parsed)) {
-            if (isset($parsed['lead']))    $assignments['lead']    = intval($parsed['lead']);
-            if (isset($parsed['member']))  $assignments['member']  = intval($parsed['member']);
-            if (isset($parsed['support'])) $assignments['support'] = intval($parsed['support']);
-            if (isset($parsed['days']))    $assignments['days']    = intval($parsed['days']);
+            if (isset($parsed['a_grade']))    $assignments['a_grade']    = intval($parsed['a_grade']);
+            if (isset($parsed['b_grade']))    $assignments['b_grade']    = intval($parsed['b_grade']);
+            if (isset($parsed['pin_wash']))   $assignments['pin_wash']   = intval($parsed['pin_wash']);
+            if (isset($parsed['dely']))       $assignments['dely']       = intval($parsed['dely']);
+            if (isset($parsed['parts_wash'])) $assignments['parts_wash'] = intval($parsed['parts_wash']);
+            if (isset($parsed['days']))       $assignments['days']       = intval($parsed['days']);
         }
     }
 
@@ -175,7 +184,7 @@ function recomputeProjectDerived($conn, $projectId) {
 
     // 4) 각 role별 단가 캐스케이드 조회 + breakdown 구성
     $days = intval($assignments['days']);
-    $roles = array('lead', 'member', 'support');
+    $roles = array('a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash');
     $breakdown = array();
     $laborCost = 0;
     foreach ($roles as $role) {
