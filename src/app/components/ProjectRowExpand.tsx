@@ -17,6 +17,8 @@ import {
   Receipt,
   Loader2,
   Plus,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
@@ -63,6 +65,12 @@ export interface ProjectForExpand extends ProjectRefForStaffing {
   transportCost: number;
   otherCost: number;
   memo: string;
+  // Phase 1.7 / Step 5 — AI 자동 호출 상태
+  aiStatus?: 'pending' | 'generating' | 'success' | 'failed' | 'manual';
+  aiAttemptedAt?: string;
+  aiError?: string;
+  aiInfluence?: 'high' | 'medium' | 'low' | 'none' | '';
+  aiSuggestion?: string;
 }
 
 interface ProjectRowExpandProps {
@@ -76,6 +84,8 @@ interface ProjectRowExpandProps {
   onSave: (updates: Partial<ProjectFormState>) => void | Promise<void>;
   onComplete: () => void;
   onAiAdopted: (suggestion: StaffingSuggestion) => void;
+  /** Phase 1.7 / Step 5 — failed→pending 리셋 후 자동 큐 재진입 */
+  onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
 }
 
@@ -542,6 +552,121 @@ function ResultStat({
 }
 
 // ============================================================
+// Phase 1.7 / Step 5 — AI 상태/학습 영향도 배지 + 추천 근거 펼침
+// ============================================================
+function AiInfluenceBadge({ influence }: { influence?: string }) {
+  const config: Record<string, { color: string; label: string; tooltip: string }> = {
+    high:   { color: 'bg-emerald-100 text-emerald-700', label: '🎯 학습 강함', tooltip: '5건 이상 유사 프로젝트 + 우수 사례 기반 추천' },
+    medium: { color: 'bg-teal-100 text-teal-700',       label: '📊 학습 보통', tooltip: '1~4건 유사 프로젝트 기반 추천' },
+    low:    { color: 'bg-amber-100 text-amber-700',     label: '🔍 학습 약함', tooltip: '유사 사례 부족, 일반 추정 기반' },
+    none:   { color: 'bg-slate-100 text-slate-600',     label: '🆕 첫 사례',   tooltip: '이 서비스/수량의 첫 케이스 — 일반 추정' },
+  };
+  const c = config[influence || 'none'] || config.none;
+  return (
+    <span
+      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${c.color}`}
+      title={c.tooltip}
+    >
+      {c.label}
+    </span>
+  );
+}
+
+function AiStatusBadge({ project }: { project: ProjectForExpand }) {
+  if (project.aiStatus === 'generating') {
+    return (
+      <span className="text-xs text-teal-600 flex items-center gap-1 px-2 py-0.5 bg-teal-50 rounded-full">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        AI 분석 중...
+      </span>
+    );
+  }
+  if (project.aiStatus === 'failed') {
+    return (
+      <span
+        className="text-xs text-red-600 flex items-center gap-1 px-2 py-0.5 bg-red-50 rounded-full"
+        title={project.aiError || '알 수 없는 오류'}
+      >
+        <AlertCircle className="w-3 h-3" />
+        AI 생성 실패
+      </span>
+    );
+  }
+  if (project.aiStatus === 'success') {
+    return <AiInfluenceBadge influence={project.aiInfluence || ''} />;
+  }
+  if (project.aiStatus === 'manual') {
+    return (
+      <span className="text-xs text-slate-500 flex items-center gap-1 px-2 py-0.5 bg-slate-100 rounded-full">
+        👤 수동 입력
+      </span>
+    );
+  }
+  // pending / 미정 — 표시 안 함 (자동 호출 시작 전 잠시 상태)
+  return null;
+}
+
+function AiRationale({ project }: { project: ProjectForExpand }) {
+  if (!project.aiSuggestion) return null;
+
+  let parsed: {
+    rationale?: string;
+    warnings?: string[];
+    estimatedLaborCost?: number;
+    estimatedNetProfit?: number;
+    estimatedProfitRatio?: number;
+  };
+  try {
+    parsed = JSON.parse(project.aiSuggestion);
+  } catch {
+    return null;
+  }
+
+  const warnings = parsed.warnings && parsed.warnings.length > 0 ? parsed.warnings : null;
+
+  return (
+    <details className="mb-3 text-sm bg-slate-50 border border-slate-200 rounded-lg">
+      <summary className="cursor-pointer font-medium text-slate-700 hover:text-slate-900
+                          px-3 py-2 select-none flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-teal-600" />
+        AI 추천 근거 보기
+        {warnings && (
+          <span className="ml-auto text-xs text-amber-600 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            경고 {warnings.length}건
+          </span>
+        )}
+      </summary>
+      <div className="px-3 pb-3 pt-1 space-y-2 text-slate-600">
+        {parsed.rationale && (
+          <div className="text-sm leading-relaxed">{parsed.rationale}</div>
+        )}
+
+        {parsed.estimatedProfitRatio !== undefined && (
+          <div className="text-xs text-slate-500 flex flex-wrap gap-3">
+            <span>예상 인건비: ₩{(parsed.estimatedLaborCost || 0).toLocaleString('ko-KR')}</span>
+            <span>예상 순이익: ₩{(parsed.estimatedNetProfit || 0).toLocaleString('ko-KR')}</span>
+            <span>예상 순익률: {((parsed.estimatedProfitRatio || 0) * 100).toFixed(1)}%</span>
+          </div>
+        )}
+
+        {warnings && (
+          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs">
+            <div className="font-medium text-amber-700 mb-1 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" />
+              경고
+            </div>
+            <ul className="list-disc list-inside text-amber-700 space-y-0.5">
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+// ============================================================
 // ConfirmModal — '완료 처리' 등 되돌리기 어려운 액션 확인
 // ============================================================
 function ConfirmModal({
@@ -612,6 +737,7 @@ export function ProjectRowExpand({
   onSave,
   onComplete,
   onAiAdopted,
+  onReRunAi,
   onNotification,
 }: ProjectRowExpandProps) {
   // 폼 초기값 — 기존 workerAssignments가 옛 키(lead/member/support)면 무시하고 0으로 시작
@@ -815,13 +941,16 @@ export function ProjectRowExpand({
         </div>
       </div>
 
-      {/* ============ 블록 2-1: 인력 배치 (헤더에 작업일수 inline + AI 버튼) ============ */}
+      {/* ============ 블록 2-1: 인력 배치 (헤더: 상태 배지 + 작업일수 + AI 다시 추천) ============ */}
       <div>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-          <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <Users className="w-4 h-4 text-teal-600" />
-            인력 배치
-          </h4>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Users className="w-4 h-4 text-teal-600" />
+              인력 배치
+            </h4>
+            <AiStatusBadge project={project} />
+          </div>
 
           <div className="flex items-center gap-3 flex-wrap">
             {/* 작업일수 inline 입력 */}
@@ -852,19 +981,27 @@ export function ProjectRowExpand({
               </div>
             </div>
 
-            {/* AI 추천 버튼 */}
+            {/* AI 다시 추천 — ai_status='pending' 으로 리셋 → 자동 큐가 재호출 */}
             <button
-              onClick={() => setAiModalOpen(true)}
-              className="bg-gradient-to-r from-teal-500 to-blue-500 text-white
-                         px-4 py-1.5 rounded-lg text-sm font-medium
-                         hover:from-teal-600 hover:to-blue-600
-                         flex items-center gap-1.5 transition shadow-sm"
+              type="button"
+              onClick={() => onReRunAi(project.id)}
+              disabled={project.aiStatus === 'generating'}
+              className="bg-white border border-teal-300 text-teal-700 px-3 py-1.5 rounded-lg
+                         text-xs font-medium hover:bg-teal-50
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         flex items-center gap-1.5 transition"
+              title="학습 데이터를 반영해 다시 추천"
             >
-              <Sparkles className="w-4 h-4" />
-              AI 인력 초안 추천
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${project.aiStatus === 'generating' ? 'animate-spin' : ''}`}
+              />
+              AI 다시 추천
             </button>
           </div>
         </div>
+
+        {/* AI 추천 근거 (aiSuggestion 있을 때만) */}
+        <AiRationale project={project} />
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           {ROLE_ORDER.map((role) => (

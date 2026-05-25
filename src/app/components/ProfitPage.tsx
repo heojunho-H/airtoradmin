@@ -652,10 +652,9 @@ export function ProfitPage({
   }, []);
 
   /**
-   * 사용자 수동 재시도 (Step 5에서 UI 연결 예정).
+   * 사용자 수동 재시도 — ProjectRowExpand의 [AI 다시 추천] 버튼이 호출.
    * failed 상태 → pending 으로 리셋 → useEffect 가 큐로 재진입.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleReRunAi = useCallback(
     (projectId: number) => {
       updateProject(projectId, { aiStatus: 'pending', aiError: '' })
@@ -1032,6 +1031,7 @@ export function ProfitPage({
               onSave={(updates) => handleUpdateProject(p.id, updates)}
               onComplete={() => handleCompleteProject(p.id)}
               onAiAdopted={(s) => handleAdoptAiSuggestion(p.id, s)}
+              onReRunAi={handleReRunAi}
               onNotification={onNotification}
             />
           ))}
@@ -1099,6 +1099,7 @@ export function ProfitPage({
                       onSave={(updates) => handleUpdateProject(p.id, updates)}
                       onComplete={() => handleCompleteProject(p.id)}
                       onAiAdopted={(s) => handleAdoptAiSuggestion(p.id, s)}
+                      onReRunAi={handleReRunAi}
                       onNotification={onNotification}
                     />
                   );
@@ -1131,6 +1132,7 @@ interface RowProps {
   onSave: (updates: Partial<Project>) => void;
   onComplete: () => void;
   onAiAdopted: (suggestion: StaffingSuggestion) => void;
+  onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
 }
 
@@ -1150,6 +1152,7 @@ function ProjectTableRow({
   onSave,
   onComplete,
   onAiAdopted,
+  onReRunAi,
   onNotification,
 }: RowProps) {
   return (
@@ -1268,6 +1271,7 @@ function ProjectTableRow({
                 onSave={onSave}
                 onComplete={onComplete}
                 onAiAdopted={onAiAdopted}
+                onReRunAi={onReRunAi}
                 onNotification={onNotification}
               />
             </div>
@@ -1296,6 +1300,7 @@ function ProjectMobileCard({
   onSave,
   onComplete,
   onAiAdopted,
+  onReRunAi,
   onNotification,
 }: Omit<RowProps, 'colCount'>) {
   return (
@@ -1379,6 +1384,7 @@ function ProjectMobileCard({
           onSave={onSave}
           onComplete={onComplete}
           onAiAdopted={onAiAdopted}
+          onReRunAi={onReRunAi}
           onNotification={onNotification}
         />
       )}
