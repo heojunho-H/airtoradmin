@@ -160,6 +160,9 @@ ${input.availableSubcontractors.length > 0
   });
 
   if (!response.ok) {
+    // Anthropic 에러 본문을 그대로 콘솔에 노출 (디버깅 가시성)
+    const errorBody = await response.text();
+    console.error(`[Claude staffing] ${response.status} 에러 본문:`, errorBody);
     throw new Error(`AI 응답 오류 (${response.status})`);
   }
 
