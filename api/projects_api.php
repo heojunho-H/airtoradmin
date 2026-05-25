@@ -32,6 +32,10 @@
  * profit_ratio        → profitRatio (파생, 퍼센트)
  * ai_suggestion       → aiSuggestion (TEXT)
  * ai_applied          → aiApplied (BOOLEAN)
+ * ai_status           → aiStatus (ENUM: pending|generating|success|failed|manual)
+ * ai_attempted_at     → aiAttemptedAt (DATETIME)
+ * ai_error            → aiError (TEXT)
+ * ai_influence        → aiInfluence (ENUM: high|medium|low|none)
  * memo                → memo
  * created_at          → createdAt
  * updated_at          → updatedAt
@@ -303,7 +307,9 @@ if ($method === 'GET') {
                    worker_assignments, labor_breakdown, labor_cost,
                    meal_cost, transport_cost, other_cost,
                    total_cost, labor_cost_ratio, net_profit, profit_ratio,
-                   ai_suggestion, ai_applied, memo, created_at, updated_at
+                   ai_suggestion, ai_applied,
+                   ai_status, ai_attempted_at, ai_error, ai_influence,
+                   memo, created_at, updated_at
             FROM airtor_projects
             WHERE " . $whereClause . "
             ORDER BY work_date DESC, id DESC";
@@ -345,6 +351,10 @@ if ($method === 'GET') {
             'profitRatio'       => floatval($row['profit_ratio']),
             'aiSuggestion'      => $row['ai_suggestion'] ? $row['ai_suggestion'] : '',
             'aiApplied'         => ($aiAppliedRaw === '1' || $aiAppliedRaw === 1) ? true : false,
+            'aiStatus'          => $row['ai_status'] ? $row['ai_status'] : 'pending',
+            'aiAttemptedAt'     => $row['ai_attempted_at'] ? $row['ai_attempted_at'] : '',
+            'aiError'           => $row['ai_error'] ? $row['ai_error'] : '',
+            'aiInfluence'       => $row['ai_influence'] ? $row['ai_influence'] : '',
             'memo'              => $row['memo'] ? $row['memo'] : '',
             'createdAt'         => $row['created_at'] ? $row['created_at'] : '',
             'updatedAt'         => $row['updated_at'] ? $row['updated_at'] : '',
@@ -504,6 +514,18 @@ if ($method === 'PUT') {
             unset($input['completedReason']);
         }
     }
+    if (isset($input['aiStatus'])) {
+        $_validAiStatus = array('pending', 'generating', 'success', 'failed', 'manual');
+        if (!in_array($input['aiStatus'], $_validAiStatus, true)) {
+            unset($input['aiStatus']);
+        }
+    }
+    if (isset($input['aiInfluence']) && $input['aiInfluence'] !== '') {
+        $_validAiInfluence = array('high', 'medium', 'low', 'none');
+        if (!in_array($input['aiInfluence'], $_validAiInfluence, true)) {
+            unset($input['aiInfluence']);
+        }
+    }
 
     // 키 → (DB 컬럼, bind 타입, 변환종류 'str'|'int'|'json')
     // 클로저 금지 — 카페24 PHP 환경 호환을 위해 문자열 식별자 디스패치 (customers_api.php와 동일).
@@ -525,6 +547,10 @@ if ($method === 'PUT') {
         'otherCost'         => array('other_cost',           'i', 'int'),
         'aiSuggestion'      => array('ai_suggestion',        's', 'str'),
         'aiApplied'         => array('ai_applied',           'i', 'int'),
+        'aiStatus'          => array('ai_status',            's', 'str'),
+        'aiAttemptedAt'     => array('ai_attempted_at',      's', 'str'),
+        'aiError'           => array('ai_error',             's', 'str'),
+        'aiInfluence'       => array('ai_influence',         's', 'str'),
         'memo'              => array('memo',                 's', 'str'),
     );
 

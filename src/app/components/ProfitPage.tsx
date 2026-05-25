@@ -61,6 +61,11 @@ export interface Project {
   profitRatio: number; // fraction (0~1)
   aiSuggestion?: string;
   aiApplied: boolean;
+  // Phase 1.7 — AI 자동 추천 상태 컬럼 (마이그레이션 005)
+  aiStatus?: 'pending' | 'generating' | 'success' | 'failed' | 'manual';
+  aiAttemptedAt?: string;
+  aiError?: string;
+  aiInfluence?: 'high' | 'medium' | 'low' | 'none' | '';
   memo: string;
   createdAt?: string;
   updatedAt?: string;
