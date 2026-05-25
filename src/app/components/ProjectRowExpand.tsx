@@ -1,7 +1,7 @@
 // 프로젝트 행 펼침 폼 — 3블록 구조 (메타 / 입력 / 결과)
 //   블록1: 메타 정보 (회색, 읽기 전용) — 문의 등록일, 총 수량, 견적 금액, 세금 제외 매출
-//   블록2: 입력 — AI 버튼 헤더 / RoleInputCard×5 + DaysInputCard / 합계 인건비 강조 / CostInput×3
-//   블록3: 결과 — 비용총합·순이익·순익률 (gradient + dim + 적자 red)
+//   블록2: 입력 — 인력배치 헤더(작업일수 inline + AI 버튼) / RoleInputCard×5 / LaborSummary / CostInputCard×3
+//   블록3: 결과 — empty / partial / full 상태별 표시 (+ 적자 red)
 //
 // 5개 역할 = src/lib/roles.ts (단일 진실원). Props 시그니처 유지 (+inquiryDate optional).
 
@@ -13,6 +13,9 @@ import {
   StickyNote,
   FileText,
   X,
+  Users,
+  Receipt,
+  Loader2,
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
@@ -29,6 +32,7 @@ import {
   type RoleAssignments,
   emptyRoleAssignments,
 } from '../../lib/roles';
+import { formatDetailedQuantity } from '../../lib/quantity';
 
 // 폼이 부모에게 PUT-ready로 넘기는 필드만 정의 (서버 파생지표는 별도 recompute)
 export interface ProjectFormState {
@@ -59,7 +63,7 @@ interface ProjectRowExpandProps {
   totalQuantity: number;
   detailedQuantity?: string;
   inquiryDate?: string;
-  onSave: (updates: Partial<ProjectFormState>) => void;
+  onSave: (updates: Partial<ProjectFormState>) => void | Promise<void>;
   onComplete: () => void;
   onAiAdopted: (suggestion: StaffingSuggestion) => void;
   onNotification?: (msg: string) => void;
@@ -96,11 +100,6 @@ function formatKRW(n: number): string {
   return n.toLocaleString('ko-KR');
 }
 
-function formatManwon(n: number): string {
-  if (n === 0) return '';
-  return (n / 10000).toFixed(1) + '만원';
-}
-
 function profitRatioColor(ratio: number): string {
   if (ratio >= 0.30) return 'text-emerald-600';
   if (ratio >= 0.10) return 'text-teal-600';
@@ -108,7 +107,7 @@ function profitRatioColor(ratio: number): string {
   return 'text-red-600';
 }
 
-// 인건비율 색상 (합계 인건비 강조 행)
+// 인건비율 색상 (LaborSummary)
 function laborRatioColor(ratio: number): string {
   if (ratio <= 0.30) return 'text-emerald-600';
   if (ratio <= 0.50) return 'text-amber-600';
@@ -131,13 +130,14 @@ function MetaField({
     <div>
       <div className="text-[11px] text-slate-500 mb-1">{label}</div>
       <div className="text-[15px] font-semibold text-slate-700 tabular-nums">{value}</div>
-      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
     </div>
   );
 }
 
 // ============================================================
 // RoleInputCard — 역할 1개 카드 (단가 표시 + 인원 input + 자동 인건비)
+//   가로 한 줄: [인풋(명 suffix)] = [인건비 결과]
 // ============================================================
 function RoleInputCard({
   label,
@@ -155,34 +155,52 @@ function RoleInputCard({
   onChange: (n: number) => void;
 }) {
   const subtotal = (dailyRate || 0) * (count || 0) * (days || 0);
+  const hasInput = count > 0 && days > 0;
+
   return (
     <div
-      className={`bg-white border rounded-lg p-3 transition ${
+      className={`bg-white border rounded-lg p-4 transition ${
         cascaded ? 'border-amber-200' : 'border-slate-200 hover:border-teal-300'
       }`}
     >
-      <div className="text-[13px] font-semibold text-slate-900 mb-0.5">{label}</div>
-      <div className="text-[11px] text-slate-400 mb-2">
-        ₩{formatKRW(dailyRate)}/일
-        {cascaded && <span className="ml-1 text-amber-600">· 전월 단가</span>}
+      {/* 라벨 + 단가 */}
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-slate-900">{label}</div>
+        <div className="text-[11px] text-slate-400 mt-0.5">
+          ₩{formatKRW(dailyRate)}/일
+          {cascaded && <span className="ml-1 text-amber-600">· 전월</span>}
+        </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-2">
-        <input
-          type="number"
-          min={0}
-          value={count}
-          onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
-          className="flex-1 text-center text-[16px] font-bold border border-slate-300
-                     rounded px-2 py-1 focus:outline-none focus:border-teal-500
-                     tabular-nums"
-        />
-        <span className="text-[11px] text-slate-500">명</span>
-      </div>
+      {/* 인풋 = 결과 한 줄 */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-shrink-0" style={{ width: '72px' }}>
+          <input
+            type="number"
+            min={0}
+            value={count}
+            onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+            className="w-full text-center text-base font-semibold
+                       border border-slate-300 rounded px-2 py-1.5 pr-7
+                       focus:outline-none focus:border-teal-500
+                       tabular-nums"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2
+                           text-xs text-slate-400 pointer-events-none">
+            명
+          </span>
+        </div>
 
-      <div className="text-right">
-        <div className="text-[13px] font-semibold text-teal-700 tabular-nums">
-          ₩{formatKRW(subtotal)}
+        <span className="text-slate-400 text-sm flex-shrink-0">=</span>
+
+        <div className="flex-1 text-right min-w-0">
+          <span
+            className={`text-base font-bold tabular-nums ${
+              hasInput ? 'text-teal-700' : 'text-slate-300'
+            }`}
+          >
+            ₩{formatKRW(subtotal)}
+          </span>
         </div>
       </div>
     </div>
@@ -190,56 +208,88 @@ function RoleInputCard({
 }
 
 // ============================================================
-// DaysInputCard — 작업일수 (모든 역할에 곱셈) — blue 톤
+// LaborSummary — 합계 인건비 강조 행 (또는 입력 안내)
 // ============================================================
-function DaysInputCard({
+function LaborSummary({
+  totalWorkers,
   days,
-  onChange,
+  totalLaborCost,
+  netRevenue,
 }: {
+  totalWorkers: number;
   days: number;
-  onChange: (n: number) => void;
+  totalLaborCost: number;
+  netRevenue: number;
 }) {
-  return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-      <div className="text-[13px] font-semibold text-slate-900 mb-0.5">작업일수</div>
-      <div className="text-[11px] text-blue-600 mb-2">× 모든 역할에 곱셈</div>
+  const hasInput = totalWorkers > 0 && days > 0;
+  const ratio = netRevenue > 0 ? totalLaborCost / netRevenue : 0;
 
-      <div className="flex items-center gap-1 mb-2">
-        <input
-          type="number"
-          min={0}
-          step="0.5"
-          value={days}
-          onChange={(e) => onChange(Math.max(0, parseFloat(e.target.value) || 0))}
-          className="flex-1 text-center text-[16px] font-bold border border-slate-300
-                     rounded px-2 py-1 focus:outline-none focus:border-blue-500
-                     tabular-nums"
-        />
-        <span className="text-[11px] text-slate-500">일</span>
+  if (!hasInput) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+        <span className="text-sm text-slate-500">
+          역할별 인원과 작업일수를 입력하면 합계 인건비가 계산됩니다
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-teal-50 border border-teal-200 rounded-lg p-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-700">합계 인건비</span>
+          <span className="text-xs text-slate-500 tabular-nums">
+            {totalWorkers}명 × {days}일
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-bold text-teal-700 tabular-nums">
+            ₩{formatKRW(totalLaborCost)}
+          </span>
+          <span className={`text-sm font-medium tabular-nums ${laborRatioColor(ratio)}`}>
+            매출대비 {(ratio * 100).toFixed(1)}%
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
 // ============================================================
-// CostInput — 변동비 (천단위 콤마 자동, 만원 환산 + hint)
+// CostInputCard — 변동비 1개 카드 (라벨/sub + input + 보조정보)
 // ============================================================
-function CostInput({
+function CostInputCard({
   label,
+  sub,
   value,
   onChange,
-  hint,
+  totalWorkers,
+  days,
+  showPerPerson,
 }: {
   label: string;
+  sub: string;
   value: number;
   onChange: (n: number) => void;
-  hint?: string;
+  totalWorkers?: number;
+  days?: number;
+  showPerPerson?: boolean;
 }) {
   const formatted = value > 0 ? value.toLocaleString('ko-KR') : '';
-  const manwon = formatManwon(value);
+  const manwon = value >= 10000 ? `${(value / 10000).toFixed(1)}만원` : null;
+  const perPerson =
+    showPerPerson && (totalWorkers ?? 0) > 0 && (days ?? 0) > 0 && value > 0
+      ? Math.round(value / (totalWorkers as number) / (days as number))
+      : null;
+
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-3">
-      <label className="text-[13px] font-semibold text-slate-900 mb-1 block">{label}</label>
+    <div className="bg-white border border-slate-200 rounded-lg p-4 hover:border-teal-300 transition">
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-slate-900">{label}</div>
+        <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>
+      </div>
+
       <div className="relative">
         <input
           type="text"
@@ -250,19 +300,20 @@ function CostInput({
             const raw = e.target.value.replace(/[^0-9]/g, '');
             onChange(parseInt(raw) || 0);
           }}
-          className="w-full text-right text-[16px] font-semibold border border-slate-300
-                     rounded px-3 py-2 pr-8 focus:outline-none focus:border-teal-500
+          className="w-full text-right text-base font-semibold
+                     border border-slate-300 rounded px-3 py-2 pr-8
+                     focus:outline-none focus:border-teal-500
                      tabular-nums"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
           원
         </span>
       </div>
-      {(manwon || hint) && (
-        <div className="text-[11px] text-slate-400 mt-1 text-right">
-          {manwon}
-          {manwon && hint && ' · '}
-          {hint}
+
+      {(manwon || perPerson) && (
+        <div className="text-[11px] text-slate-500 mt-2 text-right flex justify-end gap-2">
+          {manwon && <span>{manwon}</span>}
+          {perPerson && <span>· 1인 1일 ₩{formatKRW(perPerson)}</span>}
         </div>
       )}
     </div>
@@ -270,54 +321,115 @@ function CostInput({
 }
 
 // ============================================================
-// 결과 — ResultStat / ResultRatio
+// ResultBlock — 비용·순이익·순익률 (empty / partial / full + loss)
 // ============================================================
-function ResultStat({
-  label,
-  value,
-  dimmed,
-  emphasized,
-  loss,
+type ResultState = 'empty' | 'partial' | 'full';
+
+function ResultBlock({
+  totalLaborCost,
+  totalVariableCost,
+  totalCost,
+  netProfit,
+  profitRatio,
 }: {
-  label: string;
-  value: number;
-  dimmed: boolean;
-  emphasized?: boolean;
-  loss?: boolean;
+  totalLaborCost: number;
+  totalVariableCost: number;
+  totalCost: number;
+  netProfit: number;
+  profitRatio: number;
 }) {
-  const tone = dimmed
-    ? 'text-slate-400'
-    : loss
-      ? 'text-red-600'
-      : emphasized
-        ? 'text-slate-900'
-        : 'text-slate-700';
+  const state: ResultState =
+    totalLaborCost === 0 && totalVariableCost === 0
+      ? 'empty'
+      : totalLaborCost === 0 || totalVariableCost === 0
+        ? 'partial'
+        : 'full';
+  const isLoss = state !== 'empty' && netProfit < 0;
+
+  const bgClass =
+    state === 'empty'
+      ? 'bg-slate-50 border-slate-200'
+      : isLoss
+        ? 'bg-red-50 border-red-200'
+        : state === 'full'
+          ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-200'
+          : 'bg-amber-50 border-amber-200';
+
   return (
-    <div className="text-center">
-      <p className="text-[11px] text-slate-500">{label}</p>
-      <p className={`text-[20px] font-bold mt-1 tabular-nums ${tone}`}>
-        ₩{formatKRW(value)}
-      </p>
+    <div className={`rounded-lg p-5 border ${bgClass}`}>
+      {state === 'empty' && (
+        <div className="text-center text-sm text-slate-500 mb-4">
+          인력 또는 변동비를 입력하면 정확한 손익이 계산됩니다
+        </div>
+      )}
+      {state === 'partial' && (
+        <div className="text-center text-xs text-amber-700 mb-3">
+          ⓘ 일부 비용만 입력됨 — 정확하지 않을 수 있습니다
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        <ResultStat
+          label="비용 총합"
+          value={state === 'empty' ? null : `₩${formatKRW(totalCost)}`}
+          state={state}
+        />
+        <ResultStat
+          label="순이익"
+          value={state === 'empty' ? null : `₩${formatKRW(netProfit)}`}
+          state={state}
+          emphasized
+          loss={isLoss}
+        />
+        <ResultStat
+          label="순익률"
+          value={state === 'empty' ? null : `${(profitRatio * 100).toFixed(1)}%`}
+          state={state}
+          isRatio
+          ratio={profitRatio}
+        />
+      </div>
     </div>
   );
 }
 
-function ResultRatio({
+function ResultStat({
   label,
+  value,
+  state,
+  emphasized,
+  loss,
+  isRatio,
   ratio,
-  dimmed,
 }: {
   label: string;
-  ratio: number;
-  dimmed: boolean;
+  value: string | null;
+  state: ResultState;
+  emphasized?: boolean;
+  loss?: boolean;
+  isRatio?: boolean;
+  ratio?: number;
 }) {
-  const tone = dimmed ? 'text-slate-400' : profitRatioColor(ratio);
+  const ratioColorClass =
+    isRatio && state !== 'empty' && typeof ratio === 'number' ? profitRatioColor(ratio) : '';
+
+  const valueColor =
+    state === 'empty'
+      ? 'text-slate-300'
+      : loss
+        ? 'text-red-600'
+        : ratioColorClass
+          ? ratioColorClass
+          : emphasized
+            ? 'text-slate-900'
+            : 'text-slate-700';
+
   return (
     <div className="text-center">
-      <p className="text-[11px] text-slate-500">{label}</p>
-      <p className={`text-[20px] font-bold mt-1 tabular-nums ${tone}`}>
-        {(ratio * 100).toFixed(1)}%
-      </p>
+      <div className="text-[11px] text-slate-500 mb-1">{label}</div>
+      <div className={`text-[22px] font-bold tabular-nums ${valueColor}`}>
+        {value ?? '—'}
+      </div>
     </div>
   );
 }
@@ -414,6 +526,7 @@ export function ProjectRowExpand({
   const [showMemo, setShowMemo] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // work_date의 YYYY-MM (없으면 현재 월 폴백)
   const yearMonth = useMemo(() => {
@@ -452,10 +565,6 @@ export function ProjectRowExpand({
   const totalCost = totalLaborCost + totalVariableCost;
   const netProfit = project.netRevenue - totalCost;
   const profitRatio = project.netRevenue > 0 ? netProfit / project.netRevenue : 0;
-  const laborCostRatio = project.netRevenue > 0 ? totalLaborCost / project.netRevenue : 0;
-
-  // 결과 흐림 처리 — 인건비 0이고 변동비 0이면 의미 없는 수치
-  const isDimmed = totalLaborCost === 0 && totalCost === 0;
 
   // hasChanges — 폼 현재값 vs 원본
   const hasChanges = useMemo(() => {
@@ -490,15 +599,22 @@ export function ProjectRowExpand({
     setAssignments((prev) => ({ ...prev, [role]: Math.max(0, n) }));
   };
 
-  const handleSave = () => {
-    onSave({
-      workerAssignments: { ...assignments, days },
-      mealCost,
-      transportCost,
-      otherCost,
-      memo,
-    });
-    onNotification?.('프로젝트 저장 완료');
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await Promise.resolve(
+        onSave({
+          workerAssignments: { ...assignments, days },
+          mealCost,
+          transportCost,
+          otherCost,
+          memo,
+        }),
+      );
+      onNotification?.('프로젝트 저장 완료');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCompleteClick = () => {
@@ -512,17 +628,10 @@ export function ProjectRowExpand({
     const next = emptyRoleAssignments();
     for (const r of ROLE_ORDER) next[r] = Number(suggestion.assignments[r]) || 0;
     setAssignments(next);
-    setDays(Number(suggestion.assignments.days) || 0);
+    setDays(Number(suggestion.assignments.days) || 1);
     onAiAdopted(suggestion);
     onNotification?.('AI 추천 채택 — 인력 배치 prefill 완료');
   };
-
-  // 결과 배경 — 일반/흐림/적자
-  const resultBgClass = isDimmed
-    ? 'bg-slate-50 border border-slate-200'
-    : netProfit < 0
-      ? 'bg-red-50 border border-red-200'
-      : 'bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200';
 
   // 단가 표시 (배지용)
   const ratesForAi: RoleAssignments = useMemo(() => {
@@ -531,11 +640,7 @@ export function ProjectRowExpand({
     return r;
   }, [resolved]);
 
-  // 식비 hint — 1인당 식비
-  const mealHint =
-    mealCost > 0 && totalWorkers > 0 && days > 0
-      ? `${formatKRW(Math.round(mealCost / (totalWorkers * days)))}원/인일`
-      : undefined;
+  const totalQuantitySub = formatDetailedQuantity(detailedQuantity);
 
   return (
     <div className="bg-slate-50 border-t border-slate-200 px-4 md:px-6 py-5 space-y-4">
@@ -545,14 +650,11 @@ export function ProjectRowExpand({
           프로젝트 정보
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetaField
-            label="문의 등록일"
-            value={inquiryDate || '-'}
-          />
+          <MetaField label="문의 등록일" value={inquiryDate || '-'} />
           <MetaField
             label="총 수량"
             value={totalQuantity > 0 ? `${formatKRW(totalQuantity)}대` : '-'}
-            sub={detailedQuantity}
+            sub={totalQuantitySub}
           />
           <MetaField
             label="견적 금액"
@@ -562,25 +664,63 @@ export function ProjectRowExpand({
           <MetaField
             label="세금 제외 매출"
             value={`₩${formatKRW(project.netRevenue)}`}
-            sub="순매출"
+            sub="순매출 (VAT 제외)"
           />
         </div>
       </div>
 
-      {/* ============ 블록 2-1: 인력 배치 카드 그리드 ============ */}
+      {/* ============ 블록 2-1: 인력 배치 (헤더에 작업일수 inline + AI 버튼) ============ */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-[13px] font-semibold text-slate-900">인력 배치</h4>
-          <button
-            onClick={() => setAiModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors shadow-sm"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            AI 인력 초안 추천
-          </button>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+          <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Users className="w-4 h-4 text-teal-600" />
+            인력 배치
+          </h4>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* 작업일수 inline 입력 */}
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+              <span className="text-xs text-slate-600 font-medium">작업일수</span>
+              <div className="relative" style={{ width: '64px' }}>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  value={days}
+                  onChange={(e) =>
+                    setDays(Math.max(0, parseFloat(e.target.value) || 0))
+                  }
+                  className="w-full text-center text-base font-bold border-0 bg-transparent
+                             focus:outline-none tabular-nums pr-4"
+                />
+                <span className="absolute right-1 top-1/2 -translate-y-1/2
+                                 text-xs text-slate-500 pointer-events-none">
+                  일
+                </span>
+              </div>
+              <div
+                className="text-[10px] text-blue-600 ml-1"
+                title="모든 역할 카드에 곱해집니다"
+              >
+                × 전체 적용
+              </div>
+            </div>
+
+            {/* AI 추천 버튼 */}
+            <button
+              onClick={() => setAiModalOpen(true)}
+              className="bg-gradient-to-r from-teal-500 to-blue-500 text-white
+                         px-4 py-1.5 rounded-lg text-sm font-medium
+                         hover:from-teal-600 hover:to-blue-600
+                         flex items-center gap-1.5 transition shadow-sm"
+            >
+              <Sparkles className="w-4 h-4" />
+              AI 인력 초안 추천
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           {ROLE_ORDER.map((role) => (
             <RoleInputCard
               key={role}
@@ -592,70 +732,55 @@ export function ProjectRowExpand({
               onChange={(n) => setRoleCount(role, n)}
             />
           ))}
-          <DaysInputCard days={days} onChange={setDays} />
         </div>
+
+        <LaborSummary
+          totalWorkers={totalWorkers}
+          days={days}
+          totalLaborCost={totalLaborCost}
+          netRevenue={project.netRevenue}
+        />
       </div>
 
-      {/* ============ 블록 2-2: 합계 인건비 강조 행 ============ */}
-      <div className="bg-teal-50 border border-teal-200 rounded-lg p-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-semibold text-slate-700">합계 인건비</span>
-            <span className="text-[11px] text-slate-500">
-              {totalWorkers}명 × {days}일
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[20px] font-bold text-teal-700 tabular-nums">
-              ₩{formatKRW(totalLaborCost)}
-            </span>
-            <span
-              className={`text-[13px] font-medium tabular-nums ${
-                totalLaborCost === 0 ? 'text-slate-400' : laborRatioColor(laborCostRatio)
-              }`}
-            >
-              매출대비 {(laborCostRatio * 100).toFixed(1)}%
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ============ 블록 2-3: 변동비 입력 ============ */}
+      {/* ============ 블록 2-2: 변동비 ============ */}
       <div>
-        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-3">
+        <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+          <Receipt className="w-4 h-4 text-teal-600" />
           변동비
-        </div>
+        </h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <CostInput
+          <CostInputCard
             label="식비"
+            sub="인당 식사 보조"
             value={mealCost}
             onChange={setMealCost}
-            hint={mealHint}
+            totalWorkers={totalWorkers}
+            days={days}
+            showPerPerson
           />
-          <CostInput label="교통비" value={transportCost} onChange={setTransportCost} />
-          <CostInput label="기타" value={otherCost} onChange={setOtherCost} />
+          <CostInputCard
+            label="교통비"
+            sub="차량·이동 비용"
+            value={transportCost}
+            onChange={setTransportCost}
+          />
+          <CostInputCard
+            label="기타"
+            sub="장비·소모품 등"
+            value={otherCost}
+            onChange={setOtherCost}
+          />
         </div>
       </div>
 
       {/* ============ 블록 3: 결과 (자동 계산, 가장 강한 시각) ============ */}
-      <div className={`rounded-lg p-5 ${resultBgClass}`}>
-        <div className="grid grid-cols-3 gap-4">
-          <ResultStat label="비용 총합" value={totalCost} dimmed={isDimmed} />
-          <ResultStat
-            label="순이익"
-            value={netProfit}
-            dimmed={isDimmed}
-            emphasized={!isDimmed}
-            loss={!isDimmed && netProfit < 0}
-          />
-          <ResultRatio label="순익률" ratio={profitRatio} dimmed={isDimmed} />
-        </div>
-        {isDimmed && (
-          <div className="text-[12px] text-slate-500 text-center mt-3">
-            인력 또는 비용을 입력하면 정확한 손익이 계산됩니다
-          </div>
-        )}
-      </div>
+      <ResultBlock
+        totalLaborCost={totalLaborCost}
+        totalVariableCost={totalVariableCost}
+        totalCost={totalCost}
+        netProfit={netProfit}
+        profitRatio={profitRatio}
+      />
 
       {/* ============ 메모 (펼침 토글) ============ */}
       {showMemo && (
@@ -678,7 +803,7 @@ export function ProjectRowExpand({
           {memo ? '메모 보기/수정' : '메모 추가'}
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {project.status === 'in-progress' && (
             <button
               onClick={handleCompleteClick}
@@ -689,16 +814,31 @@ export function ProjectRowExpand({
             </button>
           )}
 
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            className="bg-teal-600 text-white px-5 py-2 rounded-lg font-medium
-                       hover:bg-teal-700 disabled:bg-slate-300 disabled:cursor-not-allowed
-                       transition-colors flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            저장
-          </button>
+          <div className="flex items-center gap-2">
+            {!hasChanges && !isSaving && (
+              <span className="text-[11px] text-slate-400">변경사항 없음</span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="bg-teal-600 text-white px-5 py-2 rounded-lg font-medium
+                         hover:bg-teal-700 active:bg-teal-800
+                         disabled:bg-slate-300 disabled:cursor-not-allowed
+                         transition-colors flex items-center gap-2 shadow-sm"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  저장 중...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  저장
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

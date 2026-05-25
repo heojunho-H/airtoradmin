@@ -966,19 +966,21 @@ function ProjectTableRow({
       {isExpanded && (
         <tr>
           <td colSpan={colCount} className="p-0">
-            <ProjectRowExpand
-              project={p}
-              laborRates={laborRates}
-              similarProjects={similarProjects}
-              availableSubcontractors={availableSubcontractors}
-              totalQuantity={totalQuantity}
-              detailedQuantity={detailedQuantity}
-              inquiryDate={inquiryDate}
-              onSave={onSave}
-              onComplete={onComplete}
-              onAiAdopted={onAiAdopted}
-              onNotification={onNotification}
-            />
+            <div className="border-l-4 border-teal-400">
+              <ProjectRowExpand
+                project={p}
+                laborRates={laborRates}
+                similarProjects={similarProjects}
+                availableSubcontractors={availableSubcontractors}
+                totalQuantity={totalQuantity}
+                detailedQuantity={detailedQuantity}
+                inquiryDate={inquiryDate}
+                onSave={onSave}
+                onComplete={onComplete}
+                onAiAdopted={onAiAdopted}
+                onNotification={onNotification}
+              />
+            </div>
           </td>
         </tr>
       )}
