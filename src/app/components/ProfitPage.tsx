@@ -24,7 +24,7 @@ import {
 import * as XLSX from 'xlsx';
 import { LaborRateCard, type LaborRate, type LaborRole } from './LaborRateCard';
 import { ProjectRowExpand, type ExtraLaborEntry } from './ProjectRowExpand';
-import { suggestProjectStaffing, type StaffingSuggestion } from '../../lib/gemini';
+import { suggestProjectStaffing, type StaffingSuggestion } from '../../lib/claude-staffing';
 import {
   computeLearningStats,
   type ProjectForLearning,
