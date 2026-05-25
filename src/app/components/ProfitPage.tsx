@@ -161,11 +161,23 @@ function formatPct(fraction: number): string {
   return (fraction * 100).toFixed(1) + '%';
 }
 
-function ratioColorClass(fraction: number): string {
-  if (fraction >= 0.3) return 'text-blue-700';
-  if (fraction >= 0.1) return 'text-amber-600';
-  if (fraction >= 0) return 'text-orange-600';
+// 순익률 4단계 색상 — 30%↑ emerald / 10~30% teal / 0~10% amber / 적자 red
+function profitRatioColor(ratio: number): string {
+  if (ratio >= 0.30) return 'text-emerald-600';
+  if (ratio >= 0.10) return 'text-teal-600';
+  if (ratio >= 0)    return 'text-amber-600';
   return 'text-red-600';
+}
+
+// 인건비 0이거나 인력배치 미입력이면 결과 수치는 의미 없음 → 슬레이트 톤다운
+function shouldDimResult(project: Project): boolean {
+  return (project.laborCost ?? 0) === 0 || !project.workerAssignments;
+}
+
+// 셀에서 사용 — dim일 때 슬레이트로 덮음
+function ratioColorClass(project: Project): string {
+  if (shouldDimResult(project)) return 'text-slate-400';
+  return profitRatioColor(project.profitRatio);
 }
 
 // ============================================================
@@ -364,6 +376,14 @@ export function ProfitPage({
     if (!customer?.workHistory) return undefined;
     const entry = customer.workHistory.find((w: any) => w.dealId === project.workHistoryDealId);
     return entry?.detailedQuantity || undefined;
+  };
+
+  const getProjectInquiryDate = (project: Project): string | undefined => {
+    if (!project.workHistoryDealId || !project.customerId) return undefined;
+    const customer = customers.find((c: any) => c.id === project.customerId);
+    if (!customer?.workHistory) return undefined;
+    const entry = customer.workHistory.find((w: any) => w.dealId === project.workHistoryDealId);
+    return entry?.inquiryDate || undefined;
   };
 
   const getSimilarProjects = (project: Project): SimilarProjectRef[] => {
@@ -718,6 +738,7 @@ export function ProfitPage({
               availableSubcontractors={availableSubs}
               totalQuantity={getProjectTotalQuantity(p)}
               detailedQuantity={getProjectDetailedQuantity(p)}
+              inquiryDate={getProjectInquiryDate(p)}
               onSave={(updates) => handleUpdateProject(p.id, updates)}
               onComplete={() => handleCompleteProject(p.id)}
               onAiAdopted={(s) => handleAdoptAiSuggestion(p.id, s)}
@@ -741,13 +762,10 @@ export function ProfitPage({
                     서비스
                   </th>
                   <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    순매출
+                    견적금액
                   </th>
                   <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
                     인건비
-                  </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    매출대비 인건비
                   </th>
                   <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
                     순이익
@@ -770,7 +788,7 @@ export function ProfitPage({
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredProjects.map((p) => {
-                  const colCount = activeTab === 'completed' ? 11 : 9;
+                  const colCount = activeTab === 'completed' ? 10 : 8;
                   return (
                     <ProjectTableRow
                       key={p.id}
@@ -786,6 +804,7 @@ export function ProfitPage({
                       availableSubcontractors={availableSubs}
                       totalQuantity={getProjectTotalQuantity(p)}
                       detailedQuantity={getProjectDetailedQuantity(p)}
+                      inquiryDate={getProjectInquiryDate(p)}
                       colCount={colCount}
                       onSave={(updates) => handleUpdateProject(p.id, updates)}
                       onComplete={() => handleCompleteProject(p.id)}
@@ -817,6 +836,7 @@ interface RowProps {
   availableSubcontractors: AvailableSubcontractor[];
   totalQuantity: number;
   detailedQuantity?: string;
+  inquiryDate?: string;
   colCount: number;
   onSave: (updates: Partial<Project>) => void;
   onComplete: () => void;
@@ -835,6 +855,7 @@ function ProjectTableRow({
   availableSubcontractors,
   totalQuantity,
   detailedQuantity,
+  inquiryDate,
   colCount,
   onSave,
   onComplete,
@@ -865,20 +886,27 @@ function ProjectTableRow({
           <span className="text-sm text-slate-700">{p.serviceType || '-'}</span>
         </td>
         <td className="px-4 py-4 text-right">
-          <span className="text-sm font-semibold text-slate-900">
-            ₩{formatAmount(p.netRevenue)}
+          <span className="text-sm font-semibold text-slate-900 tabular-nums">
+            ₩{formatAmount(p.quotationAmount)}
           </span>
         </td>
         <td className="px-4 py-4 text-right">
-          <span className="text-sm text-slate-700">₩{formatAmount(p.laborCost)}</span>
-        </td>
-        <td className="px-4 py-4 text-right">
-          <span className="text-sm text-slate-600">{formatPct(p.laborCostRatio)}</span>
+          <span
+            className={`text-sm tabular-nums ${
+              shouldDimResult(p) ? 'text-slate-400' : 'text-slate-700'
+            }`}
+          >
+            ₩{formatAmount(p.laborCost)}
+          </span>
         </td>
         <td className="px-4 py-4 text-right">
           <span
-            className={`text-sm font-semibold ${
-              p.netProfit >= 0 ? 'text-slate-900' : 'text-red-600'
+            className={`text-sm font-semibold tabular-nums ${
+              shouldDimResult(p)
+                ? 'text-slate-400'
+                : p.netProfit >= 0
+                  ? 'text-slate-900'
+                  : 'text-red-600'
             }`}
           >
             ₩{formatAmount(p.netProfit)}
@@ -886,9 +914,7 @@ function ProjectTableRow({
         </td>
         <td className="px-4 py-4 text-right">
           <span
-            className={`inline-flex items-center gap-1 text-sm font-bold ${ratioColorClass(
-              p.profitRatio,
-            )}`}
+            className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${ratioColorClass(p)}`}
           >
             {formatPct(p.profitRatio)}
             {p.aiApplied && <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
@@ -947,6 +973,7 @@ function ProjectTableRow({
               availableSubcontractors={availableSubcontractors}
               totalQuantity={totalQuantity}
               detailedQuantity={detailedQuantity}
+              inquiryDate={inquiryDate}
               onSave={onSave}
               onComplete={onComplete}
               onAiAdopted={onAiAdopted}
@@ -973,6 +1000,7 @@ function ProjectMobileCard({
   availableSubcontractors,
   totalQuantity,
   detailedQuantity,
+  inquiryDate,
   onSave,
   onComplete,
   onAiAdopted,
@@ -1012,16 +1040,20 @@ function ProjectMobileCard({
 
         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-100">
           <div>
-            <p className="text-[11px] text-slate-500 font-medium">순매출</p>
-            <p className="text-[14px] font-semibold text-slate-900 mt-1">
-              ₩{formatKRWShort(p.netRevenue)}
+            <p className="text-[11px] text-slate-500 font-medium">견적금액</p>
+            <p className="text-[14px] font-semibold text-slate-900 mt-1 tabular-nums">
+              ₩{formatKRWShort(p.quotationAmount)}
             </p>
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-medium">순이익</p>
             <p
-              className={`text-[14px] font-semibold mt-1 ${
-                p.netProfit >= 0 ? 'text-slate-900' : 'text-red-600'
+              className={`text-[14px] font-semibold mt-1 tabular-nums ${
+                shouldDimResult(p)
+                  ? 'text-slate-400'
+                  : p.netProfit >= 0
+                    ? 'text-slate-900'
+                    : 'text-red-600'
               }`}
             >
               ₩{formatKRWShort(p.netProfit)}
@@ -1029,7 +1061,7 @@ function ProjectMobileCard({
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-medium">순익률</p>
-            <p className={`text-[14px] font-bold mt-1 ${ratioColorClass(p.profitRatio)}`}>
+            <p className={`text-[14px] font-bold mt-1 tabular-nums ${ratioColorClass(p)}`}>
               {formatPct(p.profitRatio)}
             </p>
           </div>
@@ -1051,6 +1083,7 @@ function ProjectMobileCard({
           availableSubcontractors={availableSubcontractors}
           totalQuantity={totalQuantity}
           detailedQuantity={detailedQuantity}
+          inquiryDate={inquiryDate}
           onSave={onSave}
           onComplete={onComplete}
           onAiAdopted={onAiAdopted}
