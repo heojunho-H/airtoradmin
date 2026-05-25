@@ -1,7 +1,7 @@
 // 손익 관리 (프로젝트 관리) 페이지
 // SalesPage/CustomersPage 디자인 패턴 채택: p-4 md:p-8 space-y-, KPI 32px, uppercase 헤더, blue 강조
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -19,6 +19,7 @@ import {
   Calendar,
   Building2,
   Package,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { LaborRateCard, type LaborRate, type LaborRole } from './LaborRateCard';
@@ -27,8 +28,12 @@ import {
   type SimilarProjectRef,
 } from './AiStaffingModal';
 import { ProjectRowExpand, type ExtraLaborEntry } from './ProjectRowExpand';
-import type { StaffingSuggestion } from '../../lib/gemini';
-import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments } from '../../lib/roles';
+import { suggestProjectStaffing, type StaffingSuggestion } from '../../lib/gemini';
+import {
+  computeLearningStats,
+  type ProjectForLearning,
+} from '../../lib/staffing-learning';
+import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments, type RoleCode } from '../../lib/roles';
 
 // ============================================================
 // 타입
@@ -185,6 +190,31 @@ function shouldDimResult(project: Project): boolean {
 function ratioColorClass(project: Project): string {
   if (shouldDimResult(project)) return 'text-slate-400';
   return profitRatioColor(project.profitRatio);
+}
+
+// ============================================================
+// 단가 캐스케이드 — yearMonth 정확 매칭 → 12개월 이내 직전월 → 0
+// LaborRateCard.resolveRate 와 동일 로직 (Step 4 AI 자동 호출용)
+// ============================================================
+function resolveCurrentRates(
+  laborRates: LaborRate[],
+  yearMonth: string,
+): Record<RoleCode, number> {
+  const result = {} as Record<RoleCode, number>;
+  for (const role of ROLE_ORDER) {
+    const exact = laborRates.find(
+      (r) => r.yearMonth === yearMonth && r.role === role,
+    );
+    if (exact) {
+      result[role] = exact.dailyRate;
+      continue;
+    }
+    const fallback = laborRates
+      .filter((r) => r.role === role && r.yearMonth < yearMonth)
+      .sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))[0];
+    result[role] = fallback?.dailyRate || 0;
+  }
+  return result;
 }
 
 // ============================================================
@@ -422,6 +452,239 @@ export function ProfitPage({
   }));
 
   // ============================================================
+  // Phase 1.7 / Step 4 — AI 자동 호출 매니저
+  //   - 영업확정으로 status=in-progress, ai_status=pending 인 프로젝트 자동 탐지
+  //   - 큐에 적재 → MAX_PARALLEL_AI_CALLS 동시 처리 → 결과 저장
+  //   - failed 는 사용자 수동 재시도(handleReRunAi)만 허용 (자동 재시도 금지)
+  // ============================================================
+  const MAX_PARALLEL_AI_CALLS = 3;
+  const AI_CALL_TIMEOUT_MS = 30000;
+
+  const [aiQueue, setAiQueue] = useState<{
+    processing: Set<number>;
+    pending: number[];
+  }>({ processing: new Set<number>(), pending: [] });
+
+  // processNext 는 useCallback([]) 라 첫 렌더 클로저를 갖는다.
+  // runAiSuggestionForProject 는 매 렌더마다 새로 정의되어 latest projects/laborRates/subcontractors 를 캡처.
+  // 둘을 연결하기 위해 ref 로 latest runner 를 동기화.
+  const runAiRef = useRef<((id: number) => Promise<void>) | null>(null);
+
+  /**
+   * 자동 호출 대상 식별:
+   *   - status='in-progress' AND ai_status='pending'
+   *   - ai_status 없는 옛 행 폴백: workerAssignments 비어있고 !aiApplied
+   */
+  const findPendingAiProjects = useCallback((): number[] => {
+    return projects
+      .filter((p) => {
+        if (p.status !== 'in-progress') return false;
+        if (p.aiStatus === 'pending') return true;
+        if (
+          p.aiStatus === 'success' ||
+          p.aiStatus === 'manual' ||
+          p.aiStatus === 'generating' ||
+          p.aiStatus === 'failed'
+        ) {
+          return false;
+        }
+        // ai_status 컬럼 없는 옛 행 폴백
+        const wa = p.workerAssignments;
+        let hasAssignments = false;
+        if (wa && typeof wa === 'object') {
+          for (const r of ROLE_ORDER) {
+            if (((wa as Record<string, unknown>)[r] as number) > 0) {
+              hasAssignments = true;
+              break;
+            }
+          }
+        }
+        return !hasAssignments && !p.aiApplied;
+      })
+      .map((p) => p.id);
+  }, [projects]);
+
+  const enqueuePendingAi = useCallback(() => {
+    const pending = findPendingAiProjects();
+    if (pending.length === 0) return;
+    setAiQueue((prev) => {
+      const existing = new Set<number>([...prev.pending, ...prev.processing]);
+      const newPending = pending.filter((id) => !existing.has(id));
+      if (newPending.length === 0) return prev;
+      return { ...prev, pending: [...prev.pending, ...newPending] };
+    });
+  }, [findPendingAiProjects]);
+
+  const releaseAiSlot = useCallback((projectId: number) => {
+    setAiQueue((prev) => {
+      if (!prev.processing.has(projectId)) return prev;
+      const np = new Set(prev.processing);
+      np.delete(projectId);
+      return { ...prev, processing: np };
+    });
+  }, []);
+
+  // 단일 프로젝트 AI 호출 실행 — 매 렌더 재정의 (latest 캡처).
+  // - useCallback 미적용: deps 추적 비용 > re-create 비용. ref 로 latest 연결.
+  const runAiSuggestionForProject = async (projectId: number): Promise<void> => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) {
+      releaseAiSlot(projectId);
+      return;
+    }
+
+    try {
+      // 1) 락 — ai_status='generating' (낙관적 + PUT)
+      await updateProject(projectId, { aiStatus: 'generating' });
+
+      // 2) 학습 통계 — 완료 프로젝트를 totalQuantity enrich 후 전달
+      const totalQuantity = getProjectTotalQuantity(project);
+      const detailedQuantity = getProjectDetailedQuantity(project);
+
+      const completedEnriched: ProjectForLearning[] = projects
+        .filter((p) => p.status === 'completed')
+        .map((p) => ({ ...p, totalQuantity: getProjectTotalQuantity(p) }));
+
+      const learningStats = computeLearningStats(
+        completedEnriched,
+        project.serviceType,
+        totalQuantity,
+      );
+
+      // 3) 단가 조회 (workDate 기준 월, 없으면 현재 월)
+      const ym = (project.workDate || new Date().toISOString()).substring(0, 7);
+      const rates = resolveCurrentRates(laborRates, ym);
+
+      // 4) Gemini 호출 — 30초 타임아웃 race
+      const suggestion = await Promise.race<StaffingSuggestion>([
+        suggestProjectStaffing({
+          service: project.serviceType,
+          totalQuantity,
+          detailedQuantity,
+          netRevenue: project.netRevenue,
+          laborRates: rates,
+          learningStats,
+          availableSubcontractors: (subcontractors || [])
+            .filter((s: any) => s.status === 'available')
+            .slice(0, 10)
+            .map((s: any) => ({
+              name: s.name,
+              grade: s.grade,
+              cooperationScore: s.cooperationScore || 0,
+              ongoingProjects: s.ongoingProjects || 0,
+            })),
+          targetProfitRatio: 0.40,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('AI 호출 타임아웃 (30초)')),
+            AI_CALL_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+
+      // 5) 결과 저장 — 자동 생성이지 사용자 채택 아님 (aiApplied=false)
+      await updateProject(projectId, {
+        workerAssignments: suggestion.assignments,
+        aiSuggestion: JSON.stringify(suggestion),
+        aiApplied: false,
+        aiStatus: 'success',
+        aiAttemptedAt: new Date().toISOString().substring(0, 19).replace('T', ' '),
+        aiInfluence: suggestion.learningInfluence || 'none',
+      });
+
+      onNotification?.(
+        `[${project.projectName || project.serviceType}] AI 인력 초안 생성 완료`,
+      );
+    } catch (error: any) {
+      console.error(`[AI ${projectId}] 호출 실패:`, error);
+      try {
+        await updateProject(projectId, {
+          aiStatus: 'failed',
+          aiError: (error?.message || '알 수 없는 오류').substring(0, 500),
+          aiAttemptedAt: new Date().toISOString().substring(0, 19).replace('T', ' '),
+        });
+      } catch {
+        // updateProject 자체 실패 시 무시 — 다음 fetchProjects 에서 회복
+      }
+    } finally {
+      releaseAiSlot(projectId);
+      try {
+        const refreshed = await fetchProjects();
+        setProjects(refreshed);
+      } catch {
+        // 새 fetch 실패는 다음 useEffect 회복에 위임
+      }
+    }
+  };
+
+  // 매 렌더 후 runAiRef 갱신 — processNext 의 stale closure 방지
+  useEffect(() => {
+    runAiRef.current = runAiSuggestionForProject;
+  });
+
+  /**
+   * 큐 처리 — 빈 슬롯이 있으면 다음 작업 시작.
+   * setState 콜백 안의 사이드이펙트는 queueMicrotask 로 분리 (React 18 안전).
+   */
+  const processNext = useCallback(() => {
+    setAiQueue((prev) => {
+      const slotsAvailable = MAX_PARALLEL_AI_CALLS - prev.processing.size;
+      if (slotsAvailable <= 0 || prev.pending.length === 0) return prev;
+
+      const toStart = prev.pending.slice(0, slotsAvailable);
+      const remaining = prev.pending.slice(slotsAvailable);
+
+      const run = runAiRef.current;
+      if (run) {
+        queueMicrotask(() => {
+          for (const id of toStart) {
+            run(id).catch(() => {});
+          }
+        });
+      }
+
+      return {
+        processing: new Set<number>([...prev.processing, ...toStart]),
+        pending: remaining,
+      };
+    });
+  }, []);
+
+  /**
+   * 사용자 수동 재시도 (Step 5에서 UI 연결 예정).
+   * failed 상태 → pending 으로 리셋 → useEffect 가 큐로 재진입.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleReRunAi = useCallback(
+    (projectId: number) => {
+      updateProject(projectId, { aiStatus: 'pending', aiError: '' })
+        .then(() => fetchProjects())
+        .then((refreshed) => setProjects(refreshed))
+        .catch((err) => {
+          console.error(err);
+          onNotification?.('AI 재시도 요청 실패');
+        });
+    },
+    [onNotification, setProjects],
+  );
+
+  // projects 변경 시 새 pending 발견 → 큐 적재
+  useEffect(() => {
+    enqueuePendingAi();
+  }, [projects, enqueuePendingAi]);
+
+  // 큐 변경 시 슬롯 가용하면 다음 처리 트리거
+  useEffect(() => {
+    if (
+      aiQueue.pending.length > 0 &&
+      aiQueue.processing.size < MAX_PARALLEL_AI_CALLS
+    ) {
+      processNext();
+    }
+  }, [aiQueue.pending, aiQueue.processing, processNext]);
+
+  // ============================================================
   // 파생 데이터 — KPI / 필터
   // ============================================================
   const inProgressProjects = projects.filter((p) => p.status === 'in-progress');
@@ -621,6 +884,23 @@ export function ProfitPage({
           </div>
         </div>
       </div>
+
+      {/* AI 자동 호출 상태 인디케이터 (큐에 작업이 있을 때만) */}
+      {(aiQueue.processing.size > 0 || aiQueue.pending.length > 0) && (
+        <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200
+                        rounded-lg px-4 py-3 flex items-center gap-3">
+          <Sparkles className="w-5 h-5 text-teal-600 animate-pulse flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-teal-700">
+              AI가 인력 초안을 생성 중입니다
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              진행 중 {aiQueue.processing.size}건 · 대기 {aiQueue.pending.length}건
+            </div>
+          </div>
+          <Loader2 className="w-4 h-4 text-teal-500 animate-spin flex-shrink-0" />
+        </div>
+      )}
 
       {/* Labor Rate Card — 진행중 탭에서만 노출 */}
       {activeTab === 'in-progress' && (
