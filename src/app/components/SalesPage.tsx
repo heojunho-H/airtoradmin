@@ -633,6 +633,14 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
 
+    // 수주확정 전환 시 확정작업일 필수 — 프로젝트 관리 페이지 정렬 기준이라
+    // 비어 있으면 신규 프로젝트가 목록 최하단에 매장됨
+    if (newStatus === 'confirmed' && !targetDeal.confirmedWorkDate?.trim()) {
+      alert('수주확정 처리하려면 확정작업일을 먼저 입력해야 합니다.\n상세 모달을 열어 확정작업일을 입력한 뒤 다시 시도해주세요.');
+      setEditingStatusId(null);
+      return;
+    }
+
     const updatedDeal = {
       ...targetDeal,
       status: newStatus,
@@ -669,6 +677,13 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   const handleSuccessStatusChange = async (dealId: number, newSuccessStatus: Deal['successStatus']) => {
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
+
+    // 성공 전환 시 확정작업일 필수 (수주확정과 동일 사유)
+    if (newSuccessStatus === 'success' && !targetDeal.confirmedWorkDate?.trim()) {
+      alert('성공 처리하려면 확정작업일을 먼저 입력해야 합니다.\n상세 모달을 열어 확정작업일을 입력한 뒤 다시 시도해주세요.');
+      setEditingSuccessStatusId(null);
+      return;
+    }
 
     const updatedDeal = { ...targetDeal, successStatus: newSuccessStatus };
 
@@ -733,6 +748,13 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
 
   const handleSaveEdit = async () => {
     if (editedDeal) {
+      // 수주확정/성공으로 가는 저장은 확정작업일 필수
+      const goingToSuccess =
+        editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
+      if (goingToSuccess && !editedDeal.confirmedWorkDate?.trim()) {
+        alert('수주확정 처리하려면 확정작업일을 입력해야 합니다.');
+        return;
+      }
       if (isAddingNewDeal) {
         // 필수 입력: 기업명
         if (!editedDeal.company.trim()) {
