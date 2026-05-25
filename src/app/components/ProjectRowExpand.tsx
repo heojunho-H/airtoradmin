@@ -16,6 +16,7 @@ import {
   Users,
   Receipt,
   Loader2,
+  Plus,
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
@@ -34,9 +35,16 @@ import {
 } from '../../lib/roles';
 import { formatDetailedQuantity } from '../../lib/quantity';
 
+// 자유 입력 추가 인력 (5개 고정 역할 외 특이 상황 대응용)
+export interface ExtraLaborEntry {
+  label: string;      // 자유 입력 역할명 (예: "외주반장")
+  dailyRate: number;  // 1인 1일 단가
+  count: number;      // 인원수
+}
+
 // 폼이 부모에게 PUT-ready로 넘기는 필드만 정의 (서버 파생지표는 별도 recompute)
 export interface ProjectFormState {
-  workerAssignments: RoleAssignments & { days: number };
+  workerAssignments: RoleAssignments & { days: number; extras?: ExtraLaborEntry[] };
   mealCost: number;
   transportCost: number;
   otherCost: number;
@@ -47,7 +55,9 @@ export interface ProjectFormState {
 export interface ProjectForExpand extends ProjectRefForStaffing {
   workDate: string;
   status: 'in-progress' | 'completed';
-  workerAssignments: (RoleAssignments & { days: number }) | null;
+  workerAssignments:
+    | (RoleAssignments & { days: number; extras?: ExtraLaborEntry[] })
+    | null;
   laborCost: number;
   mealCost: number;
   transportCost: number;
@@ -197,6 +207,103 @@ function RoleInputCard({
           <span
             className={`text-base font-bold tabular-nums ${
               hasInput ? 'text-teal-700' : 'text-slate-300'
+            }`}
+          >
+            ₩{formatKRW(subtotal)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ExtraRoleCard — 자유 입력 추가 인력 1개 (역할명 / 1인 1일 단가 / 인원수)
+//   특이 상황 (외주, 비표준 역할 등) 대응용. 5역할 카드와 시각 언어는 통일하되
+//   amber 톤 + dashed 보더로 "사용자 정의" 신호.
+// ============================================================
+function ExtraRoleCard({
+  entry,
+  days,
+  onChange,
+  onRemove,
+}: {
+  entry: ExtraLaborEntry;
+  days: number;
+  onChange: (next: ExtraLaborEntry) => void;
+  onRemove: () => void;
+}) {
+  const subtotal = (entry.dailyRate || 0) * (entry.count || 0) * (days || 0);
+  const hasInput = entry.count > 0 && days > 0 && entry.dailyRate > 0;
+  const dailyRateFormatted = entry.dailyRate > 0 ? entry.dailyRate.toLocaleString('ko-KR') : '';
+
+  return (
+    <div className="bg-white border border-dashed border-amber-300 rounded-lg p-4 relative hover:border-amber-400 transition">
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-2 right-2 p-1 rounded text-slate-400 hover:bg-red-50 hover:text-red-500"
+        aria-label="이 항목 삭제"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 역할명 + 단가 입력 */}
+      <div className="mb-3 pr-6">
+        <input
+          type="text"
+          value={entry.label}
+          onChange={(e) => onChange({ ...entry, label: e.target.value })}
+          placeholder="역할명 (예: 외주반장)"
+          className="w-full text-sm font-semibold text-slate-900 bg-transparent
+                     border-b border-amber-200 focus:border-amber-500
+                     focus:outline-none pb-0.5 placeholder:text-slate-300 placeholder:font-normal"
+        />
+        <div className="flex items-center gap-1 mt-1.5">
+          <span className="text-[11px] text-slate-400">₩</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={dailyRateFormatted}
+            placeholder="0"
+            onChange={(e) => {
+              const raw = e.target.value.replace(/[^0-9]/g, '');
+              onChange({ ...entry, dailyRate: parseInt(raw) || 0 });
+            }}
+            className="flex-1 text-[11px] tabular-nums text-slate-600
+                       border-0 bg-transparent focus:outline-none p-0 placeholder:text-slate-300"
+          />
+          <span className="text-[11px] text-slate-400 whitespace-nowrap">/일</span>
+        </div>
+      </div>
+
+      {/* 인원수 input = subtotal */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-shrink-0" style={{ width: '72px' }}>
+          <input
+            type="number"
+            min={0}
+            value={entry.count}
+            onChange={(e) =>
+              onChange({ ...entry, count: Math.max(0, parseInt(e.target.value) || 0) })
+            }
+            className="w-full text-center text-base font-semibold
+                       border border-slate-300 rounded px-2 py-1.5 pr-7
+                       focus:outline-none focus:border-amber-500
+                       tabular-nums"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2
+                           text-xs text-slate-400 pointer-events-none">
+            명
+          </span>
+        </div>
+
+        <span className="text-slate-400 text-sm flex-shrink-0">=</span>
+
+        <div className="flex-1 text-right min-w-0">
+          <span
+            className={`text-base font-bold tabular-nums ${
+              hasInput ? 'text-amber-700' : 'text-slate-300'
             }`}
           >
             ₩{formatKRW(subtotal)}
@@ -519,6 +626,17 @@ export function ProjectRowExpand({
     return base;
   });
   const [days, setDays] = useState<number>(Number(initial.days) || 1);
+  const [extras, setExtras] = useState<ExtraLaborEntry[]>(() => {
+    const raw = (project.workerAssignments as { extras?: unknown } | null)?.extras;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+      .map((e) => ({
+        label: typeof e.label === 'string' ? e.label : '',
+        dailyRate: Number(e.dailyRate) || 0,
+        count: Number(e.count) || 0,
+      }));
+  });
   const [mealCost, setMealCost] = useState(project.mealCost);
   const [transportCost, setTransportCost] = useState(project.transportCost);
   const [otherCost, setOtherCost] = useState(project.otherCost);
@@ -543,8 +661,10 @@ export function ProjectRowExpand({
     return r;
   }, [laborRates, yearMonth]);
 
-  // 즉시 계산
-  const totalWorkers = ROLE_ORDER.reduce((s, r) => s + (assignments[r] || 0), 0);
+  // 즉시 계산 — extras 포함
+  const extrasWorkers = extras.reduce((s, e) => s + (e.count || 0), 0);
+  const totalWorkers =
+    ROLE_ORDER.reduce((s, r) => s + (assignments[r] || 0), 0) + extrasWorkers;
   const laborBreakdown = useMemo(() => {
     return ROLE_ORDER.reduce(
       (acc, role) => {
@@ -557,28 +677,43 @@ export function ProjectRowExpand({
     );
   }, [assignments, days, resolved]);
 
-  const totalLaborCost = ROLE_ORDER.reduce(
-    (s, r) => s + (laborBreakdown[r]?.subtotal || 0),
+  const extrasLaborCost = extras.reduce(
+    (s, e) => s + (e.dailyRate || 0) * (e.count || 0) * (days || 0),
     0,
   );
+  const totalLaborCost =
+    ROLE_ORDER.reduce((s, r) => s + (laborBreakdown[r]?.subtotal || 0), 0) +
+    extrasLaborCost;
   const totalVariableCost = (mealCost || 0) + (transportCost || 0) + (otherCost || 0);
   const totalCost = totalLaborCost + totalVariableCost;
   const netProfit = project.netRevenue - totalCost;
   const profitRatio = project.netRevenue > 0 ? netProfit / project.netRevenue : 0;
 
-  // hasChanges — 폼 현재값 vs 원본
+  // hasChanges — 폼 현재값 vs 원본 (extras 포함)
   const hasChanges = useMemo(() => {
     const originalAssignments = emptyRoleAssignments();
     let originalDays = 1;
+    let originalExtras: ExtraLaborEntry[] = [];
     if (project.workerAssignments && typeof project.workerAssignments === 'object') {
       for (const r of ROLE_ORDER) {
         originalAssignments[r] = Number(project.workerAssignments[r]) || 0;
       }
       originalDays = Number(project.workerAssignments.days) || 1;
+      const rawExtras = (project.workerAssignments as { extras?: unknown }).extras;
+      if (Array.isArray(rawExtras)) {
+        originalExtras = rawExtras
+          .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+          .map((e) => ({
+            label: typeof e.label === 'string' ? e.label : '',
+            dailyRate: Number(e.dailyRate) || 0,
+            count: Number(e.count) || 0,
+          }));
+      }
     }
     const current = JSON.stringify({
       assignments,
       days,
+      extras,
       mealCost,
       transportCost,
       otherCost,
@@ -587,16 +722,27 @@ export function ProjectRowExpand({
     const orig = JSON.stringify({
       assignments: originalAssignments,
       days: originalDays,
+      extras: originalExtras,
       mealCost: project.mealCost,
       transportCost: project.transportCost,
       otherCost: project.otherCost,
       memo: project.memo,
     });
     return current !== orig;
-  }, [assignments, days, mealCost, transportCost, otherCost, memo, project]);
+  }, [assignments, days, extras, mealCost, transportCost, otherCost, memo, project]);
 
   const setRoleCount = (role: RoleCode, n: number) => {
     setAssignments((prev) => ({ ...prev, [role]: Math.max(0, n) }));
+  };
+
+  const addExtra = () => {
+    setExtras((prev) => [...prev, { label: '', dailyRate: 0, count: 0 }]);
+  };
+  const updateExtra = (i: number, next: ExtraLaborEntry) => {
+    setExtras((prev) => prev.map((e, idx) => (idx === i ? next : e)));
+  };
+  const removeExtra = (i: number) => {
+    setExtras((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   const handleSave = async () => {
@@ -604,7 +750,7 @@ export function ProjectRowExpand({
     try {
       await Promise.resolve(
         onSave({
-          workerAssignments: { ...assignments, days },
+          workerAssignments: { ...assignments, days, extras },
           mealCost,
           transportCost,
           otherCost,
@@ -732,6 +878,36 @@ export function ProjectRowExpand({
               onChange={(n) => setRoleCount(role, n)}
             />
           ))}
+        </div>
+
+        {/* 기타 인력 (자유 입력 — 특이 상황 대응) */}
+        <div className="mb-3">
+          {extras.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
+              {extras.map((entry, i) => (
+                <ExtraRoleCard
+                  key={i}
+                  entry={entry}
+                  days={days}
+                  onChange={(next) => updateExtra(i, next)}
+                  onRemove={() => removeExtra(i)}
+                />
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={addExtra}
+            className="text-[13px] text-amber-700 hover:text-amber-800 hover:bg-amber-50
+                       flex items-center gap-1 px-3 py-1.5 rounded
+                       border border-dashed border-amber-300 hover:border-amber-400 transition"
+          >
+            <Plus className="w-4 h-4" />
+            기타 추가
+            <span className="text-[11px] text-slate-400 ml-1">
+              5개 역할 외 자유 입력
+            </span>
+          </button>
         </div>
 
         <LaborSummary

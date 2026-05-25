@@ -153,7 +153,7 @@ function recomputeProjectDerived($conn, $projectId) {
     }
     $stmt->close();
 
-    // 2) workerAssignments 파싱 — 5개 역할 (src/lib/roles.ts와 동기화)
+    // 2) workerAssignments 파싱 — 5개 역할 + extras (src/lib/roles.ts와 동기화)
     $assignments = array(
         'a_grade'    => 0,
         'b_grade'    => 0,
@@ -162,6 +162,7 @@ function recomputeProjectDerived($conn, $projectId) {
         'parts_wash' => 0,
         'days'       => 0,
     );
+    $extras = array(); // [{label, dailyRate, count}] — ProjectRowExpand.tsx의 ExtraLaborEntry
     if ($workerJson) {
         $parsed = json_decode($workerJson, true);
         if (is_array($parsed)) {
@@ -171,6 +172,16 @@ function recomputeProjectDerived($conn, $projectId) {
             if (isset($parsed['dely']))       $assignments['dely']       = intval($parsed['dely']);
             if (isset($parsed['parts_wash'])) $assignments['parts_wash'] = intval($parsed['parts_wash']);
             if (isset($parsed['days']))       $assignments['days']       = intval($parsed['days']);
+            if (isset($parsed['extras']) && is_array($parsed['extras'])) {
+                foreach ($parsed['extras'] as $e) {
+                    if (!is_array($e)) continue;
+                    $extras[] = array(
+                        'label'     => isset($e['label']) ? strval($e['label']) : '',
+                        'dailyRate' => isset($e['dailyRate']) ? intval($e['dailyRate']) : 0,
+                        'count'     => isset($e['count']) ? intval($e['count']) : 0,
+                    );
+                }
+            }
         }
     }
 
@@ -199,6 +210,21 @@ function recomputeProjectDerived($conn, $projectId) {
         );
         $laborCost += $subtotal;
     }
+
+    // 4-1) extras (자유 입력 추가 인력) — 사용자가 입력한 단가/인원 그대로 사용 (캐스케이드 조회 없음)
+    $extrasBreakdown = array();
+    foreach ($extras as $e) {
+        $subtotal = $e['dailyRate'] * $e['count'] * $days;
+        $extrasBreakdown[] = array(
+            'label'    => $e['label'],
+            'rate'     => $e['dailyRate'],
+            'count'    => $e['count'],
+            'days'     => $days,
+            'subtotal' => $subtotal,
+        );
+        $laborCost += $subtotal;
+    }
+    $breakdown['extras'] = $extrasBreakdown;
 
     // 5) 파생지표 계산 — ratio는 fraction (0~1 범위, 소수점 4자리)
     //    AI staffing 응답(StaffingSuggestion.estimatedProfitRatio)·프론트 UI와 단위 일관성 유지.

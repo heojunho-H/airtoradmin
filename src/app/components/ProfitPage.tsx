@@ -26,7 +26,7 @@ import {
   type AvailableSubcontractor,
   type SimilarProjectRef,
 } from './AiStaffingModal';
-import { ProjectRowExpand } from './ProjectRowExpand';
+import { ProjectRowExpand, type ExtraLaborEntry } from './ProjectRowExpand';
 import type { StaffingSuggestion } from '../../lib/gemini';
 import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments } from '../../lib/roles';
 
@@ -47,7 +47,9 @@ export interface Project {
   quotationAmount: number;
   taxAmount: number;
   netRevenue: number;
-  workerAssignments: (RoleAssignments & { days: number }) | null;
+  workerAssignments:
+    | (RoleAssignments & { days: number; extras?: ExtraLaborEntry[] })
+    | null;
   laborBreakdown: Record<LaborRole, { rate: number; count: number; days: number; subtotal: number }> | null;
   laborCost: number;
   mealCost: number;
@@ -275,8 +277,11 @@ export function ProfitPage({
   };
 
   const handleAdoptAiSuggestion = async (projectId: number, suggestion: StaffingSuggestion) => {
+    // AI 추천은 5개 고정 역할만 다루므로 기존 사용자 정의 extras는 보존 (덮어쓰기 방지)
+    const current = projects.find((p) => p.id === projectId);
+    const preservedExtras = current?.workerAssignments?.extras ?? [];
     await handleUpdateProject(projectId, {
-      workerAssignments: suggestion.assignments,
+      workerAssignments: { ...suggestion.assignments, extras: preservedExtras },
       aiSuggestion: JSON.stringify(suggestion),
       aiApplied: true,
     });
