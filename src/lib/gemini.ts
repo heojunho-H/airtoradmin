@@ -1,6 +1,11 @@
 // Gemini AI 서비스 — API 호출 및 데이터 컨텍스트 빌더
 
 import { ROLE_ORDER, ROLE_LABELS, type RoleCode, type RoleAssignments, emptyRoleAssignments } from './roles';
+import {
+  formatLearningContextForPrompt,
+  classifyLearningInfluence,
+  type LearningStats,
+} from './staffing-learning';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -541,6 +546,8 @@ export interface StaffingSuggestion {
   estimatedProfitRatio: number; // fraction (0~1)
   rationale: string;
   warnings: string[];
+  /** Phase 1.7 — 학습 영향도. AI 응답에 없으면 호출 측 또는 본 함수가 보강. */
+  learningInfluence?: 'high' | 'medium' | 'low' | 'none';
 }
 
 export interface StaffingInput {
@@ -549,57 +556,63 @@ export interface StaffingInput {
   detailedQuantity?: string;
   netRevenue: number;
   laborRates: RoleAssignments;          // 역할별 일당 (5개)
-  similarProjects: Array<{
-    service: string;
-    quantity: number;
-    assignments: RoleAssignments & { days: number };
-    profitRatio: number; // fraction (0~1)
-  }>;
+  /** Phase 1.7 — Step 2 computeLearningStats() 결과. similarProjects 배열을 대체. */
+  learningStats: LearningStats;
   availableSubcontractors: Array<{
     name: string;
     grade: 'S' | 'A' | 'B' | 'C';
     cooperationScore: number;
     ongoingProjects: number;
   }>;
-  targetProfitRatio: number; // fraction (0~1)
+  targetProfitRatio: number; // fraction (0~1). 기본 0.40 (40%) — Step 4 호출 측에서 주입.
 }
 
 const STAFFING_SYSTEM_PROMPT = `당신은 에어터(Airtor)의 프로젝트 손익 최적화 컨설턴트입니다.
 B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을 제안합니다.
 
-[역할 정의 — 5개 역할의 일반적 책임]
-a_grade   (A급 분조): 숙련 작업자, 분조 작업의 메인 — 고난도/대형 현장 담당
-b_grade   (B급 분조): 일반 작업자, 분조 작업 보조 — 표준 현장 담당
-pin_wash  (핀세척):   에어컨 핀(Fin) 정밀 세척 전담 — 세척 품질 핵심
-dely      (딜리):     이동·운반·부대 작업 — 현장 지원
-parts_wash(부품세척): 분해된 부품의 별도 세척 — 분해/조립 동반 시 필수
+[역할 정의]
+- a_grade  (A급 분조): 숙련 작업자, 분조 작업 메인, 고난도/대형 현장
+- b_grade  (B급 분조): 일반 작업자, 분조 작업 보조, 표준 현장
+- pin_wash (핀세척): 에어컨 핀 정밀 세척 전담
+- dely     (딜리): 이동·운반·부대 작업
+- parts_wash (부품세척): 분해된 부품 별도 세척
 
-(역할별 정확한 책임은 프로젝트 종류에 따라 달라질 수 있으니
-similarProjects 패턴을 참조해서 유연하게 판단)
+[목표 순익률: 40% — 빡빡한 목표]
+- 목표 달성이 어려운 경우 warnings에 명확히 사유 적기
+- 그래도 가능한 최선의 배치를 제안 (불가능하다고 빈 배치 반환 금지)
+- 적자가 명백한 경우에도 합리적 최소 인력으로 제안 + warning
 
-[추론 4단계 — 반드시 이 순서로 따르세요]
+[추론 5단계 — 반드시 이 순서로 따르세요]
 
-1. 서비스 + 수량 → 필요 역할 조합 추정
-   - 에어컨세척: a_grade + b_grade + pin_wash가 주축, 부품 분해 시 parts_wash 추가
-   - 청소·소독·방제: a_grade + b_grade 위주, 대형/이동 많으면 dely 추가
-   - 어떤 역할도 0명일 수 있음 (서비스 특성에 맞지 않으면)
+1. 학습 데이터 우선 참조
+   - 입력의 학습 데이터 섹션에서 평균 인력 배치를 출발점으로 삼음
+   - 우수 사례에서 가장 비슷한 수량의 케이스를 참조
+   - 사용자 수정 패턴이 있으면 그 방향으로 보정 (예: pin_wash가 +0.7명이면 1명 더 추가)
 
-2. 유사 프로젝트 패턴 매칭
-   - similarProjects 중 동일 service + 수량 차이 ±30% 우선
-   - 수량이 가까운 프로젝트일수록 가중치 ↑ (단순 평균 금지)
-   - 가중 평균 결과의 평균 순익률이 targetProfitRatio 미달이면 인력·일수 줄이는 방향 검토
+2. 수량 기반 조정
+   - 평균 배치가 입력 수량에 맞는지 검증
+   - 수량이 평균의 1.5배면 인력도 1.3~1.5배 (효율 고려)
+   - 수량이 평균의 0.5배면 인력도 0.6~0.7배
 
-3. 작업일수 · 인건비 → 목표 순익률 역산
-   - 인건비 = Σ(role별 인원 × laborRates[role]) × days
-   - profitRatio = (netRevenue - laborCost) / netRevenue
-   - profitRatio < targetProfitRatio면 days 또는 인원을 줄여 비용/매출비 조정
-   - estimatedLaborCost / estimatedNetProfit / estimatedProfitRatio 정확히 계산해 출력
+3. 서비스 특성 반영
+   - 에어컨세척: a_grade + b_grade + pin_wash가 주축
+   - 소독·방제: a_grade + b_grade 위주
+   - 부품 분해 동반 시 parts_wash 추가
+   - 대형 현장(수량 50+): dely 1~2명 추가
 
-4. 가용 인력 검증 + 경고 작성
-   - availableSubcontractors의 등급(S>A>B>C)과 cooperationScore로 충원 가능성 확인
-   - ongoingProjects 적은 인력 우선 매칭, rationale에 반영
-   - 등급 부족/협력점수 낮음/현재 부하 높음이면 warnings에 명시
-   - profitRatio가 여전히 targetProfitRatio 미달이면 warnings에 경고 추가
+4. 가용 인력 매칭
+   - 가용 작업팀장 풀의 등급 분포 확인 (S/A는 a_grade 후보)
+   - ongoingProjects 적은 인력 우선
+   - 매칭 결과를 rationale에 반영
+
+5. 캡 검증 (목표 순익률 40%)
+   - 인건비 = (a_grade*rate1 + b_grade*rate2 + pin_wash*rate3 + dely*rate4 + parts_wash*rate5) * days
+   - 변동비 추정 = 인건비 × 0.12 (식비·교통비 약 12%)
+   - 총비용 = 인건비 + 추정변동비
+   - profitRatio = (netRevenue - 총비용) / netRevenue
+   - profitRatio < 0.40 이면 인력 1회만 재조정 (무한 루프 금지)
+   - 재조정해도 40% 미달이면 warnings에 명시:
+     "목표 순익률 40% 달성 어려움. 견적 인상 또는 인력 최소화 검토 필요"
 
 [출력 형식 — 엄수]
 반드시 다음 스키마의 JSON만 출력. 마크다운 펜스 금지, 설명 금지, 코드 블록 금지.
@@ -615,7 +628,7 @@ similarProjects 패턴을 참조해서 유연하게 판단)
   "estimatedLaborCost": int,
   "estimatedNetProfit": int,
   "estimatedProfitRatio": float (0~1),
-  "rationale": "한국어 3~5문장으로 추론 근거",
+  "rationale": "한국어 3~5문장. 학습 데이터 활용 여부 명시.",
   "warnings": ["문자열 배열, 없으면 빈 배열"]
 }`;
 
@@ -624,12 +637,7 @@ export async function suggestProjectStaffing(input: StaffingInput): Promise<Staf
     (r) => `${ROLE_LABELS[r]} (${r}): ${(input.laborRates[r] ?? 0).toLocaleString()}원/일`,
   ).join('\n');
 
-  const similarLines = input.similarProjects.map((p, i) => {
-    const assignParts = ROLE_ORDER.map(
-      (r) => `${ROLE_LABELS[r]}${p.assignments[r] ?? 0}`,
-    ).join('/');
-    return `${i + 1}. ${p.service} ${p.quantity}대 | ${assignParts}/${p.assignments.days}일 | 순익률${(p.profitRatio * 100).toFixed(0)}%`;
-  }).join('\n');
+  const learningContext = formatLearningContextForPrompt(input.learningStats);
 
   const userContent = `
 서비스: ${input.service}
@@ -641,13 +649,17 @@ ${input.detailedQuantity ? `상세수량: ${input.detailedQuantity}` : ''}
 [역할별 일당 (5개)]
 ${ratesLines}
 
-[과거 유사 프로젝트 (최근 ${input.similarProjects.length}건)]
-${similarLines}
+${learningContext}
 
 [가용 작업팀장 풀]
-${input.availableSubcontractors.map((s) => `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`).join('\n')}
+${input.availableSubcontractors.length > 0
+  ? input.availableSubcontractors.map((s) =>
+      `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`,
+    ).join('\n')
+  : '(가용 인력 정보 없음)'}
 
-위 데이터를 바탕으로 4단계 추론을 거쳐 인력 배치 JSON을 제안하세요.
+위 데이터를 바탕으로 5단계 추론을 거쳐 인력 배치 JSON을 제안하세요.
+목표 순익률 40% 달성을 최우선으로 하되, 학습 데이터를 적극 활용하세요.
 `.trim();
 
   const response = await fetch('/api/gemini', {
@@ -694,6 +706,11 @@ ${input.availableSubcontractors.map((s) => `· ${s.name} (${s.grade}등급, 협�
   }
   parsed.assignments = { ...safe, days: typeof parsed.assignments.days === 'number' ? parsed.assignments.days : 0 };
   if (!parsed.warnings) parsed.warnings = [];
+
+  // learningInfluence 보강 — AI가 응답에 안 넣으면 학습 통계로 분류
+  if (!parsed.learningInfluence) {
+    parsed.learningInfluence = classifyLearningInfluence(input.learningStats);
+  }
 
   return parsed;
 }
