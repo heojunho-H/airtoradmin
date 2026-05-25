@@ -399,14 +399,14 @@ export function ProjectRowExpand({
   const initial =
     project.workerAssignments && typeof project.workerAssignments === 'object'
       ? project.workerAssignments
-      : { ...emptyRoleAssignments(), days: 0 };
+      : { ...emptyRoleAssignments(), days: 1 };
 
   const [assignments, setAssignments] = useState<RoleAssignments>(() => {
     const base = emptyRoleAssignments();
     for (const r of ROLE_ORDER) base[r] = Number(initial[r]) || 0;
     return base;
   });
-  const [days, setDays] = useState<number>(Number(initial.days) || 0);
+  const [days, setDays] = useState<number>(Number(initial.days) || 1);
   const [mealCost, setMealCost] = useState(project.mealCost);
   const [transportCost, setTransportCost] = useState(project.transportCost);
   const [otherCost, setOtherCost] = useState(project.otherCost);
@@ -460,12 +460,12 @@ export function ProjectRowExpand({
   // hasChanges — 폼 현재값 vs 원본
   const hasChanges = useMemo(() => {
     const originalAssignments = emptyRoleAssignments();
-    let originalDays = 0;
+    let originalDays = 1;
     if (project.workerAssignments && typeof project.workerAssignments === 'object') {
       for (const r of ROLE_ORDER) {
         originalAssignments[r] = Number(project.workerAssignments[r]) || 0;
       }
-      originalDays = Number(project.workerAssignments.days) || 0;
+      originalDays = Number(project.workerAssignments.days) || 1;
     }
     const current = JSON.stringify({
       assignments,
