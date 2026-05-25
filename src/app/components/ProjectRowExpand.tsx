@@ -22,13 +22,6 @@ import {
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
-  AiStaffingModal,
-  type ProjectRefForStaffing,
-  type SimilarProjectRef,
-  type AvailableSubcontractor,
-} from './AiStaffingModal';
-import type { StaffingSuggestion } from '../../lib/gemini';
-import {
   ROLE_ORDER,
   ROLE_LABELS,
   type RoleCode,
@@ -54,7 +47,14 @@ export interface ProjectFormState {
 }
 
 // ProjectRowExpand가 다루는 Project 최소 형태
-export interface ProjectForExpand extends ProjectRefForStaffing {
+// Phase 1.7 / Step 6 — AiStaffingModal 삭제로 ProjectRefForStaffing 의존 제거.
+// 필요한 필드는 명시적으로 inline.
+export interface ProjectForExpand {
+  id: number;
+  projectName: string;
+  serviceType: string;
+  netRevenue: number;
+  quotationAmount: number;
   workDate: string;
   status: 'in-progress' | 'completed';
   workerAssignments:
@@ -76,14 +76,11 @@ export interface ProjectForExpand extends ProjectRefForStaffing {
 interface ProjectRowExpandProps {
   project: ProjectForExpand;
   laborRates: LaborRate[];
-  similarProjects: SimilarProjectRef[];
-  availableSubcontractors: AvailableSubcontractor[];
   totalQuantity: number;
   detailedQuantity?: string;
   inquiryDate?: string;
   onSave: (updates: Partial<ProjectFormState>) => void | Promise<void>;
   onComplete: () => void;
-  onAiAdopted: (suggestion: StaffingSuggestion) => void;
   /** Phase 1.7 / Step 5 — failed→pending 리셋 후 자동 큐 재진입 */
   onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
@@ -729,14 +726,11 @@ function ConfirmModal({
 export function ProjectRowExpand({
   project,
   laborRates,
-  similarProjects,
-  availableSubcontractors,
   totalQuantity,
   detailedQuantity,
   inquiryDate,
   onSave,
   onComplete,
-  onAiAdopted,
   onReRunAi,
   onNotification,
 }: ProjectRowExpandProps) {
@@ -768,7 +762,6 @@ export function ProjectRowExpand({
   const [otherCost, setOtherCost] = useState(project.otherCost);
   const [memo, setMemo] = useState(project.memo);
   const [showMemo, setShowMemo] = useState(false);
-  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -895,22 +888,6 @@ export function ProjectRowExpand({
     }
     setShowCompleteConfirm(true);
   };
-
-  const handleAiAdopt = (suggestion: StaffingSuggestion) => {
-    const next = emptyRoleAssignments();
-    for (const r of ROLE_ORDER) next[r] = Number(suggestion.assignments[r]) || 0;
-    setAssignments(next);
-    setDays(Number(suggestion.assignments.days) || 1);
-    onAiAdopted(suggestion);
-    onNotification?.('AI 추천 채택 — 인력 배치 prefill 완료');
-  };
-
-  // 단가 표시 (배지용)
-  const ratesForAi: RoleAssignments = useMemo(() => {
-    const r = emptyRoleAssignments();
-    for (const role of ROLE_ORDER) r[role] = resolved[role]?.rate || 0;
-    return r;
-  }, [resolved]);
 
   const totalQuantitySub = formatDetailedQuantity(detailedQuantity);
 
@@ -1154,20 +1131,6 @@ export function ProjectRowExpand({
           </div>
         </div>
       </div>
-
-      {/* AI 인력 추천 모달 */}
-      <AiStaffingModal
-        isOpen={aiModalOpen}
-        onClose={() => setAiModalOpen(false)}
-        project={project}
-        totalQuantity={totalQuantity}
-        detailedQuantity={detailedQuantity}
-        laborRates={ratesForAi}
-        similarProjects={similarProjects}
-        availableSubcontractors={availableSubcontractors}
-        targetProfitRatio={0.3}
-        onAdopt={handleAiAdopt}
-      />
 
       {/* 완료 처리 확인 모달 */}
       {showCompleteConfirm && (

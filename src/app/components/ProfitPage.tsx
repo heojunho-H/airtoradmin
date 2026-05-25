@@ -23,10 +23,6 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { LaborRateCard, type LaborRate, type LaborRole } from './LaborRateCard';
-import {
-  type AvailableSubcontractor,
-  type SimilarProjectRef,
-} from './AiStaffingModal';
 import { ProjectRowExpand, type ExtraLaborEntry } from './ProjectRowExpand';
 import { suggestProjectStaffing, type StaffingSuggestion } from '../../lib/gemini';
 import {
@@ -311,17 +307,6 @@ export function ProfitPage({
     await handleUpdateProject(id, { status: 'completed', completedReason: 'manual' });
   };
 
-  const handleAdoptAiSuggestion = async (projectId: number, suggestion: StaffingSuggestion) => {
-    // AI 추천은 5개 고정 역할만 다루므로 기존 사용자 정의 extras는 보존 (덮어쓰기 방지)
-    const current = projects.find((p) => p.id === projectId);
-    const preservedExtras = current?.workerAssignments?.extras ?? [];
-    await handleUpdateProject(projectId, {
-      workerAssignments: { ...suggestion.assignments, extras: preservedExtras },
-      aiSuggestion: JSON.stringify(suggestion),
-      aiApplied: true,
-    });
-  };
-
   const handleUpdateLaborRate = async (yearMonth: string, role: LaborRole, dailyRate: number) => {
     try {
       await updateLaborRate(yearMonth, role, dailyRate, updatedBy);
@@ -425,31 +410,6 @@ export function ProfitPage({
     const entry = customer.workHistory.find((w: any) => w.dealId === project.workHistoryDealId);
     return entry?.inquiryDate || undefined;
   };
-
-  const getSimilarProjects = (project: Project): SimilarProjectRef[] => {
-    return projects
-      .filter(
-        (p) =>
-          p.serviceType === project.serviceType &&
-          p.status === 'completed' &&
-          p.id !== project.id &&
-          p.workerAssignments,
-      )
-      .slice(0, 5)
-      .map((p) => ({
-        serviceType: p.serviceType,
-        totalQuantity: getProjectTotalQuantity(p),
-        workerAssignments: p.workerAssignments!,
-        profitRatio: p.profitRatio,
-      }));
-  };
-
-  const availableSubs: AvailableSubcontractor[] = subcontractors.map((s: any) => ({
-    name: s.name || '',
-    grade: (s.grade as 'S' | 'A' | 'B' | 'C') || 'B',
-    cooperationScore: Number(s.cooperationScore) || 0,
-    ongoingProjects: Number(s.ongoingProjects) || 0,
-  }));
 
   // ============================================================
   // Phase 1.7 / Step 4 — AI 자동 호출 매니저
@@ -1023,14 +983,11 @@ export function ProfitPage({
               isExpanded={expandedRowId === p.id}
               onToggleExpand={() => setExpandedRowId(expandedRowId === p.id ? null : p.id)}
               laborRates={laborRates}
-              similarProjects={getSimilarProjects(p)}
-              availableSubcontractors={availableSubs}
               totalQuantity={getProjectTotalQuantity(p)}
               detailedQuantity={getProjectDetailedQuantity(p)}
               inquiryDate={getProjectInquiryDate(p)}
               onSave={(updates) => handleUpdateProject(p.id, updates)}
               onComplete={() => handleCompleteProject(p.id)}
-              onAiAdopted={(s) => handleAdoptAiSuggestion(p.id, s)}
               onReRunAi={handleReRunAi}
               onNotification={onNotification}
             />
@@ -1090,15 +1047,12 @@ export function ProfitPage({
                         setExpandedRowId(expandedRowId === p.id ? null : p.id)
                       }
                       laborRates={laborRates}
-                      similarProjects={getSimilarProjects(p)}
-                      availableSubcontractors={availableSubs}
                       totalQuantity={getProjectTotalQuantity(p)}
                       detailedQuantity={getProjectDetailedQuantity(p)}
                       inquiryDate={getProjectInquiryDate(p)}
                       colCount={colCount}
                       onSave={(updates) => handleUpdateProject(p.id, updates)}
                       onComplete={() => handleCompleteProject(p.id)}
-                      onAiAdopted={(s) => handleAdoptAiSuggestion(p.id, s)}
                       onReRunAi={handleReRunAi}
                       onNotification={onNotification}
                     />
@@ -1123,15 +1077,12 @@ interface RowProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   laborRates: LaborRate[];
-  similarProjects: SimilarProjectRef[];
-  availableSubcontractors: AvailableSubcontractor[];
   totalQuantity: number;
   detailedQuantity?: string;
   inquiryDate?: string;
   colCount: number;
   onSave: (updates: Partial<Project>) => void;
   onComplete: () => void;
-  onAiAdopted: (suggestion: StaffingSuggestion) => void;
   onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
 }
@@ -1143,15 +1094,12 @@ function ProjectTableRow({
   isExpanded,
   onToggleExpand,
   laborRates,
-  similarProjects,
-  availableSubcontractors,
   totalQuantity,
   detailedQuantity,
   inquiryDate,
   colCount,
   onSave,
   onComplete,
-  onAiAdopted,
   onReRunAi,
   onNotification,
 }: RowProps) {
@@ -1263,14 +1211,11 @@ function ProjectTableRow({
               <ProjectRowExpand
                 project={p}
                 laborRates={laborRates}
-                similarProjects={similarProjects}
-                availableSubcontractors={availableSubcontractors}
                 totalQuantity={totalQuantity}
                 detailedQuantity={detailedQuantity}
                 inquiryDate={inquiryDate}
                 onSave={onSave}
                 onComplete={onComplete}
-                onAiAdopted={onAiAdopted}
                 onReRunAi={onReRunAi}
                 onNotification={onNotification}
               />
@@ -1292,14 +1237,11 @@ function ProjectMobileCard({
   isExpanded,
   onToggleExpand,
   laborRates,
-  similarProjects,
-  availableSubcontractors,
   totalQuantity,
   detailedQuantity,
   inquiryDate,
   onSave,
   onComplete,
-  onAiAdopted,
   onReRunAi,
   onNotification,
 }: Omit<RowProps, 'colCount'>) {
@@ -1376,14 +1318,11 @@ function ProjectMobileCard({
         <ProjectRowExpand
           project={p}
           laborRates={laborRates}
-          similarProjects={similarProjects}
-          availableSubcontractors={availableSubcontractors}
           totalQuantity={totalQuantity}
           detailedQuantity={detailedQuantity}
           inquiryDate={inquiryDate}
           onSave={onSave}
           onComplete={onComplete}
-          onAiAdopted={onAiAdopted}
           onReRunAi={onReRunAi}
           onNotification={onNotification}
         />
