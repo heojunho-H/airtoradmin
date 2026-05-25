@@ -26,3 +26,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 로컬 스크래치/스펙 노트 (커밋 대상 아님)
+_notes/
