@@ -8,8 +8,9 @@
 //   구조화 JSON + 5단계 추론은 Claude Sonnet 4.6의 강점 영역이라 이관.
 //
 // 프록시: functions/api/claude.ts → Anthropic Messages API
-// JSON 강제: assistant 메시지 prefill('{') 패턴. 응답 첫 글자가 '{' 다음부터 시작하므로
-//           수신 후 leading '{' 를 다시 붙여 JSON.parse.
+// JSON 강제: tool_use forced output. tool_choice로 submit_staffing 호출을 강제하면
+//           모델은 input_schema에 맞춘 구조화 객체를 반환한다. (prefill은 sonnet-4-6에서
+//           "This model does not support assistant message prefill" 400 에러 발생.)
 
 import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments, emptyRoleAssignments } from './roles';
 import {
@@ -94,24 +95,13 @@ B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을
    - 재조정해도 40% 미달이면 warnings에 명시:
      "목표 순익률 40% 달성 어려움. 견적 인상 또는 인력 최소화 검토 필요"
 
-[출력 형식 — 엄수]
-반드시 다음 스키마의 JSON만 출력. 마크다운 펜스 금지, 설명 금지, 코드 블록 금지.
-응답은 반드시 '{' 로 시작해서 '}' 로 끝나야 하며, 그 외 어떤 문자도 출력하지 마세요.
-{
-  "assignments": {
-    "a_grade": int,
-    "b_grade": int,
-    "pin_wash": int,
-    "dely": int,
-    "parts_wash": int,
-    "days": int
-  },
-  "estimatedLaborCost": int,
-  "estimatedNetProfit": int,
-  "estimatedProfitRatio": float (0~1),
-  "rationale": "한국어 3~5문장. 학습 데이터 활용 여부 명시.",
-  "warnings": ["문자열 배열, 없으면 빈 배열"]
-}`;
+[출력 방법]
+반드시 submit_staffing 도구를 호출해서 결과를 제출하세요. 일반 텍스트 응답 금지.
+- assignments: 5개 역할별 인원 수(int) + days(int)
+- estimatedLaborCost / estimatedNetProfit: 원 단위 int
+- estimatedProfitRatio: 0~1 사이 fraction
+- rationale: 한국어 3~5문장. 학습 데이터 활용 여부 명시.
+- warnings: 문자열 배열, 없으면 빈 배열.`;
 
 export async function suggestProjectStaffing(input: StaffingInput): Promise<StaffingSuggestion> {
   const ratesLines = ROLE_ORDER.map(
@@ -151,43 +141,64 @@ ${input.availableSubcontractors.length > 0
       max_tokens: 2048,
       temperature: 0.3,
       system: STAFFING_SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content: userContent },
-        // Prefill: 응답이 '{' 다음 글자부터 시작하도록 강제 (JSON-only 출력 보장)
-        { role: 'assistant', content: '{' },
+      tools: [
+        {
+          name: 'submit_staffing',
+          description: '프로젝트 인력 배치 결과를 제출합니다.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              assignments: {
+                type: 'object',
+                properties: {
+                  a_grade: { type: 'integer', minimum: 0 },
+                  b_grade: { type: 'integer', minimum: 0 },
+                  pin_wash: { type: 'integer', minimum: 0 },
+                  dely: { type: 'integer', minimum: 0 },
+                  parts_wash: { type: 'integer', minimum: 0 },
+                  days: { type: 'integer', minimum: 0 },
+                },
+                required: ['a_grade', 'b_grade', 'pin_wash', 'dely', 'parts_wash', 'days'],
+              },
+              estimatedLaborCost: { type: 'integer' },
+              estimatedNetProfit: { type: 'integer' },
+              estimatedProfitRatio: { type: 'number' },
+              rationale: { type: 'string' },
+              warnings: { type: 'array', items: { type: 'string' } },
+            },
+            required: [
+              'assignments',
+              'estimatedLaborCost',
+              'estimatedNetProfit',
+              'estimatedProfitRatio',
+              'rationale',
+              'warnings',
+            ],
+          },
+        },
       ],
+      // tool_choice로 submit_staffing 호출을 강제 — 자유 텍스트 응답 차단
+      tool_choice: { type: 'tool', name: 'submit_staffing' },
+      messages: [{ role: 'user', content: userContent }],
     }),
   });
 
   if (!response.ok) {
-    // Anthropic 에러 본문을 그대로 콘솔에 노출 (디버깅 가시성)
     const errorBody = await response.text();
     console.error(`[Claude staffing] ${response.status} 에러 본문:`, errorBody);
     throw new Error(`AI 응답 오류 (${response.status})`);
   }
 
   const data = await response.json();
-  // Anthropic Messages: { content: [{ type: 'text', text: '...' }, ...], stop_reason, ... }
-  const textPart = data.content?.find((c: any) => c.type === 'text');
-  let text: string = (textPart?.text || '').trim();
-
-  // Prefill('{')로 인해 실제 응답엔 leading '{'가 빠져 있다. 다시 붙임.
-  if (text && !text.startsWith('{')) {
-    text = '{' + text;
-  }
-  // 마지막 '}' 이후 잔여 텍스트는 잘라냄 (모델이 꼬리에 설명을 붙이는 경우 방어)
-  const lastBrace = text.lastIndexOf('}');
-  if (lastBrace >= 0 && lastBrace < text.length - 1) {
-    text = text.substring(0, lastBrace + 1);
-  }
-
-  let parsed: StaffingSuggestion;
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    console.error('AI staffing JSON parse failed:', text);
+  // tool_choice 강제 호출이므로 응답에 tool_use 블록이 반드시 포함됨.
+  const toolUse = data.content?.find(
+    (c: any) => c.type === 'tool_use' && c.name === 'submit_staffing',
+  );
+  if (!toolUse || !toolUse.input) {
+    console.error('[Claude staffing] tool_use 누락:', JSON.stringify(data));
     throw new Error('AI 응답 형식 오류 — 다시 시도해주세요');
   }
+  const parsed: StaffingSuggestion = toolUse.input;
 
   // 최소 필드 검증 — 5개 역할 모두 number 인지 확인
   if (!parsed.assignments || typeof (parsed.assignments as any).a_grade !== 'number') {
