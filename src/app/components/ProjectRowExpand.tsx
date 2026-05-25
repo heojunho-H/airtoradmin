@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
@@ -81,6 +82,8 @@ interface ProjectRowExpandProps {
   inquiryDate?: string;
   onSave: (updates: Partial<ProjectFormState>) => void | Promise<void>;
   onComplete: () => void;
+  /** 프로젝트 삭제 (DB row 제거). 미지정 시 삭제 버튼 미표시. */
+  onDelete?: () => void;
   /** Phase 1.7 / Step 5 — failed→pending 리셋 후 자동 큐 재진입 */
   onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
@@ -672,12 +675,15 @@ function ConfirmModal({
   confirmLabel,
   onConfirm,
   onCancel,
+  destructive = false,
 }: {
   title: string;
   description: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** true면 확인 버튼이 빨강 톤 (되돌릴 수 없는 작업) */
+  destructive?: boolean;
 }) {
   return (
     <div
@@ -710,7 +716,11 @@ function ConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 text-[13px] font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+            className={`px-4 py-2 text-[13px] font-medium text-white rounded-lg transition-colors ${
+              destructive
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
             {confirmLabel}
           </button>
@@ -731,6 +741,7 @@ export function ProjectRowExpand({
   inquiryDate,
   onSave,
   onComplete,
+  onDelete,
   onReRunAi,
   onNotification,
 }: ProjectRowExpandProps) {
@@ -763,6 +774,7 @@ export function ProjectRowExpand({
   const [memo, setMemo] = useState(project.memo);
   const [showMemo, setShowMemo] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // work_date의 YYYY-MM (없으면 현재 월 폴백)
@@ -1132,6 +1144,19 @@ export function ProjectRowExpand({
         </div>
       </div>
 
+      {/* ============ 위험 영역 — 삭제 ============ */}
+      {onDelete && (
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-[12px] text-slate-400 hover:text-red-600 flex items-center gap-1.5 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            프로젝트 삭제
+          </button>
+        </div>
+      )}
+
       {/* 완료 처리 확인 모달 */}
       {showCompleteConfirm && (
         <ConfirmModal
@@ -1143,6 +1168,21 @@ export function ProjectRowExpand({
             setShowCompleteConfirm(false);
           }}
           onCancel={() => setShowCompleteConfirm(false)}
+        />
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && onDelete && (
+        <ConfirmModal
+          title="이 프로젝트를 삭제하시겠습니까?"
+          description="DB에서 영구 삭제되며 되돌릴 수 없습니다. AI 추천·인력 배치·메모 등 모든 정보가 사라집니다. (단, 원본 영업 딜이 수주확정 상태에서 다시 수정되면 빈 프로젝트가 자동 재생성될 수 있습니다.)"
+          confirmLabel="영구 삭제"
+          destructive
+          onConfirm={() => {
+            onDelete();
+            setShowDeleteConfirm(false);
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
     </div>

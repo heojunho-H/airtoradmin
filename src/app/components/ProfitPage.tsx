@@ -307,6 +307,19 @@ export function ProfitPage({
     await handleUpdateProject(id, { status: 'completed', completedReason: 'manual' });
   };
 
+  const handleDeleteProject = async (id: number) => {
+    try {
+      await deleteProject(id);
+      setExpandedRowId((curr) => (curr === id ? null : curr));
+      const refreshed = await fetchProjects();
+      setProjects(refreshed);
+      onNotification?.('프로젝트가 삭제되었습니다');
+    } catch (err) {
+      console.error('프로젝트 삭제 실패:', err);
+      onNotification?.('프로젝트 삭제 실패 — 다시 시도해주세요');
+    }
+  };
+
   const handleUpdateLaborRate = async (yearMonth: string, role: LaborRole, dailyRate: number) => {
     try {
       await updateLaborRate(yearMonth, role, dailyRate, updatedBy);
@@ -988,6 +1001,7 @@ export function ProfitPage({
               inquiryDate={getProjectInquiryDate(p)}
               onSave={(updates) => handleUpdateProject(p.id, updates)}
               onComplete={() => handleCompleteProject(p.id)}
+              onDelete={() => handleDeleteProject(p.id)}
               onReRunAi={handleReRunAi}
               onNotification={onNotification}
             />
@@ -1053,6 +1067,7 @@ export function ProfitPage({
                       colCount={colCount}
                       onSave={(updates) => handleUpdateProject(p.id, updates)}
                       onComplete={() => handleCompleteProject(p.id)}
+                      onDelete={() => handleDeleteProject(p.id)}
                       onReRunAi={handleReRunAi}
                       onNotification={onNotification}
                     />
@@ -1083,6 +1098,7 @@ interface RowProps {
   colCount: number;
   onSave: (updates: Partial<Project>) => void;
   onComplete: () => void;
+  onDelete: () => void;
   onReRunAi: (projectId: number) => void;
   onNotification?: (msg: string) => void;
 }
@@ -1100,6 +1116,7 @@ function ProjectTableRow({
   colCount,
   onSave,
   onComplete,
+  onDelete,
   onReRunAi,
   onNotification,
 }: RowProps) {
@@ -1216,6 +1233,7 @@ function ProjectTableRow({
                 inquiryDate={inquiryDate}
                 onSave={onSave}
                 onComplete={onComplete}
+                onDelete={onDelete}
                 onReRunAi={onReRunAi}
                 onNotification={onNotification}
               />
@@ -1242,6 +1260,7 @@ function ProjectMobileCard({
   inquiryDate,
   onSave,
   onComplete,
+  onDelete,
   onReRunAi,
   onNotification,
 }: Omit<RowProps, 'colCount'>) {
@@ -1323,6 +1342,7 @@ function ProjectMobileCard({
           inquiryDate={inquiryDate}
           onSave={onSave}
           onComplete={onComplete}
+          onDelete={onDelete}
           onReRunAi={onReRunAi}
           onNotification={onNotification}
         />
