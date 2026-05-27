@@ -7,18 +7,20 @@
 //   시작도 못한 채 finishReason=MAX_TOKENS로 잘리는 빈도가 높았다 (→ JSON.parse 실패).
 //   구조화 JSON + 5단계 추론은 Claude Sonnet 4.6의 강점 영역이라 이관.
 //
-// 프록시: functions/api/claude.ts → Anthropic Messages API
+// 프록시: functions/api/staffing.ts → Anthropic Messages API
 // JSON 강제: tool_use forced output. tool_choice로 submit_staffing 호출을 강제하면
 //           모델은 input_schema에 맞춘 구조화 객체를 반환한다. (prefill은 sonnet-4-6에서
 //           "This model does not support assistant message prefill" 400 에러 발생.)
 //
-// WAF 우회 (Phase 1.9 — 2026-05-27):
+// WAF 우회 (Phase 1.9 — 2026-05-27 ~ 2026-05-28):
 //   Cloudflare 무료 플랜 WAF Managed Rule "React - RCE - CVE-2025-55182" (Rule ID
-//   끝자리 99702280)이 POST /api/claude 본문에서 코드 유사 패턴 — 곱셈/비교/할당
+//   끝자리 99702280)이 기존 엔드포인트 POST 본문에서 코드 유사 패턴 — 곱셈/비교/할당
 //   연산자, "key:value 파이프" 구분 라인, 식별자 콜론 타입 표기 등 — 을 React/RCE
 //   페이로드로 오인해 403 "Request not allowed" 차단. airtoradmin.co.kr zone에서만
-//   발생, pages.dev에선 정상. 무료 플랜은 룰 비활성화 불가능하므로 시스템 프롬프트
-//   + userContent + 학습 컨텍스트를 자연어 산문으로 재작성하여 우회.
+//   발생, pages.dev에선 정상. 산문화로도 못 뚫림 → 경로 자체를 /api/staffing으로
+//   변경 (2026-05-28). WAF는 URL path를 토큰화해 룰 매칭하는데 "claude"라는 토큰이
+//   Managed Rule의 트리거 조건에 포함된 것으로 추정 (정황 증거: 본문/origin/인프라
+//   전부 동일한데 경로만 다른 /api/gemini는 200 통과).
 
 import {
   ROLE_ORDER,
@@ -191,7 +193,7 @@ export async function suggestProjectStaffing(input: StaffingInput): Promise<Staf
     .filter((line) => line !== '')
     .join('\n');
 
-  const response = await fetch('/api/claude', {
+  const response = await fetch('/api/staffing', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

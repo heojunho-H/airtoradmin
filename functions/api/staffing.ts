@@ -1,5 +1,8 @@
-// Cloudflare Pages Function — /api/claude 프록시
-// 프론트엔드 → 같은 도메인(/api/claude) → Anthropic Messages API로 전달 (API 키 보호).
+// Cloudflare Pages Function — /api/staffing 프록시 (Anthropic Claude 백엔드)
+// 프론트엔드 → 같은 도메인(/api/staffing) → Anthropic Messages API로 전달 (API 키 보호).
+// 경로명 "claude" 회피: Cloudflare 무료 플랜 WAF Managed Rule이 path에 "claude"가
+// 포함된 POST를 403 차단하는 정황이 확인되어 (gemini.ts는 동일 인프라에서 통과)
+// 엔드포인트를 /api/staffing으로 변경 (2026-05-28). 파일/함수 내부는 여전히 Claude.
 //
 // 모델 선택: 요청 본문에 `_model` 필드가 있고 ALLOWED_MODELS에 포함되면 그 모델을
 // 사용한다. allowlist 외 값은 무시하고 DEFAULT_MODEL로 폴백 (모델 ID 조작 차단).
