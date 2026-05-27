@@ -300,6 +300,15 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   const [salesManagerDropdownOpen, setSalesManagerDropdownOpen] = useState(false);
   const [successStatusDropdownOpen, setSuccessStatusDropdownOpen] = useState(false);
 
+  // 확정작업일 입력 팝업 — 수주확정/성공 전환 시 미입력이면 alert 대신 이 모달을 띄움.
+  // '다음에 입력하기' 버튼으로 빈 날짜인 채 진행을 허용 (사용자 요청).
+  const [workDateModal, setWorkDateModal] = useState<{
+    companyName: string;
+    actionLabel: string;
+    date: string;
+    onSubmit: (date: string) => void;
+  } | null>(null);
+
   // 견적금액 파싱 함수 (만원 단위 처리)
   const parseQuotationAmount = (quotationAmount: string): number => {
     if (!quotationAmount) return 0;
@@ -634,32 +643,48 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     if (!targetDeal) return;
 
     // 수주확정 전환 시 확정작업일 필수 — 프로젝트 관리 페이지 정렬 기준이라
-    // 비어 있으면 신규 프로젝트가 목록 최하단에 매장됨
+    // 비어 있으면 신규 프로젝트가 목록 최하단에 매장됨.
+    // 미입력이면 팝업으로 안내하되, '다음에 입력하기'로 빈 날짜 진행 허용.
     if (newStatus === 'confirmed' && !targetDeal.confirmedWorkDate?.trim()) {
-      alert('수주확정 처리하려면 확정작업일을 먼저 입력해야 합니다.\n상세 모달을 열어 확정작업일을 입력한 뒤 다시 시도해주세요.');
       setEditingStatusId(null);
+      setWorkDateModal({
+        companyName: targetDeal.company,
+        actionLabel: '수주확정',
+        date: '',
+        onSubmit: (date) => {
+          setWorkDateModal(null);
+          void proceedWithStatusChange(targetDeal, newStatus, date);
+        },
+      });
       return;
     }
 
-    const updatedDeal = {
+    void proceedWithStatusChange(targetDeal, newStatus, targetDeal.confirmedWorkDate);
+  };
+
+  const proceedWithStatusChange = async (
+    targetDeal: Deal,
+    newStatus: Deal['status'],
+    workDate: string,
+  ) => {
+    const updatedDeal: Deal = {
       ...targetDeal,
       status: newStatus,
-      successStatus: newStatus === 'confirmed' ? 'success' as const : targetDeal.successStatus
+      confirmedWorkDate: workDate,
+      successStatus: newStatus === 'confirmed' ? 'success' as const : targetDeal.successStatus,
     };
 
-    // UI는 즉시 반영
     setDealsData((prevDeals) =>
-      prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
+      prevDeals.map((deal) => (deal.id === targetDeal.id ? updatedDeal : deal))
     );
     setEditingStatusId(null);
 
-    if (selectedDeal && selectedDeal.id === dealId) {
+    if (selectedDeal && selectedDeal.id === targetDeal.id) {
       setSelectedDeal(updatedDeal);
     }
 
     onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
 
-    // DB 저장 (서버에서 status=confirmed 시 고객 자동 동기화)
     try {
       await updateDeal(updatedDeal);
     } catch (err) {
@@ -667,7 +692,6 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
       return;
     }
 
-    // 서버 동기화 완료 후 클라이언트 고객 목록 새로고침 트리거
     const becameSuccess = newStatus === 'confirmed' || updatedDeal.successStatus === 'success';
     if (becameSuccess && onDealSuccess) {
       onDealSuccess(updatedDeal);
@@ -678,21 +702,37 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const targetDeal = dealsData.find((d) => d.id === dealId);
     if (!targetDeal) return;
 
-    // 성공 전환 시 확정작업일 필수 (수주확정과 동일 사유)
+    // 성공 전환 시 확정작업일 필수 (수주확정과 동일 사유) — 미입력이면 팝업.
     if (newSuccessStatus === 'success' && !targetDeal.confirmedWorkDate?.trim()) {
-      alert('성공 처리하려면 확정작업일을 먼저 입력해야 합니다.\n상세 모달을 열어 확정작업일을 입력한 뒤 다시 시도해주세요.');
       setEditingSuccessStatusId(null);
+      setWorkDateModal({
+        companyName: targetDeal.company,
+        actionLabel: '성공 처리',
+        date: '',
+        onSubmit: (date) => {
+          setWorkDateModal(null);
+          void proceedWithSuccessStatusChange(targetDeal, newSuccessStatus, date);
+        },
+      });
       return;
     }
 
-    const updatedDeal = { ...targetDeal, successStatus: newSuccessStatus };
+    void proceedWithSuccessStatusChange(targetDeal, newSuccessStatus, targetDeal.confirmedWorkDate);
+  };
+
+  const proceedWithSuccessStatusChange = async (
+    targetDeal: Deal,
+    newSuccessStatus: Deal['successStatus'],
+    workDate: string,
+  ) => {
+    const updatedDeal: Deal = { ...targetDeal, successStatus: newSuccessStatus, confirmedWorkDate: workDate };
 
     setDealsData((prevDeals) =>
-      prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
+      prevDeals.map((deal) => (deal.id === targetDeal.id ? updatedDeal : deal))
     );
     setEditingSuccessStatusId(null);
 
-    if (selectedDeal && selectedDeal.id === dealId) {
+    if (selectedDeal && selectedDeal.id === targetDeal.id) {
       setSelectedDeal(updatedDeal);
     }
 
@@ -747,58 +787,65 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   };
 
   const handleSaveEdit = async () => {
-    if (editedDeal) {
-      // 수주확정/성공으로 가는 저장은 확정작업일 필수
-      const goingToSuccess =
-        editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
-      if (goingToSuccess && !editedDeal.confirmedWorkDate?.trim()) {
-        alert('수주확정 처리하려면 확정작업일을 입력해야 합니다.');
+    if (!editedDeal) return;
+
+    // 수주확정/성공으로 가는 저장은 확정작업일 필수 — 미입력이면 팝업.
+    const goingToSuccess =
+      editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
+    if (goingToSuccess && !editedDeal.confirmedWorkDate?.trim()) {
+      setWorkDateModal({
+        companyName: editedDeal.company || '신규 거래',
+        actionLabel: '저장',
+        date: '',
+        onSubmit: (date) => {
+          setWorkDateModal(null);
+          void performSaveEdit({ ...editedDeal, confirmedWorkDate: date });
+        },
+      });
+      return;
+    }
+
+    void performSaveEdit(editedDeal);
+  };
+
+  const performSaveEdit = async (dealToSave: Deal) => {
+    if (isAddingNewDeal) {
+      if (!dealToSave.company.trim()) {
+        alert('기업명은 필수 입력 항목입니다.');
         return;
       }
-      if (isAddingNewDeal) {
-        // 필수 입력: 기업명
-        if (!editedDeal.company.trim()) {
-          alert('기업명은 필수 입력 항목입니다.');
-          return;
-        }
-        // 새 거래 추가 — DB 저장
-        try {
-          const newId = await createDeal(editedDeal);
-          const newDeal = { ...editedDeal, id: newId };
-          setDealsData((prevDeals) => [...prevDeals, newDeal]);
-          setSelectedDeal(null);
-          setIsAddingNewDeal(false);
-          onNotification?.(`[${editedDeal.company}] 새 거래가 등록되었습니다`);
-        } catch (err) {
-          alert('거래 등록에 실패했습니다. 다시 시도해주세요.');
-          console.error(err);
-          return;
-        }
-      } else {
-        // 기존 거래 수정 — DB 저장
-        try {
-          await updateDeal(editedDeal);
-          setDealsData((prevDeals) =>
-            prevDeals.map((deal) =>
-              deal.id === editedDeal.id ? editedDeal : deal
-            )
-          );
-          setSelectedDeal(editedDeal);
-          onNotification?.(`[${editedDeal.company}] 거래 정보가 수정되었습니다`);
-          // 모달에서 수주확정 또는 성공 상태로 저장 시 고객 자동 동기화 트리거
-          const becameSuccess = editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
-          if (becameSuccess && onDealSuccess) {
-            onDealSuccess(editedDeal);
-          }
-        } catch (err) {
-          alert('거래 수정에 실패했습니다. 다시 시도해주세요.');
-          console.error(err);
-          return;
-        }
+      try {
+        const newId = await createDeal(dealToSave);
+        const newDeal = { ...dealToSave, id: newId };
+        setDealsData((prevDeals) => [...prevDeals, newDeal]);
+        setSelectedDeal(null);
+        setIsAddingNewDeal(false);
+        onNotification?.(`[${dealToSave.company}] 새 거래가 등록되었습니다`);
+      } catch (err) {
+        alert('거래 등록에 실패했습니다. 다시 시도해주세요.');
+        console.error(err);
+        return;
       }
-      setIsEditMode(false);
-      setEditedDeal(null);
+    } else {
+      try {
+        await updateDeal(dealToSave);
+        setDealsData((prevDeals) =>
+          prevDeals.map((deal) => (deal.id === dealToSave.id ? dealToSave : deal))
+        );
+        setSelectedDeal(dealToSave);
+        onNotification?.(`[${dealToSave.company}] 거래 정보가 수정되었습니다`);
+        const becameSuccess = dealToSave.status === 'confirmed' || dealToSave.successStatus === 'success';
+        if (becameSuccess && onDealSuccess) {
+          onDealSuccess(dealToSave);
+        }
+      } catch (err) {
+        alert('거래 수정에 실패했습니다. 다시 시도해주세요.');
+        console.error(err);
+        return;
+      }
     }
+    setIsEditMode(false);
+    setEditedDeal(null);
   };
 
   const handleFieldChange = (field: keyof Deal, value: string | number) => {
@@ -2523,6 +2570,70 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                   </>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 확정작업일 입력 팝업 — 수주확정/성공 전환 시 미입력이면 alert 대신 노출.
+          '다음에 입력하기' 버튼으로 빈 날짜인 채 진행 가능 (정렬 시 최하단 배치 감수). */}
+      {workDateModal && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setWorkDateModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 rounded-lg">
+                  <CalendarCheck className="w-4 h-4 text-blue-600" />
+                </div>
+                <h3 className="text-[16px] font-semibold text-slate-900">확정작업일 입력</h3>
+              </div>
+              <button
+                onClick={() => setWorkDateModal(null)}
+                className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="닫기"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-[14px] text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">[{workDateModal.companyName}]</span>{' '}
+                {workDateModal.actionLabel} 처리 시 확정작업일을 함께 입력하시겠어요?
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-[12px] text-amber-700 leading-relaxed">
+                  작업일이 비어 있으면 프로젝트 관리 목록에서 정렬 기준이 없어 <strong>최하단에 배치</strong>됩니다.
+                </p>
+              </div>
+              <input
+                type="date"
+                value={workDateModal.date}
+                onChange={(e) =>
+                  setWorkDateModal((prev) => (prev ? { ...prev, date: e.target.value } : prev))
+                }
+                className="w-full px-3 py-2.5 text-[15px] font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex gap-2">
+              <button
+                onClick={() => workDateModal.onSubmit('')}
+                className="flex-1 px-4 py-2.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors text-[14px] font-semibold text-slate-700"
+              >
+                다음에 입력하기
+              </button>
+              <button
+                onClick={() => workDateModal.onSubmit(workDateModal.date)}
+                disabled={!workDateModal.date}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-[14px] font-semibold shadow-sm"
+              >
+                저장하고 진행
+              </button>
             </div>
           </div>
         </div>
