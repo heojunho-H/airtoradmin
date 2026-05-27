@@ -2444,18 +2444,24 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">확정작업일</p>
-                  {isEditMode ? (
-                    <input
-                      type="date"
-                      value={editedDeal?.confirmedWorkDate || ''}
-                      onChange={(e) => handleFieldChange('confirmedWorkDate', e.target.value)}
-                      className="w-full px-3 py-2 text-base font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
-                    />
-                  ) : (
-                    <p className="text-[15px] font-semibold text-slate-900 mt-2">
-                      {selectedDeal.confirmedWorkDate || '미정'}
-                    </p>
-                  )}
+                  <input
+                    type="date"
+                    value={isEditMode ? (editedDeal?.confirmedWorkDate || '') : (selectedDeal.confirmedWorkDate || '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (isEditMode) {
+                        handleFieldChange('confirmedWorkDate', value);
+                      } else {
+                        const updatedDeal = { ...selectedDeal, confirmedWorkDate: value };
+                        setSelectedDeal(updatedDeal);
+                        setDealsData(prev => prev.map(d => d.id === updatedDeal.id ? updatedDeal : d));
+                        updateDeal(updatedDeal)
+                          .then(() => onNotification?.(`[${updatedDeal.company}] 확정작업일이 ${value || '미정'}(으)로 변경되었습니다`))
+                          .catch(err => console.error('확정작업일 저장 실패:', err));
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-base font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                  />
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">성공여부</p>
