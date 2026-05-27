@@ -11,10 +11,23 @@
 // JSON 강제: tool_use forced output. tool_choice로 submit_staffing 호출을 강제하면
 //           모델은 input_schema에 맞춘 구조화 객체를 반환한다. (prefill은 sonnet-4-6에서
 //           "This model does not support assistant message prefill" 400 에러 발생.)
+//
+// WAF 우회 (Phase 1.9 — 2026-05-27):
+//   Cloudflare 무료 플랜 WAF Managed Rule "React - RCE - CVE-2025-55182" (Rule ID
+//   끝자리 99702280)이 POST /api/claude 본문에서 코드 유사 패턴 — 곱셈/비교/할당
+//   연산자, "key:value 파이프" 구분 라인, 식별자 콜론 타입 표기 등 — 을 React/RCE
+//   페이로드로 오인해 403 "Request not allowed" 차단. airtoradmin.co.kr zone에서만
+//   발생, pages.dev에선 정상. 무료 플랜은 룰 비활성화 불가능하므로 시스템 프롬프트
+//   + userContent + 학습 컨텍스트를 자연어 산문으로 재작성하여 우회.
 
-import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments, emptyRoleAssignments } from './roles';
 import {
-  formatLearningContextForPrompt,
+  ROLE_ORDER,
+  ROLE_LABELS,
+  type RoleAssignments,
+  type RoleCode,
+  emptyRoleAssignments,
+} from './roles';
+import {
   classifyLearningInfluence,
   type LearningStats,
 } from './staffing-learning';
@@ -48,90 +61,135 @@ export interface StaffingInput {
   targetProfitRatio: number; // fraction (0~1). 기본 0.40 (40%).
 }
 
-const STAFFING_SYSTEM_PROMPT = `당신은 에어터(Airtor)의 프로젝트 손익 최적화 컨설턴트입니다.
-B2B 청소·소독·방제·에어컨세척 서비스의 인력 배치 초안을 제안합니다.
+const STAFFING_SYSTEM_PROMPT = `당신은 에어터라는 회사의 프로젝트 손익 최적화 컨설턴트입니다.
+B2B 청소와 소독과 방제와 에어컨세척 서비스의 인력 배치 초안을 제안하는 역할을 맡습니다.
 
-[역할 정의]
-- a_grade  (A급 분조): 숙련 작업자, 분조 작업 메인, 고난도/대형 현장
-- b_grade  (B급 분조): 일반 작업자, 분조 작업 보조, 표준 현장
-- pin_wash (핀세척): 에어컨 핀 정밀 세척 전담
-- dely     (딜리): 이동·운반·부대 작업
-- parts_wash (부품세척): 분해된 부품 별도 세척
+역할은 다섯 가지로 구분합니다.
+첫 번째 역할은 에이급 분조입니다. 숙련 작업자가 분조 작업의 메인을 맡으며 고난도 현장이나 대형 현장에 투입됩니다.
+두 번째 역할은 비급 분조입니다. 일반 작업자가 분조 작업의 보조를 맡으며 표준 현장에 투입됩니다.
+세 번째 역할은 핀세척입니다. 에어컨 핀 정밀 세척을 전담합니다.
+네 번째 역할은 딜리입니다. 이동과 운반 그리고 부대 작업을 맡습니다.
+다섯 번째 역할은 부품세척입니다. 분해된 부품을 별도로 세척합니다.
 
-[목표 순익률: 40% — 빡빡한 목표]
-- 목표 달성이 어려운 경우 warnings에 명확히 사유 적기
-- 그래도 가능한 최선의 배치를 제안 (불가능하다고 빈 배치 반환 금지)
-- 적자가 명백한 경우에도 합리적 최소 인력으로 제안 + warning
+목표 순익률 안내입니다.
+목표 순익률은 사십 퍼센트입니다. 빡빡한 목표이지만 가능한 한 최선의 배치를 제안하세요. 달성이 어려운 경우에는 그 사유를 경고 메시지에 분명히 적어 주세요. 빈 배치를 반환하지는 마세요. 적자가 예상되는 경우에도 합리적인 최소 인력으로 제안하고 함께 경고를 남깁니다.
 
-[추론 5단계 — 반드시 이 순서로 따르세요]
+추론은 다섯 단계 순서로 진행합니다.
 
-1. 학습 데이터 우선 참조
-   - 입력의 학습 데이터 섹션에서 평균 인력 배치를 출발점으로 삼음
-   - 우수 사례에서 가장 비슷한 수량의 케이스를 참조
-   - 사용자 수정 패턴이 있으면 그 방향으로 보정 (예: pin_wash가 +0.7명이면 1명 더 추가)
+첫째 단계, 학습 데이터를 가장 먼저 참조합니다.
+입력의 학습 데이터 섹션에서 평균 인력 배치를 출발점으로 삼습니다. 우수 사례에서는 가장 비슷한 수량의 케이스를 참조합니다. 사용자 수정 패턴이 있다면 그 방향으로 보정합니다. 예를 들어 핀세척 역할이 평균보다 영점 칠 명만큼 많이 배치되는 경향이 있다면 핀세척을 한 명 더 배치하는 식입니다.
 
-2. 수량 기반 조정
-   - 평균 배치가 입력 수량에 맞는지 검증
-   - 수량이 평균의 1.5배면 인력도 1.3~1.5배 (효율 고려)
-   - 수량이 평균의 0.5배면 인력도 0.6~0.7배
+둘째 단계, 수량 기반 조정을 합니다.
+평균 배치가 입력 수량에 맞는지 검토합니다. 수량이 평균의 한 배 반 수준이라면 인력도 한 배 반 정도로 늘리되 효율을 감안합니다. 수량이 평균의 절반 수준이라면 인력도 그에 맞춰 절반 정도로 줄입니다.
 
-3. 서비스 특성 반영
-   - 에어컨세척: a_grade + b_grade + pin_wash가 주축
-   - 소독·방제: a_grade + b_grade 위주
-   - 부품 분해 동반 시 parts_wash 추가
-   - 대형 현장(수량 50+): dely 1~2명 추가
+셋째 단계, 서비스 특성을 반영합니다.
+에어컨세척 서비스라면 에이급 분조와 비급 분조와 핀세척이 주축입니다. 소독과 방제 서비스라면 에이급 분조와 비급 분조 위주로 구성합니다. 부품 분해가 동반된다면 부품세척 인력을 추가합니다. 수량이 오십 대를 넘는 대형 현장이라면 딜리를 한 명에서 두 명 추가합니다.
 
-4. 가용 인력 매칭
-   - 가용 작업팀장 풀의 등급 분포 확인 (S/A는 a_grade 후보)
-   - ongoingProjects 적은 인력 우선
-   - 매칭 결과를 rationale에 반영
+넷째 단계, 가용 인력 풀과 매칭합니다.
+가용 작업팀장 풀의 등급 분포를 확인합니다. 에스 등급과 에이 등급은 에이급 분조 후보입니다. 진행중인 프로젝트 건수가 적은 인력을 우선합니다. 매칭 결과는 추천 근거 설명에 반영합니다.
 
-5. 캡 검증 (목표 순익률 40%)
-   - 인건비 = (a_grade*rate1 + b_grade*rate2 + pin_wash*rate3 + dely*rate4 + parts_wash*rate5) * days
-   - 변동비 추정 = 인건비 × 0.12 (식비·교통비 약 12%)
-   - 총비용 = 인건비 + 추정변동비
-   - profitRatio = (netRevenue - 총비용) / netRevenue
-   - profitRatio < 0.40 이면 인력 1회만 재조정 (무한 루프 금지)
-   - 재조정해도 40% 미달이면 warnings에 명시:
-     "목표 순익률 40% 달성 어려움. 견적 인상 또는 인력 최소화 검토 필요"
+다섯째 단계, 순익률 목표를 검증합니다.
+인건비는 다섯 역할 각각의 인원 수와 일당과 작업일수를 곱한 값을 모두 더해 산출합니다. 변동비는 식비와 교통비 등으로 인건비의 십이 퍼센트 정도로 추정합니다. 총비용은 인건비와 추정 변동비를 더한 값입니다. 순익률은 순매출에서 총비용을 뺀 순이익을 순매출로 나눈 분수입니다. 순익률이 사십 퍼센트에 못 미친다면 인력 배치를 단 한 번만 재조정합니다. 무한히 반복하지 마세요. 재조정 후에도 목표에 도달하지 못한다면 경고 메시지에 목표 순익률 사십 퍼센트 달성이 어려우니 견적 인상 또는 인력 최소화 검토가 필요하다는 취지로 명시합니다.
 
-[출력 방법]
-반드시 submit_staffing 도구를 호출해서 결과를 제출하세요. 일반 텍스트 응답 금지.
-- assignments: 5개 역할별 인원 수(int) + days(int)
-- estimatedLaborCost / estimatedNetProfit: 원 단위 int
-- estimatedProfitRatio: 0~1 사이 fraction
-- rationale: 한국어 3~5문장. 학습 데이터 활용 여부 명시.
-- warnings: 문자열 배열, 없으면 빈 배열.`;
+제출 방식 안내입니다.
+일반 텍스트 응답은 금지입니다. 결과는 반드시 제공된 도구 호출을 통해서만 제출합니다. 도구가 받는 항목은 다음과 같습니다.
+다섯 역할별 인원 수와 작업일수는 모두 정수입니다.
+추정 인건비와 추정 순익은 원 단위 정수입니다.
+추정 순익률은 영부터 일 사이의 분수입니다.
+추천 근거는 한국어로 세 문장에서 다섯 문장 사이로 작성하며 학습 데이터 활용 여부를 명시합니다.
+경고 메시지는 문자열 배열이며 없으면 빈 배열로 둡니다.`;
+
+// 학습 컨텍스트를 자연어 산문으로 직접 작성하는 로컬 포매터.
+// staffing-learning.formatLearningContextForPrompt 는 "수량 25대 | a_grade:3 b_grade:1"
+// 처럼 파이프 + 콜론 구분 라인을 만드는데, 이 형태가 WAF에 React/RCE 페이로드로
+// 오인되어 차단된다. 동일한 정보를 문장 형태로 풀어쓴다.
+function formatLearningContextSoft(stats: LearningStats): string {
+  const roleLabelOf = (k: RoleCode | 'days'): string =>
+    k === 'days' ? '작업일수' : ROLE_LABELS[k];
+
+  if (stats.sampleSize === 0) {
+    return `학습 데이터 안내입니다.
+과거 유사 프로젝트가 없습니다. 서비스는 ${stats.service} 이고 수량 범위는 ${stats.quantityRange.min} 대에서 ${stats.quantityRange.max} 대 사이입니다. 이 케이스는 첫 사례이므로 서비스 특성과 수량에 기반해 추정해 주세요.`;
+  }
+
+  const lines: string[] = [];
+  lines.push(`학습 데이터 안내입니다. 총 ${stats.sampleSize} 건의 유사 프로젝트를 분석했습니다.`);
+  lines.push(`서비스는 ${stats.service} 이고 수량 범위는 ${stats.quantityRange.min} 대에서 ${stats.quantityRange.max} 대 사이입니다.`);
+  lines.push(`평균 순익률은 ${(stats.avgProfitRatio * 100).toFixed(1)} 퍼센트 입니다.`);
+  lines.push('');
+  lines.push('평균 인력 배치는 다음과 같습니다.');
+  for (const role of ROLE_ORDER) {
+    lines.push(`${ROLE_LABELS[role]} 평균 ${stats.avgAssignments[role].toFixed(1)} 명입니다.`);
+  }
+  lines.push(`작업일수 평균은 ${stats.avgAssignments.days.toFixed(1)} 일입니다.`);
+
+  if (stats.excellentCases.length > 0) {
+    lines.push('');
+    lines.push('우수 사례 안내입니다. 순익률 삼십 퍼센트 이상인 사례들입니다.');
+    stats.excellentCases.forEach((c, i) => {
+      const partsText = ROLE_ORDER
+        .map((r) => `${ROLE_LABELS[r]} ${c.assignments[r] || 0} 명`)
+        .join(' 그리고 ');
+      lines.push(
+        `${i + 1} 번째 사례는 수량 ${c.quantity} 대 작업으로 배치는 ${partsText} 이고 작업일수는 ${c.assignments.days || 0} 일이며 순익률은 ${(c.profitRatio * 100).toFixed(0)} 퍼센트 입니다.`,
+      );
+    });
+  }
+
+  const significantDiffs = stats.aiVsActual.filter((d) => Math.abs(d.avgDiff) >= 0.5);
+  if (significantDiffs.length > 0) {
+    lines.push('');
+    lines.push('사용자 수정 패턴 안내입니다. 실제 사용과 추천의 평균 차이입니다.');
+    significantDiffs.forEach((d) => {
+      const label = roleLabelOf(d.role);
+      const direction = d.avgDiff > 0 ? '많이' : '적게';
+      lines.push(
+        `${label} 항목은 평균 ${Math.abs(d.avgDiff).toFixed(1)} 단위만큼 사용자가 추천보다 ${direction} 배치하는 경향이 있습니다.`,
+      );
+    });
+  }
+
+  return lines.join('\n');
+}
 
 export async function suggestProjectStaffing(input: StaffingInput): Promise<StaffingSuggestion> {
+  // 역할 코드(a_grade 등)를 괄호로 노출하던 라인을 한국어 라벨만 남기도록 재작성.
   const ratesLines = ROLE_ORDER.map(
-    (r) => `${ROLE_LABELS[r]} (${r}): ${(input.laborRates[r] ?? 0).toLocaleString()}원/일`,
+    (r) => `${ROLE_LABELS[r]} 일당 ${(input.laborRates[r] ?? 0).toLocaleString()} 원입니다.`,
   ).join('\n');
 
-  const learningContext = formatLearningContextForPrompt(input.learningStats);
+  const learningContext = formatLearningContextSoft(input.learningStats);
 
-  const userContent = `
-서비스: ${input.service}
-총수량: ${input.totalQuantity}
-${input.detailedQuantity ? `상세수량: ${input.detailedQuantity}` : ''}
-순매출(부가세 제외): ${input.netRevenue.toLocaleString()}원
-목표 순익률: ${(input.targetProfitRatio * 100).toFixed(0)}%
+  const subcontractorsBlock =
+    input.availableSubcontractors.length > 0
+      ? input.availableSubcontractors
+          .map(
+            (s) =>
+              `${s.name} 작업팀장은 등급이 ${s.grade} 이며 협력 점수는 ${s.cooperationScore} 이고 현재 진행중인 프로젝트는 ${s.ongoingProjects} 건입니다.`,
+          )
+          .join('\n')
+      : '가용 인력 정보가 없습니다.';
 
-[역할별 일당 (5개)]
-${ratesLines}
-
-${learningContext}
-
-[가용 작업팀장 풀]
-${input.availableSubcontractors.length > 0
-  ? input.availableSubcontractors.map((s) =>
-      `· ${s.name} (${s.grade}등급, 협력점수${s.cooperationScore}, 진행중${s.ongoingProjects}건)`,
-    ).join('\n')
-  : '(가용 인력 정보 없음)'}
-
-위 데이터를 바탕으로 5단계 추론을 거쳐 인력 배치 JSON을 제안하세요.
-목표 순익률 40% 달성을 최우선으로 하되, 학습 데이터를 적극 활용하세요.
-`.trim();
+  const userContent = [
+    `서비스 종류는 ${input.service} 입니다.`,
+    `총 수량은 ${input.totalQuantity} 입니다.`,
+    input.detailedQuantity ? `상세 수량 내역은 ${input.detailedQuantity} 입니다.` : '',
+    `순매출은 부가세를 제외하고 ${input.netRevenue.toLocaleString()} 원입니다.`,
+    `목표 순익률은 ${(input.targetProfitRatio * 100).toFixed(0)} 퍼센트입니다.`,
+    '',
+    '역할별 일당 안내입니다.',
+    ratesLines,
+    '',
+    learningContext,
+    '',
+    '가용 작업팀장 풀 안내입니다.',
+    subcontractorsBlock,
+    '',
+    '위 데이터를 바탕으로 다섯 단계 추론을 거쳐 인력 배치를 제안해 주세요.',
+    '목표 순익률 사십 퍼센트 달성을 최우선으로 하되 학습 데이터를 적극 활용해 주세요.',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
 
   const response = await fetch('/api/claude', {
     method: 'POST',
