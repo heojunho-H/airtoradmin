@@ -20,6 +20,9 @@
  * account_manager     → accountManager (고객책임자)
  * phone               → phone (전화번호)
  * email               → email (이메일)
+ * contacts            → contacts (복수 담당자, JSON TEXT: [{name,position,phone,email}]) — 006 마이그레이션
+ * newsletter_status   → newsletterStatus (스티비 뉴스레터 상태: none/subscribed/unsubscribed/bounced) — 006
+ * stibee_synced_at    → stibeeSyncedAt (스티비 주소록 마지막 동기화 시각) — 006
  * address             → address (주소)
  * field_manager       → fieldManager (현장담당자)
  * memo                → memo (메모)
@@ -116,15 +119,29 @@ if (file_exists($_dbConfigPath)) {
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ============================================================
+// 006 마이그레이션(contacts / newsletter_status / stibee_synced_at) 적용 여부 감지.
+// 프론트(Cloudflare, git push 자동 배포)가 DB(phpMyAdmin 수동)보다 먼저 배포되거나
+// PHP가 마이그레이션보다 먼저 업로드되어도 API가 500으로 죽지 않도록 새 컬럼을 조건부로 다룬다.
+// 미적용 상태에서는 새 키를 무시하고(PUT/POST) 기본값으로 응답한다(GET).
+// ============================================================
+$hasNewsletterCols = false;
+$_colRes = $conn->query("SHOW COLUMNS FROM airtor_customers LIKE 'newsletter_status'");
+if ($_colRes) {
+    $hasNewsletterCols = ($_colRes->num_rows > 0);
+    $_colRes->free();
+}
+
+// ============================================================
 // GET — 고객 목록 조회 (읽기 전용, 기존 데이터 변형 없음)
 // ============================================================
 if ($method === 'GET') {
+    $extraCols = $hasNewsletterCols ? ', contacts, newsletter_status, stibee_synced_at' : '';
     $sql = "SELECT id, company, grade, customer_status, contact_name,
                    contact_position, deals, last_work_date, total_quantity,
                    total_amount, management_cycle, next_management_date,
                    reminder_status, account_manager, phone, email, address,
                    field_manager, memo, detailed_quantity, work_history,
-                   email_history, internal_notes, created_at
+                   email_history, internal_notes, created_at" . $extraCols . "
             FROM airtor_customers
             ORDER BY id DESC";
 
@@ -138,6 +155,12 @@ if ($method === 'GET') {
 
     $customers = array();
     while ($row = $result->fetch_assoc()) {
+        // contacts: JSON 배열이 아니면(NULL/빈값/손상) 빈 배열 — 프론트 getContacts()가 단일 필드로 폴백
+        $contacts = array();
+        if (isset($row['contacts']) && $row['contacts'] !== '') {
+            $decodedContacts = json_decode($row['contacts'], true);
+            if (is_array($decodedContacts)) $contacts = $decodedContacts;
+        }
         $customers[] = array(
             'id' => intval($row['id']),
             'company' => $row['company'] ? $row['company'] : '',
@@ -162,7 +185,10 @@ if ($method === 'GET') {
             'workHistory' => $row['work_history'] ? json_decode($row['work_history'], true) : array(),
             'emailHistory' => $row['email_history'] ? json_decode($row['email_history'], true) : array(),
             'internalNotes' => $row['internal_notes'] ? json_decode($row['internal_notes'], true) : array(),
-            'createdAt' => $row['created_at'] ? $row['created_at'] : ''
+            'createdAt' => $row['created_at'] ? $row['created_at'] : '',
+            'contacts' => $contacts,
+            'newsletterStatus' => !empty($row['newsletter_status']) ? $row['newsletter_status'] : 'none',
+            'stibeeSyncedAt' => !empty($row['stibee_synced_at']) ? $row['stibee_synced_at'] : ''
         );
     }
 
@@ -183,14 +209,17 @@ if ($method === 'POST') {
         exit;
     }
 
+    // 006 적용 시에만 contacts 컬럼 포함 (미적용이면 기존 22컬럼 INSERT 유지)
+    $contactsCol = $hasNewsletterCols ? ', contacts' : '';
+    $contactsPh  = $hasNewsletterCols ? ', ?' : '';
     $sql = "INSERT INTO airtor_customers
             (company, grade, customer_status, contact_name, contact_position,
              deals, last_work_date, total_quantity, total_amount,
              management_cycle, next_management_date, reminder_status,
              account_manager, phone, email, address, field_manager, memo,
-             detailed_quantity, work_history, email_history, internal_notes,
+             detailed_quantity, work_history, email_history, internal_notes" . $contactsCol . ",
              created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" . $contactsPh . ", NOW())";
 
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
@@ -222,14 +251,27 @@ if ($method === 'POST') {
     $workHistory = isset($input['workHistory']) ? json_encode($input['workHistory']) : '[]';
     $emailHistory = isset($input['emailHistory']) ? json_encode($input['emailHistory']) : '[]';
     $internalNotes = isset($input['internalNotes']) ? json_encode($input['internalNotes']) : '[]';
+    // contacts 미전송 시 NULL — 프론트는 단일 필드(contact_name/email/phone)로 폴백한다.
+    $contacts = (isset($input['contacts']) && is_array($input['contacts'])) ? json_encode($input['contacts']) : null;
 
-    $stmt->bind_param('ssssssssssssssssssssss',
-        $company, $grade, $customerStatus, $contactName, $contactPosition,
-        $deals, $lastWorkDate, $totalQuantity, $totalAmount,
-        $managementCycle, $nextManagementDate, $reminderStatus,
-        $accountManager, $phone, $email, $address, $fieldManager, $memo,
-        $detailedQuantity, $workHistory, $emailHistory, $internalNotes
-    );
+    if ($hasNewsletterCols) {
+        $stmt->bind_param('sssssssssssssssssssssss',
+            $company, $grade, $customerStatus, $contactName, $contactPosition,
+            $deals, $lastWorkDate, $totalQuantity, $totalAmount,
+            $managementCycle, $nextManagementDate, $reminderStatus,
+            $accountManager, $phone, $email, $address, $fieldManager, $memo,
+            $detailedQuantity, $workHistory, $emailHistory, $internalNotes,
+            $contacts
+        );
+    } else {
+        $stmt->bind_param('ssssssssssssssssssssss',
+            $company, $grade, $customerStatus, $contactName, $contactPosition,
+            $deals, $lastWorkDate, $totalQuantity, $totalAmount,
+            $managementCycle, $nextManagementDate, $reminderStatus,
+            $accountManager, $phone, $email, $address, $fieldManager, $memo,
+            $detailedQuantity, $workHistory, $emailHistory, $internalNotes
+        );
+    }
 
     if (!$stmt->execute()) {
         http_response_code(500);
@@ -314,7 +356,15 @@ if ($method === 'PUT') {
         'workHistory'         => array('work_history',          's', 'json'),
         'emailHistory'        => array('email_history',         's', 'json'),
         'internalNotes'       => array('internal_notes',        's', 'json'),
+        // 006 마이그레이션 — 스티비 뉴스레터 연동
+        'contacts'            => array('contacts',              's', 'json'),
+        'newsletterStatus'    => array('newsletter_status',     's', 'str'),
+        'stibeeSyncedAt'      => array('stibee_synced_at',      's', 'str'),
     );
+    if (!$hasNewsletterCols) {
+        // 006 미적용 DB: 새 키는 조용히 무시 (기존 PHP가 미지 키를 무시하던 동작과 동일)
+        unset($fields['contacts'], $fields['newsletterStatus'], $fields['stibeeSyncedAt']);
+    }
 
     $setClauses = array();
     $types = '';
@@ -325,7 +375,10 @@ if ($method === 'PUT') {
         $setClauses[] = "$col = ?";
         $types .= $type;
         $raw = $input[$inKey];
-        if ($conv === 'int') {
+        if ($inKey === 'stibeeSyncedAt' && ($raw === '' || $raw === null)) {
+            // DATETIME 컬럼에 빈 문자열을 넣으면 strict 모드에서 실패하므로 NULL로 저장
+            $values[] = null;
+        } elseif ($conv === 'int') {
             $values[] = intval($raw);
         } elseif ($conv === 'json') {
             // 카페24 PHP는 json_encode flag 인자를 지원하지 않으므로 1-인자만 사용.

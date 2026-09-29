@@ -38,6 +38,13 @@ import {
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
+import {
+  syncCustomersToStibee,
+  syncOneQuietly,
+  NEWSLETTER_STATUS_LABEL,
+  type NewsletterStatus,
+  type SyncSummary,
+} from '../../lib/newsletter';
 
 interface WorkHistory {
   dealId?: number; // 영업관리 딜 ID — syncDealToCustomer가 채움 (legacy 엔트리는 없을 수 있음)
@@ -101,6 +108,15 @@ interface Customer {
   emailHistory: EmailHistory[]; // 이메일 발송 이력
   internalNotes: InternalNote[]; // 내부 관리 메모
   memo: string; // 메모장
+  newsletterStatus?: NewsletterStatus; // 스티비 뉴스레터 상태 캐시 (none/subscribed/unsubscribed/bounced)
+  stibeeSyncedAt?: string; // 스티비 주소록 마지막 동기화 시각 (YYYY-MM-DD HH:mm:ss)
+}
+
+// MySQL DATETIME 형식 (stibee_synced_at 저장용)
+function nowAsMysqlDatetime(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 // 고객의 담당자 목록 반환 (contacts 배열 우선, 없으면 레거시 단일 필드 폴백)
@@ -1057,6 +1073,62 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     }
   });
 
+  // ── 스티비 뉴스레터 동기화 ──────────────────────────────────────────────
+  const [isSyncingNewsletter, setIsSyncingNewsletter] = useState(false);
+
+  // 동기화 성공 고객의 상태 캐시를 로컬 state + 서버에 반영
+  const applyNewsletterSyncResult = (summary: SyncSummary) => {
+    if (summary.syncedCustomerIds.length === 0) return;
+    const syncedAt = nowAsMysqlDatetime();
+    const ids = new Set(summary.syncedCustomerIds);
+    setCustomers(prev => prev.map(c =>
+      ids.has(c.id) && c.newsletterStatus !== 'unsubscribed'
+        ? { ...c, newsletterStatus: 'subscribed' as NewsletterStatus, stibeeSyncedAt: syncedAt }
+        : c
+    ));
+    summary.syncedCustomerIds.forEach(id => {
+      const current = customers.find(c => c.id === id);
+      if (current?.newsletterStatus === 'unsubscribed') return;
+      updateCustomerFields(id, { newsletterStatus: 'subscribed', stibeeSyncedAt: syncedAt })
+        .catch(err => console.error('뉴스레터 상태 저장 API 실패:', err));
+    });
+  };
+
+  // 수동 일괄 동기화 (헤더 버튼): 이메일이 있는 담당자 전원을 스티비 주소록에 추가/갱신
+  const handleSyncNewsletter = async () => {
+    if (isSyncingNewsletter) return;
+    setIsSyncingNewsletter(true);
+    try {
+      const summary = await syncCustomersToStibee(customers);
+      applyNewsletterSyncResult(summary);
+
+      if (summary.error && summary.sent === 0) {
+        alert(`스티비 동기화 실패: ${summary.error}`);
+        return;
+      }
+      const parts = [`추가 ${summary.created.length}`, `갱신 ${summary.updated.length}`];
+      if (summary.failed.length > 0) parts.push(`실패 ${summary.failed.length}`);
+      onNotification?.(`스티비 주소록 동기화 완료 — ${parts.join(' / ')} (전송 ${summary.sent}명)`);
+
+      if (summary.invalidFields) {
+        alert(
+          '스티비 주소록에 사용자 정의 필드가 없어 일부 구독자가 거부되었습니다.\n' +
+          '스티비 [주소록 > 사용자 정의 필드]에 아래 키(영문, 텍스트 유형)를 먼저 만들어 주세요:\n' +
+          'name, position, company, grade, customer_status, account_manager, last_work_date'
+        );
+      } else if (summary.failed.length > 0) {
+        const lines = summary.failed.slice(0, 10).map(f => `- ${f.email}: ${f.reason}`);
+        if (summary.failed.length > 10) lines.push(`… 외 ${summary.failed.length - 10}건`);
+        alert(`동기화되지 않은 이메일:\n${lines.join('\n')}`);
+      }
+    } catch (err) {
+      console.error('스티비 동기화 실패:', err);
+      alert(`스티비 동기화 실패: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsSyncingNewsletter(false);
+    }
+  };
+
   // 내보내기 핸들러
   const handleExport = () => {
     const formatAmount = (amount: number): string => {
@@ -1220,7 +1292,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     setIsEditing(false);
     setEditedCustomer(null);
     onNotification?.(`[${saved.company}] 고객 정보가 수정되었습니다`);
-    updateCustomer(saved).catch(err => console.error('고객 수정 API 실패:', err));
+    updateCustomer(saved)
+      .then(() => syncOneQuietly(saved, applyNewsletterSyncResult)) // 저장 성공 시 스티비 주소록 자동 push (실패 무시)
+      .catch(err => console.error('고객 수정 API 실패:', err));
   };
 
   // 편집 중인 고객 필드 업데이트
@@ -1294,6 +1368,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       internalNotes: [],
       detailedQuantity: [],
       memo: '',
+      // 단일 담당자 입력을 contacts[] 1건으로도 저장 (006 마이그레이션 이후 정본)
+      contacts: (newCustomer.contactName || newCustomer.email || newCustomer.phone)
+        ? [{ name: newCustomer.contactName || '', position: newCustomer.contactPosition || '', phone: newCustomer.phone || '', email: newCustomer.email || '' }]
+        : [],
+      newsletterStatus: 'none',
     };
 
     // 먼저 임시 id로 UI 업데이트 후, API 호출로 실제 id 반영
@@ -1304,6 +1383,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     onNotification?.(`[${customer.company}] 새 고객이 등록되었습니다`);
     createCustomer(customerData).then(newId => {
       setCustomers(prev => prev.map(c => c.id === tempId ? { ...c, id: newId } : c));
+      // 실제 id 확보 후 스티비 주소록 자동 push (실패 무시)
+      syncOneQuietly({ ...customerData, id: newId }, applyNewsletterSyncResult);
     }).catch(err => console.error('고객 추가 API 실패:', err));
     setNewCustomer({
       company: '',
@@ -1343,6 +1424,24 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     return (
       <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${styles[status as keyof typeof styles]}`}>
         {status}
+      </span>
+    );
+  };
+
+  // 스티비 뉴스레터 상태 배지 (newsletterStatus 캐시 기준; 웹훅/동기화로 갱신됨)
+  const getNewsletterBadge = (status?: NewsletterStatus) => {
+    const s: NewsletterStatus = status || 'none';
+    const config: Record<NewsletterStatus, { color: string; icon: typeof Mail }> = {
+      none: { color: 'bg-slate-50 text-slate-500 border-slate-200', icon: Mail },
+      subscribed: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle },
+      unsubscribed: { color: 'bg-red-50 text-red-700 border-red-200', icon: X },
+      bounced: { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: AlertCircle },
+    };
+    const { color, icon: Icon } = config[s];
+    return (
+      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${color}`}>
+        <Icon className="w-3 h-3" />
+        {NEWSLETTER_STATUS_LABEL[s]}
       </span>
     );
   };
@@ -1552,7 +1651,16 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
             <Download className="w-4 h-4" />
             <span className="text-sm font-medium">내보내기</span>
           </button>
-          <button 
+          <button
+            onClick={handleSyncNewsletter}
+            disabled={isSyncingNewsletter}
+            title="이메일이 등록된 담당자 전원을 스티비 주소록에 추가/갱신합니다"
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className={`w-4 h-4 ${isSyncingNewsletter ? 'animate-pulse' : ''}`} />
+            <span className="text-sm font-medium">{isSyncingNewsletter ? '동기화 중…' : '스티비 동기화'}</span>
+          </button>
+          <button
             onClick={() => setShowAddCustomerModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
@@ -1753,6 +1861,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   리마인드 상태
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  뉴스레터
+                </th>
+                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   고객 책임자
                 </th>
                 <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -1895,6 +2006,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         {getReminderBadge(customer.reminderStatus)}
                       </div>
                     )}
+                  </td>
+                  <td className="px-4 py-4" title={customer.stibeeSyncedAt ? `마지막 동기화: ${customer.stibeeSyncedAt}` : '스티비 주소록에 아직 등록되지 않음'}>
+                    {getNewsletterBadge(customer.newsletterStatus)}
                   </td>
                   <td 
                     className="px-4 py-4 relative"

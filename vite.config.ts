@@ -59,6 +59,13 @@ export default defineConfig({
         target: 'https://airtor.co.kr',
         changeOrigin: true,
       },
+      // 스티비 뉴스레터 브로커는 Cloudflare Function(functions/api/newsletter.ts)에만 존재하므로
+      // dev에서는 배포된 Pages Function으로 그대로 프록시한다 (API 키는 Function env에만 있음).
+      // /api/newsletter/webhook도 같은 prefix로 함께 넘어간다.
+      '/api/newsletter': {
+        target: 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
