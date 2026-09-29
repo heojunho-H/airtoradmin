@@ -98,6 +98,61 @@ curl -X POST "https://airtoradmin.pages.dev/api/newsletter/webhook?token=wrong" 
 - **뉴스레터 발송**: 스티비 UI에서 세그먼트("광고성 정보 수신 동의 = 동의", `grade` 등)로 대상을 정해 발송.
   광고성 메일은 제목 `(광고)` 표기와 2년 주기 동의 재확인이 법적으로 필요하다(정보통신망법).
 
+## 팔로업 자동 이메일 (최근 작업일 + N일)
+
+고객의 **최신 작업 항목**(workHistory 중 작업일자 최대) 기준으로 N일 후 스티비 자동 이메일을 발송한다.
+고객 상세의 **리마인드 1차/2차/3차** 체크박스가 단계 1/2/3에 대응한다: 발송되면 자동으로 체크되고, 미리 수동 체크해 두면 발송하지 않는다.
+
+### 동작 구조
+```
+GitHub Actions (매일 06:30 KST, .github/workflows/newsletter-followups.yml)
+  └─ POST /api/newsletter {action:'run-followups'}  헤더 X-Newsletter-Cron-Token
+       ├─ 고객 전체 조회 → 오늘 발송 대상 계산 (functions/_lib/followups.ts)
+       ├─ 대상 담당자 주소록 upsert
+       ├─ 담당자별 스티비 자동 이메일 API 트리거 (POST https://stibee.com/api/v1.0/auto/{autoEmailId})
+       └─ 고객별 emailHistory 장부 기록 + reminderN 체크 (customers_api.php PUT)
+```
+
+### 발송 규칙
+- 오늘(KST) ≥ 작업일 + days 이고, 예정일을 지난 지 **grace(기본 30일) 이내**일 때만 발송. 그보다 오래된 건은 영구히 건너뜀(첫 가동·크론 중단 시 대량 발송 방지).
+- 작업일이 **미래**면 지날 때까지 아무 단계도 보내지 않음.
+- 여러 단계가 동시에 due면 **가장 높은 단계만** 발송, 낮은 단계는 `superseded`로 기록.
+- 같은 작업(jobKey) + 단계 + 담당자 조합은 한 번만 발송. 담당자 일부 실패 시 다음 날 실패한 담당자만 재시도.
+- 스티비 수신거부/자동삭제 구독자는 스티비가 트리거를 무시함. 우리 쪽 `newsletterStatus`가 unsubscribed/bounced 여도 건너뜀.
+- 한 번 실행에 최대 15건(담당자 단위). 초과분은 `deferred`로 보고되고 다음 날 처리 (Cloudflare 무료 플랜 서브리퀘스트 한도 때문).
+
+### 스티비 설정
+1. 주소록 사용자 정의 필드(텍스트) 추가: `project_name`, `total_quantity`, `quotation_amount` (기존 7개에 더해). 본문 개인화 키로 사용.
+2. 단계마다 **자동 이메일** 생성: 트리거 = **API 직접 요청**, 대기 시간 없음, **[트리거 중복 허용하기] ON, 중복 제한 1일** (재구매 고객에게 다시 보내기 위해 필수), 발송 시간대 예: 평일 09:00–18:00.
+3. 각 자동 이메일의 트리거 URL `https://stibee.com/api/v1.0/auto/{autoEmailId}` 에서 ID를 복사.
+4. 본문 개인화: `$%name%$` `$%company%$` `$%project_name%$` `$%last_work_date%$` `$%account_manager%$` `$%total_quantity%$` `$%quotation_amount%$`
+
+### Cloudflare Pages 환경변수
+| 변수 | 값 |
+|---|---|
+| `NEWSLETTER_FOLLOWUPS` | `{"grace":30,"stages":[{"stage":1,"days":30,"autoEmailId":"XXXX","label":"1개월 팔로업"},{"stage":2,"days":90,"autoEmailId":"YYYY","label":"3개월 팔로업"}]}` |
+| `NEWSLETTER_CRON_SECRET` | 긴 랜덤 문자열 (GitHub Secrets `NEWSLETTER_CRON_SECRET`와 동일) |
+
+- `stage`는 1~3 (리마인드 1/2/3차), `days`는 작업일 이후 일수. **기간을 바꾸려면 이 JSON만 수정하고 Deployments > Retry deployment** (코드 변경 없음).
+- 미설정이면 러너는 아무 것도 하지 않고 `disabled:true`를 반환, 화면의 리마인드 예정일은 `-`로 표시.
+
+### GitHub 설정
+- Settings > Secrets and variables > Actions > `NEWSLETTER_CRON_SECRET` 등록.
+- Actions 탭 > newsletter-followups > Run workflow (dryRun=true 기본)로 수동 점검. 60일간 커밋이 없으면 GitHub가 스케줄을 자동 비활성화하니 Actions 탭에서 재활성화.
+
+### 확인
+```bash
+# 설정 확인
+curl -s "https://airtoradmin.pages.dev/api/newsletter?action=config"
+# 미리보기 (토큰 불필요, 발송·기록 없음) — 화면의 "팔로업 점검" 버튼과 동일
+curl -s -X POST https://airtoradmin.pages.dev/api/newsletter -H 'Content-Type: application/json' -d '{"action":"run-followups","dryRun":true}'
+# 실제 실행 (토큰 필요). limit로 첫 실행 건수 제한 가능
+curl -s -X POST https://airtoradmin.pages.dev/api/newsletter -H 'Content-Type: application/json' \
+  -H "X-Newsletter-Cron-Token: $NEWSLETTER_CRON_SECRET" -d '{"action":"run-followups","limit":1}'
+```
+첫 실제 실행 전에는 직원 이메일을 테스트 고객의 담당자로 넣고 `limit:1`로 1건만 보내 본다.
+실행 결과는 고객 상세의 **이메일 발송 이력**과 리마인드 체크 아래 "자동발송 날짜" 캡션으로 확인한다.
+
 ## 스티비 API 참고
 - Base URL `https://api.stibee.com/v2`, 헤더 `AccessToken`, OpenAPI: `https://developers.stibee.com/스티비-api/openapi.json`
 - 속도 제한: 대량 추가 10회/분, 구독자 조회 100회/분, 그 외 1000회/분 (초과 시 429)

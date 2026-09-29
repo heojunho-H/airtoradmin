@@ -23,11 +23,9 @@
 // 응답은 항상 빠르게 200 — 스티비는 실패 시 3회 재시도하므로, 우리 쪽 DB 반영 실패는
 // 로그로 남기고 200을 돌려 재시도 폭주를 막는다 (토큰 불일치만 401).
 
-import { jsonResponse, type StibeeEnv } from '../../_lib/stibee';
+import { CUSTOMERS_API, jsonResponse, type StibeeEnv } from '../../_lib/stibee';
 
 type Env = StibeeEnv;
-
-const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api.php';
 
 type NewsletterStatus = 'none' | 'subscribed' | 'unsubscribed' | 'bounced';
 

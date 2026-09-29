@@ -1,0 +1,38 @@
+# 스티비 팔로업 자동 발송 스케줄러
+# 매일 06:30 KST(21:30 UTC)에 Cloudflare Pages Function /api/newsletter {action:'run-followups'} 를 호출한다.
+# 직원이 고객 데이터를 편집하기 전 시각에 돌리고, 실제 메일 발송 시각은 스티비 자동 이메일의 발송 시간대 설정이 정한다.
+#
+# 필요한 설정:
+#   - GitHub Secrets: NEWSLETTER_CRON_SECRET (Cloudflare Pages env의 같은 값)
+#   - Cloudflare Pages env: NEWSLETTER_FOLLOWUPS, NEWSLETTER_CRON_SECRET (docs/newsletter-stibee.md 참조)
+#
+# 주의: GitHub는 60일간 저장소 활동이 없으면 schedule 워크플로우를 비활성화한다 (Actions 탭에서 재활성화).
+#       수동 실행(workflow_dispatch)은 기본 dry-run — 발송 예정 목록만 확인하고 아무 것도 보내지 않는다.
+name: newsletter-followups
+
+on:
+  schedule:
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'dry-run (true면 발송하지 않고 대상만 출력)'
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run follow-ups
+        env:
+          CRON_TOKEN: ${{ secrets.NEWSLETTER_CRON_SECRET }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun || 'false' }}
+        run: |
+          if [ -z "$CRON_TOKEN" ]; then echo "NEWSLETTER_CRON_SECRET secret is not set"; exit 1; fi
+          curl -sS --fail-with-body --max-time 180 -X POST "https://airtoradmin.pages.dev/api/newsletter" \
+            -H "Content-Type: application/json" \
+            -H "X-Newsletter-Cron-Token: $CRON_TOKEN" \
+            -d "{\"action\":\"run-followups\",\"dryRun\":$DRY_RUN}" | tee report.json
+          echo
+          node -e "const r=require('./report.json'); console.log(JSON.stringify(r,null,1)); if(!r.ok) process.exit(1)"

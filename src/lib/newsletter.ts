@@ -178,15 +178,18 @@ export function summarizeSyncResult(
   };
 }
 
-async function postNewsletter(body: unknown): Promise<SyncApiResponse> {
+async function postNewsletter<T extends { ok: boolean; error?: string; result?: unknown } = SyncApiResponse>(
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const response = await fetch('/api/newsletter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
   // 302→HTML 리디렉트(호스팅 만료 등)나 WAF 403도 여기서 잡힌다.
   const text = await response.text();
-  let json: SyncApiResponse;
+  let json: T;
   try {
     json = JSON.parse(text);
   } catch {
@@ -196,6 +199,88 @@ async function postNewsletter(body: unknown): Promise<SyncApiResponse> {
     throw new Error(json.error || `뉴스레터 API 오류 (HTTP ${response.status})`);
   }
   return json;
+}
+
+// ── 팔로업 자동 발송 (functions/_lib/followups.ts 와 규칙 공유) ─────────────────────
+
+export interface FollowupStage {
+  stage: 1 | 2 | 3; // 리마인드 1/2/3차에 대응
+  days: number;
+  label?: string;
+}
+
+export interface FollowupConfig {
+  stages: FollowupStage[];
+  grace: number;
+}
+
+export interface FollowupDueItem {
+  customerId: number;
+  company: string;
+  stage: number;
+  label: string;
+  workDate: string;
+  dueDate: string;
+  projectName: string;
+  recipients: string[];
+  supersededStages: number[];
+}
+
+export interface FollowupDryRunReport {
+  ok: boolean;
+  dryRun: true;
+  disabled?: boolean;
+  today: string;
+  config: FollowupConfig;
+  evaluated: number;
+  due: FollowupDueItem[];
+  deferred: { customerId: number; company: string; stage: number; dueDate: string; recipients: number }[];
+  skippedSummary: Record<string, number>;
+  error?: string;
+}
+
+export const FOLLOWUP_SKIP_LABEL: Record<string, string> = {
+  unsubscribed: '수신거부',
+  bounced: '반송',
+  'no-email': '이메일 없음',
+  'no-work-entry': '작업 이력 없음',
+  'future-work-date': '작업일 미도래',
+  'not-due': '예정일 전',
+  'out-of-grace': '유예 기간 경과',
+  'flag-set': '이미 체크됨',
+  'already-sent': '이미 발송',
+};
+
+// 설정이 없거나(disabled) 오류면 null
+export async function fetchFollowupConfig(): Promise<FollowupConfig | null> {
+  try {
+    const response = await fetch('/api/newsletter?action=config');
+    const json = JSON.parse(await response.text()) as { ok: boolean; stages?: FollowupStage[]; grace?: number };
+    if (!json.ok || !Array.isArray(json.stages)) return null;
+    return { stages: json.stages, grace: json.grace ?? 30 };
+  } catch {
+    return null;
+  }
+}
+
+// 토큰 없이 허용되는 미리보기 — 아무 것도 발송/기록하지 않는다. 실제 발송은 GitHub Actions 크론이 담당.
+export async function runFollowupsDryRun(): Promise<FollowupDryRunReport> {
+  return postNewsletter<FollowupDryRunReport>({ action: 'run-followups', dryRun: true });
+}
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 백엔드 addDays와 동일한 UTC 일 단위 산술. 형식이 틀리면 '-'
+export function followupDueDate(workDate: string | undefined, days: number): string {
+  if (!workDate || !YMD_RE.test(workDate)) return '-';
+  const [y, m, d] = workDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
+}
+
+// 작업 항목 식별 키 — 백엔드 jobKeyOf와 반드시 동일
+export function jobKeyOf(entry: { dealId?: number; workDate?: string; projectName?: string; inquiryDate?: string }): string {
+  if (entry.dealId !== undefined && entry.dealId !== null && entry.dealId !== 0) return `deal:${entry.dealId}`;
+  return `wd:${entry.workDate || ''}|${entry.projectName || ''}|${entry.inquiryDate || ''}`;
 }
 
 // 여러 고객을 스티비 주소록에 일괄 동기화 (수동 버튼용)

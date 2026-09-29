@@ -41,9 +41,15 @@ import { AiCompanyInfoButton } from './AiCompanyInfo';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
+  fetchFollowupConfig,
+  runFollowupsDryRun,
+  followupDueDate,
+  jobKeyOf,
   NEWSLETTER_STATUS_LABEL,
+  FOLLOWUP_SKIP_LABEL,
   type NewsletterStatus,
   type SyncSummary,
+  type FollowupConfig,
 } from '../../lib/newsletter';
 
 interface WorkHistory {
@@ -66,7 +72,12 @@ interface EmailHistory {
   date: string;
   type: string;
   recipient: string;
-  status: 'sent' | 'opened' | 'failed';
+  status: 'sent' | 'opened' | 'failed' | 'skipped';
+  // 팔로업 자동 발송 장부 (functions/_lib/followups.ts 가 기록)
+  stage?: number;
+  jobKey?: string;
+  source?: 'auto';
+  reason?: string;
 }
 
 interface InternalNote {
@@ -880,6 +891,65 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // 팔로업 자동 발송 단계 설정 (Cloudflare env NEWSLETTER_FOLLOWUPS) — 리마인드 1/2/3차 예정일 표시에 사용
+  const [followupConfig, setFollowupConfig] = useState<FollowupConfig | null>(null);
+  useEffect(() => {
+    fetchFollowupConfig().then(setFollowupConfig);
+  }, []);
+  const [isCheckingFollowups, setIsCheckingFollowups] = useState(false);
+
+  // 리마인드 N차 예정일 라벨: 설정된 단계면 작업일 + days, 아니면 '-'
+  const reminderDueLabel = (workDate: string | undefined, stage: 1 | 2 | 3): string => {
+    const s = followupConfig?.stages.find(x => x.stage === stage);
+    if (!s) return '-';
+    return followupDueDate(workDate, s.days);
+  };
+
+  // 해당 작업·단계의 자동 발송 장부 항목 (있으면 "자동발송 날짜" 캡션)
+  const autoSentEntry = (customer: Customer, work: WorkHistory, stage: number): EmailHistory | undefined => {
+    const key = jobKeyOf(work);
+    return (customer.emailHistory || []).find(e => e.source === 'auto' && e.jobKey === key && e.stage === stage && e.status === 'sent');
+  };
+
+  // 팔로업 점검 — 발송하지 않고 오늘 발송 대상만 미리보기 (실제 발송은 GitHub Actions 크론)
+  const handleCheckFollowups = async () => {
+    if (isCheckingFollowups) return;
+    setIsCheckingFollowups(true);
+    try {
+      const r = await runFollowupsDryRun();
+      if (r.disabled) {
+        alert('팔로업 자동 발송이 아직 설정되지 않았습니다.\nCloudflare Pages 환경변수 NEWSLETTER_FOLLOWUPS 를 등록하세요 (docs/newsletter-stibee.md 참조).');
+        return;
+      }
+      if (!r.ok) {
+        alert(`팔로업 점검 실패: ${r.error || '알 수 없는 오류'}`);
+        return;
+      }
+      const lines: string[] = [];
+      lines.push(`기준일 ${r.today} · 고객 ${r.evaluated}곳 검사`);
+      lines.push(`단계: ${r.config.stages.map(s => `${s.stage}차 +${s.days}일`).join(', ')} · 유예 ${r.config.grace}일`);
+      lines.push('');
+      if (r.due.length === 0) {
+        lines.push('오늘 발송 대상 없음');
+      } else {
+        lines.push(`오늘 발송 대상 ${r.due.length}건:`);
+        r.due.slice(0, 15).forEach(d => lines.push(`- ${d.company} · ${d.stage}차(예정 ${d.dueDate}) → ${d.recipients.join(', ')}`));
+        if (r.due.length > 15) lines.push(`… 외 ${r.due.length - 15}건`);
+      }
+      if (r.deferred.length > 0) lines.push(`다음 실행으로 이월: ${r.deferred.length}건`);
+      const skip = Object.entries(r.skippedSummary || {});
+      if (skip.length > 0) {
+        lines.push('');
+        lines.push('건너뜀: ' + skip.map(([k, v]) => `${FOLLOWUP_SKIP_LABEL[k] || k} ${v}`).join(' / '));
+      }
+      alert(lines.join('\n'));
+    } catch (err) {
+      alert(`팔로업 점검 실패: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsCheckingFollowups(false);
+    }
+  };
+
   // 딜→고객 자동 동기화는 서버측(api/deals_api.php)에서 처리됨
   // App.tsx의 handleDealSuccess가 fetchCustomers()로 결과를 가져와 setCustomers 호출
   const [expandedYears, setExpandedYears] = useState<{ [key: number]: boolean }>({});
@@ -998,19 +1068,6 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     const year = lastDate.getFullYear();
     const month = String(lastDate.getMonth() + 1).padStart(2, '0');
     const day = String(lastDate.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // 리마인드 발송 예정일 계산 함수 (작업일 + 개월 수)
-  // workDate가 비어있거나 파싱 실패 시 'NaN-NaN-NaN' 대신 '-' 반환
-  const calculateReminderDate = (workDate: string, months: number): string => {
-    if (!workDate) return '-';
-    const date = new Date(workDate);
-    if (isNaN(date.getTime())) return '-';
-    date.setMonth(date.getMonth() + months);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -1238,7 +1295,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     setCustomers(customers.map(customer =>
       customer.id === selectedCustomer.id ? updatedCustomer : customer
     ));
-    updateCustomer(updatedCustomer).catch(err => console.error('리마인드 상태 업데이트 API 실패:', err));
+    // workHistory만 PUT — 팔로업 러너가 기록하는 emailHistory 장부를 덮어쓰지 않도록
+    updateCustomerFields(selectedCustomer.id, { workHistory: updatedWorkHistory } as any).catch(err => console.error('리마인드 상태 업데이트 API 실패:', err));
   };
 
   // 리포트전송 상태 토글 핸들러
@@ -1257,7 +1315,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     setCustomers(customers.map(customer =>
       customer.id === selectedCustomer.id ? updatedCustomer : customer
     ));
-    updateCustomer(updatedCustomer).catch(err => console.error('리포트전송 상태 업데이트 API 실패:', err));
+    // workHistory만 PUT — emailHistory 장부 보호 (서버의 syncReportSentToProject는 workHistory 키만 있으면 동작)
+    updateCustomerFields(selectedCustomer.id, { workHistory: updatedWorkHistory } as any).catch(err => console.error('리포트전송 상태 업데이트 API 실패:', err));
   };
 
   // 수정 모드 시작
@@ -1659,6 +1718,15 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
           >
             <Send className={`w-4 h-4 ${isSyncingNewsletter ? 'animate-pulse' : ''}`} />
             <span className="text-sm font-medium">{isSyncingNewsletter ? '동기화 중…' : '스티비 동기화'}</span>
+          </button>
+          <button
+            onClick={handleCheckFollowups}
+            disabled={isCheckingFollowups}
+            title="오늘 자동 발송될 팔로업 대상을 미리 봅니다 (발송하지 않음)"
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Clock className={`w-4 h-4 ${isCheckingFollowups ? 'animate-pulse' : ''}`} />
+            <span className="text-sm font-medium">{isCheckingFollowups ? '점검 중…' : '팔로업 점검'}</span>
           </button>
           <button
             onClick={() => setShowAddCustomerModal(true)}
@@ -2242,6 +2310,28 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         placeholder="메모를 입력하세요..."
                         className="flex-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none leading-relaxed"
                       />
+
+                      {/* 이메일 발송 이력 — 팔로업 자동 발송 장부 (최근 10건) */}
+                      {(selectedCustomer.emailHistory || []).length > 0 && (
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Mail className="w-4 h-4 text-slate-500" />
+                            <span className="text-sm font-semibold text-slate-700">이메일 발송 이력</span>
+                          </div>
+                          <ul className="space-y-1 max-h-40 overflow-y-auto">
+                            {[...selectedCustomer.emailHistory].reverse().slice(0, 10).map((e, i) => (
+                              <li key={i} className="text-xs text-slate-600 flex items-center gap-2">
+                                <span className="text-slate-400 shrink-0">{e.date}</span>
+                                <span className="truncate">{e.type}</span>
+                                <span className="text-slate-400 truncate">{e.recipient}</span>
+                                <span className={`shrink-0 ${e.status === 'sent' ? 'text-emerald-600' : e.status === 'failed' ? 'text-red-600' : 'text-slate-400'}`}>
+                                  {e.status === 'sent' ? '발송' : e.status === 'failed' ? '실패' : e.status === 'opened' ? '열람' : '건너뜀'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2706,9 +2796,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         <X className="w-5 h-5 text-slate-300" />
                                       )}
                                     </button>
-                                    <span className="text-xs text-slate-500">
-                                      {calculateReminderDate(work.workDate, 2)}
+                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 1) ? '자동 발송 예정일' : '자동 발송 미설정'}>
+                                      {reminderDueLabel(work.workDate, 1)}
                                     </span>
+                                    {autoSentEntry(selectedCustomer, work, 1) && (
+                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 1)!.date}</span>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="px-3 py-3 text-center">
@@ -2726,9 +2819,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         <X className="w-5 h-5 text-slate-300" />
                                       )}
                                     </button>
-                                    <span className="text-xs text-slate-500">
-                                      {calculateReminderDate(work.workDate, 6)}
+                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 2) ? '자동 발송 예정일' : '자동 발송 미설정'}>
+                                      {reminderDueLabel(work.workDate, 2)}
                                     </span>
+                                    {autoSentEntry(selectedCustomer, work, 2) && (
+                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 2)!.date}</span>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="px-3 py-3 text-center">
@@ -2746,9 +2842,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         <X className="w-5 h-5 text-slate-300" />
                                       )}
                                     </button>
-                                    <span className="text-xs text-slate-500">
-                                      {calculateReminderDate(work.workDate, 11)}
+                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 3) ? '자동 발송 예정일' : '자동 발송 미설정'}>
+                                      {reminderDueLabel(work.workDate, 3)}
                                     </span>
+                                    {autoSentEntry(selectedCustomer, work, 3) && (
+                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 3)!.date}</span>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="px-3 py-3 text-center">

@@ -8,13 +8,25 @@
 //   - 요금제: 구독자 API는 스탠다드부터 사용 가능 (그룹/이메일 API는 프로 이상 — 여기서는 사용 안 함)
 
 export const STIBEE_BASE_URL = 'https://api.stibee.com/v2';
+// 자동 이메일(트리거) API — v1. 자동 이메일의 "API 직접 요청" 트리거 URL: {STIBEE_AUTO_URL}/{autoEmailId}
+// 본문 { subscriber: email, ...개인화 키 }. 3회/초, 256KB. 200이어도 발송 보장 아님.
+export const STIBEE_AUTO_URL = 'https://stibee.com/api/v1.0/auto';
 export const BATCH_MAX = 1000;
+// 고객 데이터 원본 (cafe24 PHP). Functions는 /api/customers 프록시가 아니라 원본을 직접 호출한다.
+export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api.php';
 
 export interface StibeeEnv {
   STIBEE_API_KEY: string;
   STIBEE_LIST_ID: string;
   NEWSLETTER_WEBHOOK_SECRET?: string;
+  // 팔로업 자동 발송 — functions/_lib/followups.ts 참조
+  NEWSLETTER_FOLLOWUPS?: string; // JSON: {"grace":7,"stages":[{"stage":1,"days":30,"autoEmailId":"..."}]}
+  NEWSLETTER_CRON_SECRET?: string; // run-followups 실제 실행 토큰 (GitHub Secrets와 동일)
   ALLOWED_ORIGIN?: string;
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export interface StibeeSubscriberInput {
