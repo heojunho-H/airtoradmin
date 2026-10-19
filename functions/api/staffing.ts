@@ -6,9 +6,6 @@
 //   { input: StaffingInput, projectId?, userName? }
 //     → 200 { ok:true, data: StaffingSuggestion, model, effort, method, usage, costUsd, stopReason }
 //     → 실패 { ok:false, code, message(한국어), retryable }
-//   레거시(이전 배포 탭): Anthropic Messages 본문 그대로 { _model, system, tools, messages, ... }
-//     → messages[0] 의 사용자 텍스트만 꺼내 서버 프롬프트로 처리하고, 응답은 예전 tool_use 형태로 돌려준다.
-//     → 클라이언트의 _model·system·tools·max_tokens 는 무시한다(오픈 릴레이 차단). 1주 뒤 제거 예정.
 //
 // 모델·추론 강도는 설정 화면(D1 ai_settings.staffing)에서만 정한다. D1 이 없거나 장애면 코드 기본값
 // (Sonnet 4.6, thinking 없음, temperature 0.3, 강제 tool — Phase 1.8 동작과 동일)으로 동작한다.
@@ -30,7 +27,6 @@ import { DEFAULT_SETTINGS, buildModelParams, costMicros, getModel, normalizeMode
 import {
   STAFFING_JSON_SCHEMA,
   STAFFING_TOOL,
-  extractLegacyUserContent,
   normalizeSuggestion,
   staffingSystem,
   staffingUserContent,
@@ -51,17 +47,13 @@ export const onRequestPost: PagesFunction<AiEnv> = async (context) => {
   let spec: ModelSpec | undefined;
   let effort: ReturnType<typeof resolveEffort> | undefined;
   let userName: string | null = null;
-  let ref = 'legacy';
+  let ref = 'unknown';
 
   try {
     const body = await readJsonCapped<Record<string, unknown>>(request, 64_000);
-    const legacy = Array.isArray(body.messages);
-    const userContent = legacy ? extractLegacyUserContent(body) : staffingUserContent(validateStaffingInput(body.input));
-    if (!userContent) throw new AiError(400, 'bad_request', '인력배치 입력이 없습니다.');
-    if (!legacy) {
-      userName = cleanUserName(body.userName);
-      ref = typeof body.projectId === 'number' || typeof body.projectId === 'string' ? String(body.projectId) : 'unknown';
-    }
+    const userContent = staffingUserContent(validateStaffingInput(body.input));
+    userName = cleanUserName(body.userName);
+    if (typeof body.projectId === 'number' || typeof body.projectId === 'string') ref = String(body.projectId);
 
     const settings = await loadSettings(env.AI_DB);
     if (!settings.staffing.enabled) throw new AiError(503, 'feature_disabled', '관리자가 AI 인력배치를 일시 중지했습니다.');
@@ -141,18 +133,6 @@ export const onRequestPost: PagesFunction<AiEnv> = async (context) => {
     }
     log('ok');
 
-    if (legacy) {
-      // 이전 클라이언트는 content 에서 submit_staffing tool_use 블록을 찾는다
-      return jsonFor(request, env, {
-        id: msg.id,
-        type: 'message',
-        role: 'assistant',
-        model: servedModel,
-        stop_reason: 'tool_use',
-        usage: msg.usage,
-        content: [{ type: 'tool_use', id: 'toolu_legacy', name: STAFFING_TOOL.name, input: data }],
-      });
-    }
     return jsonFor(request, env, {
       ok: true,
       data,

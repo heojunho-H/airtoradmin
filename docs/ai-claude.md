@@ -9,7 +9,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치�
 | 파일 | 역할 |
 |---|---|
 | `functions/api/assistant.ts` | 단일 AI 엔드포인트 — 채팅(SSE)·기업정보(SSE)·설정·대화 목록·사용량. 경로에 "claude" 를 쓰지 않는다 (WAF 전례) |
-| `functions/api/staffing.ts` | AI 인력배치 (ProfitPage 자동 큐). 모델은 설정에서만 결정. 레거시 본문도 임시 수용 |
+| `functions/api/staffing.ts` | AI 인력배치 (ProfitPage 자동 큐). 모델은 설정에서만 결정 |
 | `functions/_lib/ai-models.ts` | **모델 레지스트리(단일 진실원)** — 모델별 가격·thinking·effort·구조화 출력·웹검색 버전, 기능별 기본값 |
 | `functions/_lib/ai-chat.ts` | 채팅 한 턴: 검증 → 스트리밍 → D1 원자 저장 → `done` |
 | `functions/_lib/ai-company.ts` | 기업정보: 웹 검색 + `pause_turn` 이어가기 + 출처 추출 |
@@ -137,6 +137,3 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
 | 긴 답변이 중간에 끊김 + 저장 안 됨 | Workers 무료 플랜 CPU 초과(1102) 가능성 — 6번 |
 | "안전 정책에 따라 AI가 답변하지 않았습니다" | 분류기 거부. 표현을 바꿔 재시도. 반복되면 다른 모델 선택 |
 | 인력배치 "AI 호출 타임아웃 (90초)" | 인력배치에 추론 강도가 높은 모델을 지정한 경우 — 설정에서 effort 를 낮추거나 Sonnet 4.6/5.5 로 |
-
-## 남은 정리 (2026-10 배포 약 1주 후)
-- `functions/api/staffing.ts` 의 레거시 본문(`messages`) 분기 제거 — 이전 배포 탭 호환용.

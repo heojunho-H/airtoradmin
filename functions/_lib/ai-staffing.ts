@@ -284,22 +284,6 @@ export function staffingUserContent(input: StaffingInput): string {
     .join('\n');
 }
 
-/** 이전 배포의 브라우저(열려 있던 탭)가 보내는 옛 본문에서 사용자 텍스트만 꺼낸다. */
-export function extractLegacyUserContent(body: Record<string, unknown>): string | null {
-  const messages = body.messages;
-  if (!Array.isArray(messages) || !messages[0] || typeof messages[0] !== 'object') return null;
-  const content = (messages[0] as { content?: unknown }).content;
-  let text = '';
-  if (typeof content === 'string') text = content;
-  else if (Array.isArray(content)) {
-    text = content
-      .map((c) => (c && typeof c === 'object' && (c as { type?: string }).type === 'text' ? String((c as { text?: unknown }).text ?? '') : ''))
-      .join('\n');
-  }
-  text = text.trim();
-  return text && text.length <= 30_000 ? text : null;
-}
-
 /** 모델 출력 검증 — 5역할 + days 를 0 이상 정수로 정리. 형식이 틀리면 null. */
 export function normalizeSuggestion(raw: unknown): StaffingSuggestion | null {
   if (!raw || typeof raw !== 'object') return null;
