@@ -211,8 +211,9 @@ export function upgradeExtraction(ex: Partial<QuoteExtraction> & Record<string, 
   const eqSum = sumEquipment(out);
   if (eqSum && out.totalQuantity && eqSum !== out.totalQuantity) flags.push('qty_mismatch');
   const linesTotal = out.lineItems.reduce((a, l) => a + (Number(l.total) || 0), 0);
-  // 천원 단위 절삭 정도(1% 미만)는 정상으로 본다
-  if (linesTotal && out.quotedTotal && Math.abs(linesTotal - out.quotedTotal) / out.quotedTotal >= 0.01) flags.push('amount_mismatch');
+  // 천원·만원 단위 절삭(1만 원 이하)은 정상으로 본다. 그보다 크고 1% 이상이면 할인·오기 확인
+  const gap = Math.abs(linesTotal - out.quotedTotal);
+  if (linesTotal && out.quotedTotal && gap > 10_000 && gap / out.quotedTotal >= 0.01) flags.push('amount_mismatch');
   out.flags = flags;
   return out;
 }

@@ -9,6 +9,7 @@
 import { normalizeCompanyName } from '../company';
 import { FLAG_LABELS, linkFile, type QuoteExtraction, type UploadResult } from './files';
 import { applyQuote, matchQuote, type ApplyResult, type FieldChange, type MatchResult } from './intake';
+import { parseAmount } from './snapshot/common';
 
 /** 한 번에 올릴 수 있는 견적서 수 (서버는 사용자당 10분 30건으로 한 번 더 막는다) */
 export const MAX_BATCH = 10;
@@ -199,6 +200,13 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
             if (cand.similar) reasons.push('비슷한 회사명');
             if (!cand.inWindow) reasons.push('문의일이 먼 딜');
             if (Number(cand.deal.id) !== match.defaultDealId || !match.clear) reasons.push('후보 딜 여러 개');
+          }
+          // 수주 딜의 금액·수량은 합의된 값 — 견적서가 달라도 사람이 확인하고 바꾼다 (예: 수주 후 낸 3차 견적)
+          const deal = cand?.deal ?? data.deals.find((d) => Number(d.id) === g.target);
+          if (deal && (deal.successStatus === 'success' || deal.status === 'confirmed')) {
+            const amountChanges = ex.quotedTotal > 0 && parseAmount(deal.quotationAmount) !== ex.quotedTotal;
+            const qtyChanges = ex.totalQuantity > 0 && (Number(deal.totalQuantity) || 0) !== ex.totalQuantity;
+            if (amountChanges || qtyChanges) reasons.push('수주 딜 금액·수량 변경');
           }
         }
         if (g.kind === 'same') reasons.push(g.pick === 'merge' ? '합산 입력' : '같은 딜에 견적서 여러 개');
