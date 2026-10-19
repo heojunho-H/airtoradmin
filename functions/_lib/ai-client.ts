@@ -135,6 +135,8 @@ export function collectSources(contents: BetaContentBlock[][], limit = 10): Sour
       }
     }
   }
+  // 인용이 있으면 그것만 보여준다 — 검색 결과에는 이름이 비슷한 다른 회사가 섞여 있다
+  if (out.length > 0) return out;
   for (const content of contents) {
     for (const b of content) {
       // 검색 오류 시 content 는 배열이 아니라 오류 객체 — 건너뛴다

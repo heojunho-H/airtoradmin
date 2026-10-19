@@ -86,6 +86,9 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
   - 대시보드 > Workers & Pages > airtoradmin > Functions > 실시간 로그, 또는
   - `npx wrangler pages deployment tail --project-name airtoradmin --environment preview --format json | grep -o '"outcome":"[a-zA-Z]*"'`
 - `exceededCpu` 가 한 번이라도 보이면 **Workers Paid($5/월)** 로 전환한다 (계정 단위, 코드 변경 없음).
+- 2026-10-19 프리뷰 측정: 가상 데이터 2만 자로 긴 분석 5턴 + 기업정보 3회 + Sonnet 5.5 분석 1회 중 **3건 exceededCpu**(긴 대화 4턴째, 기업정보 1회, Sonnet 분석) → Paid 전환 결정.
+  CPU 초과로 끊긴 요청은 저장·사용량 기록이 모두 빠지지만 Anthropic 에는 청구된다 (앱 사용량 카드가 실제보다 적게 보임).
+- 같은 측정의 비용 참고 (Opus 5.5·추론 보통): 분석형 질문 1건 $0.28~0.62, 기업정보 1건 $0.25~0.31. 같은 질문을 Haiku 5.5 로 하면 $0.021 (집계 결과 동일).
 
 ### 7. Gemini 정리
 - Pages 환경변수 `GEMINI_API_KEY` 삭제 (Production·Preview).
