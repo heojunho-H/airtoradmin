@@ -89,11 +89,15 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
 - 2026-10-19 프리뷰 측정: 가상 데이터 2만 자로 긴 분석 5턴 + 기업정보 3회 + Sonnet 5.5 분석 1회 중 **3건 exceededCpu**(긴 대화 4턴째, 기업정보 1회, Sonnet 분석) → Paid 전환 결정.
   CPU 초과로 끊긴 요청은 저장·사용량 기록이 모두 빠지지만 Anthropic 에는 청구된다 (앱 사용량 카드가 실제보다 적게 보임).
 - 같은 측정의 비용 참고 (Opus 5.5·추론 보통): 분석형 질문 1건 $0.28~0.62, 기업정보 1건 $0.25~0.31. 같은 질문을 Haiku 5.5 로 하면 $0.021 (집계 결과 동일).
+- **2026-10-19 Workers Paid 전환 완료.** 재측정에서 끊겼던 요청(8.6만 토큰 대화, 기업정보, Sonnet 분석) 모두 정상 완료, exceededCpu 없음.
 
 ### 7. Gemini 정리
 - Pages 환경변수 `GEMINI_API_KEY` 삭제 (Production·Preview).
 - Google AI Studio 에서 키 폐기 — 과거 커밋 `3efb8a7` 에 노출된 키 포함.
 - 직원들에게 새로고침 안내 (열려 있던 탭의 옛 AI 드로어는 동작하지 않는다).
+- 2026-10-19 진행: Pages Production `GEMINI_API_KEY` 삭제 완료 (Preview 에는 원래 없음). Google AI Studio 키 폐기는 계정 소유자가 직접 한다.
+- 같은 날 Production 의 `STIBEE_API_KEY`·`NEWSLETTER_CRON_SECRET`·`NEWSLETTER_WEBHOOK_SECRET` 을 Text → **Secret** 으로 전환 (값 유지, 스티비 인증 확인).
+  이제 대시보드에서 값을 다시 볼 수 없다 — GitHub Secret `NEWSLETTER_CRON_SECRET` 을 등록할 때 기존 값이 따로 없으면 새 값을 만들어 Cloudflare·GitHub 양쪽에 같이 넣는다.
 
 ## 동작 방식
 
