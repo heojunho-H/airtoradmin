@@ -16,7 +16,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 | `functions/_lib/ai-staffing.ts` | 인력배치 프롬프트·스키마·입력 검증 (브라우저에서 서버로 이전) |
 | `functions/_lib/ai-prompts.ts` | 전문가 에이전트 5종 프롬프트(역할·규칙·판단 기준·분석 절차), 데이터 스냅샷 블록, 기업정보 프롬프트 |
 | `functions/_lib/ai-store.ts` / `ai-http.ts` / `ai-client.ts` | D1 SQL / Origin·SSE·PIN 헬퍼 / SDK 클라이언트·오류 매핑 |
-| `functions/api/files.ts` | 견적서 입력 도우미 — PDF 업로드+판독(SSE)·파일 목록·내려받기·연결·삭제. 본문은 R2(`FILES`), 기록은 D1 `ai_files` |
+| `functions/api/files.ts` | 견적서 입력 도우미 — PDF 업로드+판독(SSE) / 고객사 파일 — 직접 올리기(판독 없음)·목록·내려받기·보기·연결·삭제. 본문은 R2(`FILES`), 기록은 D1 `ai_files` |
 | `functions/_lib/ai-files.ts` | 견적서 판독 프롬프트·JSON 스키마·결과 검증(금액·수량 교차 확인), `ai_files` SQL |
 | `functions/_lib/ai-auth.ts` | D1 확인·관리자 PIN 확인·"작성자 또는 PIN" 권한 (assistant·files 공용) |
 | `d1/migrations/0001_ai_init.sql` | D1 스키마 (재실행 안전) |
@@ -24,7 +24,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 | `src/app/components/ai/*` | AI 어시스턴트 페이지 (대화 목록·스트리밍·마크다운·모델 선택) |
 | `src/app/components/settings/*` | 설정 페이지 (AI 모델 설정·사용량·연결 상태) |
 | `src/lib/ai/*` | API 클라이언트·SSE 파서·전문가 정의(`personas.ts`)·포맷터. `intake.ts` = 견적서 매칭·변경표·딜/프로젝트 반영, `files.ts` = `/api/files` 클라이언트 |
-| `src/app/components/ai/QuoteIntakePanel.tsx` · `src/app/components/CustomerFiles.tsx` | 견적서 입력 도우미 화면 / 고객 상세의 "견적서·파일" 목록 |
+| `src/app/components/ai/QuoteIntakePanel.tsx` · `src/app/components/CompanyFiles.tsx` | 견적서 입력 도우미 화면 / 고객 상세 "파일"·영업 딜 상세 "고객사 파일" (올리기·보기·내려받기·삭제) |
 | `src/lib/ai/snapshot/*` | 전문가별 데이터 스냅샷 — `derive.ts` 가 원본 기록에서 지표를 다시 계산, `sales·crm·supply·profit·overview.ts` 가 전문가별 섹션 |
 
 ## 최초 설정 순서
@@ -137,7 +137,11 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
      - 맞는 딜이 없으면 새 딜(견적서 발송·진행중, 문의일 = 견적일).
      - 연결된 수주 딜이면 서버가 고객 작업이력과 프로젝트(견적·부가세 q×10/110·순매출·손익)를 함께 고친다 — docs/data-sync.md.
      - 서버 동기화가 실패해도 딜이 저장됐으면(500 + `persisted`) 저장된 것으로 안내하고, 고객관리·프로젝트 확인을 권한다.
-  4. 파일을 고객사(정규화 키)·딜에 연결 → 고객 관리 상세의 "견적서·파일"에서 내려받는다(수주 전 견적서도 같은 회사명이면 보인다). 삭제는 올린 사람 또는 관리자 PIN, 기록만 지우고 R2 본문은 남긴다.
+  4. 파일을 고객사(정규화 키)·딜에 연결 → 고객 관리 상세의 "파일"·영업 딜 상세의 "고객사 파일"에서 내려받는다(수주 전 견적서도 같은 회사명이면 보인다). 삭제는 올린 사람 또는 관리자 PIN, 기록만 지우고 R2 본문은 남긴다.
+- **고객사 파일** (2026-10-19): 고객 상세 "파일"·영업 딜 상세 "고객사 파일"에서 직접 올린다 — 판독 없이 R2 에 보관(`ai_files.kind='file'`).
+  - 같은 고객사 = 회사명 정규화 키·고객 ID·딜 ID 중 하나라도 맞으면(문의 단계에서 올린 파일이 수주 뒤 고객 상세에도 보이고, 고객명이 바뀌어도 고객 ID 로 보인다). 견적서 도우미 견적서도 같은 목록.
+  - 파일당 30MB·한 번에 10개, 실행 파일(.exe·.bat·.js 등) 거절, 형식은 확장자로 정한다. 같은 고객사에 같은 파일(sha256)이면 저장하지 않고 duplicate. 사용자당 10분 60개.
+  - 보기(새 탭)는 이미지·PDF 만 inline, 그 밖은 늘 내려받기. 견적서 도우미 '최근 파일'·판독 중복 검사는 `kind='quote'`만 본다.
 - **견적서 일괄 입력** (한 번에 최대 10개, 3개씩 동시 판독 — `src/lib/ai/intakeBatch.ts`):
   - 파일 여러 개 또는 고객 폴더째 끌어놓으면 PDF만 골라 읽는다. 판독 상한은 사용자당 10분 30건(서버 `ai_usage` 로 셈, 넘으면 429).
   - 판독은 공급자(에어터 등록번호 691-86-02152)로 타사 견적서를, 문서 종류로 사업자등록증·표준작업서 등을 거른다(보관 안 함).

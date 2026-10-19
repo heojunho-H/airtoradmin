@@ -38,7 +38,7 @@ import {
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
-import { CustomerFiles } from './CustomerFiles';
+import { CompanyFiles } from './CompanyFiles';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
@@ -2429,8 +2429,13 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         </div>
                       )}
 
-                      {/* 견적서·파일 — AI 견적서 입력 도우미로 올린 원본 (R2) */}
-                      <CustomerFiles company={selectedCustomer.company} />
+                      {/* 파일 — 직접 올린 고객사 파일 + 견적서 도우미로 올린 견적서 (R2). 이 고객과 연결된 딜에서 올린 파일도 보인다 */}
+                      <CompanyFiles
+                        company={selectedCustomer.company}
+                        customerId={selectedCustomer.id}
+                        dealIds={(selectedCustomer.workHistory || []).map((w) => linkedDealId(w)).filter((id) => id > 0)}
+                        title="파일"
+                      />
                     </div>
                   </div>
                 </div>

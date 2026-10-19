@@ -38,6 +38,7 @@ import {
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
+import { CompanyFiles } from './CompanyFiles';
 import { diffDeal, isValidYmd, isWonDeal, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
 
 interface Deal {
@@ -179,6 +180,8 @@ interface SalesPageProps {
   onSynced?: (result: SyncResult) => void;
   /** 고객 작업이력·프로젝트와 연결된 딜 (삭제 안내용) */
   linkedDealIds?: Set<number>;
+  /** 딜 ID → 그 딜을 작업이력에 가진 고객 ID (고객사 파일 목록을 고객 상세와 같게) */
+  dealCustomerIds?: Map<number, number>;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
   externalDateFilterState?: [DateFilter, (s: DateFilter | ((prev: DateFilter) => DateFilter)) => void];
   externalViewState?: [SalesViewState, (s: SalesViewState | ((prev: SalesViewState) => SalesViewState)) => void];
@@ -186,7 +189,7 @@ interface SalesPageProps {
   onNotification?: (message: string) => void;
 }
 
-export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomerIds, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
@@ -2484,6 +2487,17 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, externalDeal
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* 고객사 파일 — 이 회사 파일을 올리고 내려받는다. 수주되면 고객 상세에도 그대로 보인다 */}
+              {!isAddingNewDeal && selectedDeal.id > 0 && (
+                <CompanyFiles
+                  company={selectedDeal.company || ''}
+                  dealId={selectedDeal.id}
+                  customerId={dealCustomerIds?.get(selectedDeal.id) ?? null}
+                  title="고객사 파일"
+                  variant="panel"
+                />
               )}
 
               {/* 담당자 및 일정 정보 */}

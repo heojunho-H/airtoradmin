@@ -115,6 +115,15 @@ export default function App() {
 
   // 연결 작업·프로젝트의 '수주 취소'·'딜 삭제됨' 표시용 (딜 목록을 못 불러왔으면 표시하지 않는다)
   const dealStates = useMemo(() => (deals.length > 0 ? buildDealStateMap(deals) : null), [deals]);
+  // 딜 → 그 딜을 작업이력에 가진 고객 (영업 딜 상세의 고객사 파일 목록용)
+  const dealCustomerIds = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const c of customers) for (const w of c.workHistory || []) {
+      const id = linkedDealId(w);
+      if (id && !map.has(id)) map.set(id, Number(c.id));
+    }
+    return map;
+  }, [customers]);
   // 고객 작업이력·프로젝트와 연결된 딜 (영업 페이지 삭제 안내용)
   const linkedDealIds = useMemo(() => {
     const set = new Set<number>();
@@ -550,7 +559,7 @@ export default function App() {
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
           {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
           {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} />}
           {currentPage === 'settings' && (
