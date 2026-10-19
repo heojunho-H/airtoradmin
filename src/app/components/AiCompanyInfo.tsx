@@ -13,6 +13,8 @@ const Markdown = lazy(() => import('./ai/Markdown'));
 interface CompanyResult {
   text: string;
   sources: AiSource[];
+  /** false = 답변이 직접 인용하지 않은, 회사명이 들어간 검색 결과 */
+  sourcesCited: boolean;
   model: string;
   costUsd: number | null;
 }
@@ -53,7 +55,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
         (event, data) => {
           if (event === 'status') setStatus({ phase: data.phase, query: data.query });
           else if (event === 'text') setDraft((d) => d + (data.delta || ''));
-          else if (event === 'done') done = { text: data.text, sources: data.sources ?? [], model: data.model, costUsd: data.costUsd ?? null };
+          else if (event === 'done') done = { text: data.text, sources: data.sources ?? [], sourcesCited: data.sourcesCited !== false, model: data.model, costUsd: data.costUsd ?? null };
           else if (event === 'error') setError(data.message || '기업 정보를 가져오지 못했습니다.');
         },
         ac.signal,
@@ -154,7 +156,9 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
                   </Suspense>
                   {result.sources.length > 0 && (
                     <div className="mt-5 pt-4 border-t border-slate-100">
-                      <p className="text-[11px] font-semibold text-slate-500 mb-2">참고 출처 ({result.sources.length})</p>
+                      <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                        {result.sourcesCited ? '참고 출처' : '관련 검색 결과'} ({result.sources.length})
+                      </p>
                       <ul className="space-y-1.5">
                         {result.sources.map((s, i) => (
                           <li key={s.url} className="flex items-start gap-1.5">

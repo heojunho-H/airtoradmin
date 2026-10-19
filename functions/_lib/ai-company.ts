@@ -2,7 +2,7 @@
 // Gemini 2.5 Flash + Google Search grounding 을 대체한다.
 //
 // 웹 검색 + pause_turn 이어가기까지 20~90초 걸릴 수 있어 SSE 로 진행 상태를 보낸다.
-//   meta → status{searching(query)|writing|continuing} → text(임시) → done{text(확정), sources, ...}
+//   meta → status{searching(query)|writing|continuing} → text(임시) → done{text(확정), sources, sourcesCited, ...}
 // done.text 가 화면 본문을 대체한다(검색 전 서두 문장 제외). stream:false 면 JSON 한 번에.
 
 import type Anthropic from '@anthropic-ai/sdk';
@@ -31,6 +31,8 @@ const MAX_CONTINUATIONS = 3;
 interface CompanyResult {
   text: string;
   sources: { url: string; title: string }[];
+  /** true = 답변이 직접 인용한 출처, false = 인용이 없어 회사명이 들어간 검색 결과로 대체 */
+  sourcesCited: boolean;
   model: string;
   usage: ReturnType<typeof emptyUsage>;
   costUsd: number;
@@ -173,9 +175,11 @@ async function research(
 
   const servedModel = last ? normalizeModelId(last.model) : spec.id;
   const cost = costMicros(servedModel, usage);
+  const sources = collectSources(contents, { mustInclude: company });
   return {
     text: last ? finalAnswerText(last.content).trim() : '',
-    sources: collectSources(contents),
+    sources: sources.items,
+    sourcesCited: sources.cited,
     model: servedModel,
     usage,
     costUsd: cost / 1e6,

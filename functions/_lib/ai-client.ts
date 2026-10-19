@@ -119,7 +119,21 @@ export interface Source {
 }
 
 /** 출처: 본문 인용(web_search_result_location) 우선, 다음으로 검색 결과 목록. http(s)만, 중복 제거. */
-export function collectSources(contents: BetaContentBlock[][], limit = 10): Source[] {
+/** 회사명 비교용: 공백·법인 표기 제거, 소문자 */
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/\(주\)|㈜|주식회사|\s+/g, '');
+}
+
+/**
+ * 출처 목록. 답변에 인용(citations)이 있으면 그것만 쓴다 (cited: true).
+ * 인용이 없으면 검색 결과로 대체하되, mustInclude(회사명)가 제목·URL 에 들어간 것만 남긴다 —
+ * 검색 결과에는 이름이 비슷한 다른 회사가 섞여 있다.
+ */
+export function collectSources(
+  contents: BetaContentBlock[][],
+  opts: { limit?: number; mustInclude?: string } = {},
+): { items: Source[]; cited: boolean } {
+  const limit = opts.limit ?? 10;
   const out: Source[] = [];
   const seen = new Set<string>();
   const push = (url: string | undefined, title: string | null | undefined) => {
@@ -135,14 +149,25 @@ export function collectSources(contents: BetaContentBlock[][], limit = 10): Sour
       }
     }
   }
-  // 인용이 있으면 그것만 보여준다 — 검색 결과에는 이름이 비슷한 다른 회사가 섞여 있다
-  if (out.length > 0) return out;
+  if (out.length > 0) return { items: out, cited: true };
+  const needle = opts.mustInclude ? normalizeName(opts.mustInclude) : '';
   for (const content of contents) {
     for (const b of content) {
       // 검색 오류 시 content 는 배열이 아니라 오류 객체 — 건너뛴다
       if (b.type !== 'web_search_tool_result' || !Array.isArray(b.content)) continue;
-      for (const r of b.content) push(r.url, r.title);
+      for (const r of b.content) {
+        if (needle && !normalizeName(`${r.title ?? ''} ${decodeURIComponentSafe(r.url)}`).includes(needle)) continue;
+        push(r.url, r.title);
+      }
     }
   }
-  return out;
+  return { items: out, cited: false };
+}
+
+function decodeURIComponentSafe(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
 }
