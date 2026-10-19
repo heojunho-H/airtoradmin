@@ -24,7 +24,7 @@ import { normalizeCompanyName } from '../../../lib/company';
 import { toAiRequestError } from '../../../lib/ai/api';
 import { deleteFile, downloadUrl, formatBytes, linkFile, listRecentFiles, uploadQuote, type StoredFile, type UploadPhase, type UploadResult } from '../../../lib/ai/files';
 import { formatKrw, kstYmd, prettyModelId, relativeTimeKo } from '../../../lib/ai/format';
-import { applyQuote, candidateLabel, equipmentSummary, manwonText, matchQuote, planDeal, serviceLabel, type ApplyResult } from '../../../lib/ai/intake';
+import { applyQuote, candidateLabel, equipmentSummary, manwonText, matchQuote, planDeal, projectAmounts, serviceLabel, wonText, type ApplyResult } from '../../../lib/ai/intake';
 import { INTAKE_AGENT } from '../../../lib/ai/personas';
 import type { AiDatasets } from '../../../lib/ai/types';
 
@@ -51,7 +51,7 @@ interface Props {
   onBack: () => void;
 }
 
-type MatchData = Pick<AiDatasets, 'deals' | 'customers' | 'managers'>;
+type MatchData = Pick<AiDatasets, 'deals' | 'customers' | 'managers' | 'projects'>;
 
 type Stage =
   | { kind: 'idle' }
@@ -114,7 +114,7 @@ function DropZone({ onFile, dragging }: { onFile: (f: File) => void; dragging: b
       <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#eef5ff] text-[#3b82f6]">
         <Upload className="h-6 w-6" strokeWidth={1.9} />
       </span>
-      <p className="mt-4 text-[15px] font-semibold text-slate-800">견적서 PDF를 여기로 끌어놓으세요</p>
+      <p className="mt-4 text-[15px] font-semibold text-slate-800">견적서 PDF를 끌어놓거나 선택하세요</p>
       <p className="mt-1 text-[13px] text-slate-500">PDF · 20MB 이하 · 한 번에 한 장</p>
       <button
         onClick={() => inputRef.current?.click()}
@@ -255,6 +255,10 @@ function ReviewCard({
     [ex, company, selected, file.fileName, manager, needsManager],
   );
   const changed = plan.changes.filter((c) => c.changed);
+  // 수주 딜의 프로젝트는 생성 후 갱신되지 않는다 — 견적서 금액과 다르면 함께 고친다 (applyQuote)
+  const project = plan.dealSuccess && selected ? data.projects.find((p) => Number(p.dealId) === Number(selected.deal.id)) : undefined;
+  const projectCurrent = project ? Number(project.quotationAmount) || 0 : 0;
+  const projectFix = !!project && ex.quotedTotal > 0 && projectCurrent !== ex.quotedTotal;
   const confidence = CONFIDENCE[ex.confidence] ?? CONFIDENCE.medium;
   const canApply = !applying && !!(company.trim() || selected);
 
@@ -272,7 +276,7 @@ function ReviewCard({
         <p className="flex items-start gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12px] text-slate-600 md:px-5">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           {file.status === 'linked'
-            ? `이미 입력한 견적서입니다 (${file.linkedBy ?? file.uploadedBy}님${file.linkedAt ? `, ${relativeTimeKo(file.linkedAt)}` : ''}${file.dealId ? `, 딜 #${file.dealId}` : ''}). 같은 딜에 다시 입력하면 값이 같아 바뀌지 않습니다.`
+            ? `이미 입력한 견적서입니다 (${file.linkedBy ?? file.uploadedBy}님${file.linkedAt ? `, ${relativeTimeKo(file.linkedAt)}` : ''}${file.dealId ? `, 딜 #${file.dealId}` : ''}). 아래 변경표는 지금 값과 다시 비교한 결과입니다.`
             : `${file.uploadedBy}님이 ${relativeTimeKo(file.createdAt)} 올린 파일입니다. 이전 판독 결과를 다시 사용합니다.`}
         </p>
       )}
@@ -287,7 +291,10 @@ function ReviewCard({
           </Row>
         </dl>
         <dl>
-          <Row label="서비스">{[serviceLabel(ex), ex.serviceName && ex.serviceName !== serviceLabel(ex) ? `(${ex.serviceName})` : ''].filter(Boolean).join(' ')}</Row>
+          <Row label="서비스">
+            {serviceLabel(ex)}
+            {ex.serviceName && ex.serviceName !== serviceLabel(ex) ? <span className="text-slate-400"> · {ex.serviceName}</span> : null}
+          </Row>
           <Row label="장비">
             {equipmentSummary(ex)}
             {ex.totalQuantity ? <span className="text-slate-400"> · 총 {ex.totalQuantity}대</span> : null}
@@ -375,8 +382,8 @@ function ReviewCard({
 
       <div className="border-t border-slate-100 px-4 py-4 md:px-5">
         <p className="text-[13px] font-semibold text-slate-900">{plan.mode === 'create' ? '새로 등록할 값' : '바뀌는 값'}</p>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[420px] text-left text-[13px]">
+        <div className="mt-2">
+          <table className="w-full text-left text-[13px]">
             <thead>
               <tr className="border-b border-slate-100 text-[12px] text-slate-500">
                 <th className="py-1.5 pr-3 font-medium">항목</th>
@@ -389,20 +396,34 @@ function ReviewCard({
                 <tr key={c.label} className="border-b border-slate-50 align-top last:border-0">
                   <td className="whitespace-nowrap py-1.5 pr-3 text-slate-500">{c.label}</td>
                   {plan.mode === 'update' && <td className={`py-1.5 pr-3 ${c.changed ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-500'}`}>{c.current}</td>}
-                  <td className={`py-1.5 ${c.changed ? 'font-medium text-slate-900' : 'text-slate-400'}`}>
+                  <td className={`py-1.5 break-keep ${c.changed ? 'font-medium text-slate-900' : 'text-slate-400'}`}>
                     {c.changed ? c.next : '그대로'}
                     {c.note && c.changed && <span className="ml-1 text-[11px] font-normal text-slate-400">({c.note})</span>}
                   </td>
                 </tr>
               ))}
+              {projectFix && (
+                <tr className="align-top">
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-slate-500">프로젝트 견적</td>
+                  <td className="py-1.5 pr-3 text-slate-400 line-through decoration-slate-300">{wonText(projectCurrent) || '0원'}</td>
+                  <td className="py-1.5 font-medium text-slate-900">
+                    {wonText(ex.quotedTotal)}
+                    <span className="block text-[11px] font-normal text-slate-400 sm:ml-1 sm:inline">(순매출 {wonText(projectAmounts(ex.quotedTotal).netRevenue)})</span>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
         <ul className="mt-3 space-y-1 text-[12px] text-slate-500">
-          {plan.mode === 'update' && changed.length === 0 && <li>딜 값이 이미 견적서와 같습니다. 입력하면 관리 메모에 기록하고 파일을 연결합니다.</li>}
-          <li>관리 메모 끝에 “견적서 반영” 한 줄을 덧붙이고, 파일은 이 고객사에 보관됩니다.</li>
-          {plan.dealSuccess && <li className="text-slate-600">수주된 딜이라 고객 작업 이력과 프로젝트 견적·부가세·순매출도 함께 갱신됩니다.</li>}
-          {selected?.alreadyEntered && <li>이 딜에는 같은 견적 금액이 이미 들어 있습니다.</li>}
+          {plan.mode === 'update' && changed.length === 0 ? (
+            <li>딜 값은 이미 견적서와 같습니다. 입력하면 관리 메모에 “견적서 반영” 한 줄을 남기고 파일을 이 고객사에 보관합니다.</li>
+          ) : (
+            <li>관리 메모 끝에 “견적서 반영” 한 줄을 덧붙이고, 파일은 이 고객사에 보관됩니다.</li>
+          )}
+          {plan.dealSuccess && changed.length > 0 && <li className="text-slate-600">수주된 딜이라 고객 작업 이력도 함께 갱신됩니다.</li>}
+          {projectFix && <li className="text-slate-600">프로젝트 관리의 견적·부가세·순매출을 견적서 금액으로 고칩니다 (인건비율·순익은 서버가 다시 계산).</li>}
+          {selected?.alreadyEntered && changed.length > 0 && <li>이 딜에는 같은 견적 금액이 이미 들어 있습니다.</li>}
         </ul>
         {ex.warnings.length > 0 && (
           <ul className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
@@ -614,7 +635,7 @@ export function QuoteIntakePanel({ isActive, userName, datasets, loadFreshDatase
       const result = await uploadQuote(file, userName, (phase) => setStage((s) => (s.kind === 'uploading' ? { ...s, phase } : s)), ctrl.signal);
       const data = await fresh;
       if (ctrl.signal.aborted) return;
-      setStage({ kind: 'review', result, data: { deals: data.deals, customers: data.customers, managers: data.managers } });
+      setStage({ kind: 'review', result, data: { deals: data.deals, customers: data.customers, managers: data.managers, projects: data.projects } });
     } catch (err) {
       const e = toAiRequestError(err);
       setStage({ kind: 'idle' });
