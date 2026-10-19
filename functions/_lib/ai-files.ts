@@ -33,17 +33,23 @@ export const QUOTE_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: [
-    'documentType', 'recipientCompany', 'contactName', 'contactPosition', 'quoteDate', 'validDays', 'serviceName', 'serviceCategory',
-    'equipment', 'otherItems', 'totalQuantity', 'lineItems', 'supplyTotal', 'taxTotal', 'quotedTotal', 'vatIncluded', 'notes',
-    'plannedCrew', 'confidence', 'warnings',
+    'documentType', 'otherKind', 'supplierName', 'issuedByAirtor', 'recipientCompany', 'contactName', 'contactPosition', 'quoteDate',
+    'validDays', 'revision', 'variantLabel', 'quoteCount', 'serviceName', 'serviceCategory', 'equipment', 'otherItems', 'totalQuantity',
+    'lineItems', 'supplyTotal', 'taxTotal', 'quotedTotal', 'vatIncluded', 'notes', 'plannedCrew', 'confidence', 'warnings',
   ],
   properties: {
     documentType: { type: 'string', enum: ['quote', 'other'], description: '견적서이면 quote, 아니면 other' },
+    otherKind: str('견적서가 아니면 어떤 문서인지 짧게(예: 사업자등록증, 작업표준서, 안내문). 견적서면 빈 문자열'),
+    supplierName: str('공급자(견적을 낸 회사) 상호. 모르면 빈 문자열'),
+    issuedByAirtor: { type: 'boolean', description: '공급자가 에어터(㈜에어터, AIRTOR)이면 true, 다른 업체면 false' },
     recipientCompany: str('수신(고객) 회사명. 공급자(에어터)가 아니다. 모르면 빈 문자열'),
     contactName: str('수신측 담당자 이름(직책·존칭 제외). 없으면 빈 문자열'),
     contactPosition: str('수신측 담당자 직책(예: 주임). 없으면 빈 문자열'),
     quoteDate: str('견적일자 YYYY-MM-DD. 없으면 빈 문자열'),
     validDays: int('유효기간 일수. 없으면 0'),
+    revision: int('문서에 적힌 견적 차수(예: "2차 견적서" → 2, "수정 견적" → 2). 표시가 없으면 1'),
+    variantLabel: str('같은 고객의 다른 견적과 구분하는 현장·지점·건물 또는 안(옵션) 라벨(예: 김포, 방화, 스탠드, 반분해). 회사명은 넣지 않는다. 없으면 빈 문자열'),
+    quoteCount: int('이 PDF 에 수신처나 총 견적 금액이 따로 있는 견적서가 몇 개인지. 보통 1'),
     serviceName: str('문서에 적힌 서비스명'),
     serviceCategory: { type: 'string', enum: ['에어컨세척', '해충방제', '표면소독', '실내공기질', '기타'] },
     equipment: {
@@ -84,30 +90,49 @@ export const QUOTE_JSON_SCHEMA = {
 } as const;
 
 const QUOTE_SYSTEM = `당신은 에어터(Airtor)의 견적서 판독기입니다. 첨부된 PDF 를 읽고 지정된 JSON 형식으로만 답합니다.
-에어터는 해충방제·표면소독·에어컨세척·실내공기질 서비스를 하는 B2B 회사이고, 견적서의 "공급자"는 항상 에어터입니다.
+에어터는 해충방제·표면소독·에어컨세척·실내공기질 서비스를 하는 B2B 회사입니다. 보통 견적서의 "공급자"는 에어터지만,
+고객 폴더에는 다른 업체가 낸 견적서나 견적서가 아닌 문서(사업자등록증, 작업표준서, 안내문 등)가 섞여 있을 수 있습니다.
 
 판독 규칙:
+- 공급자(상호·대표자·등록번호가 적힌 쪽)가 에어터가 아니면 issuedByAirtor=false, supplierName 에 그 회사명을 적습니다. 에어터면 true.
+- 견적서가 아니면 documentType=other, otherKind 에 문서 종류를 적고 나머지는 빈 값으로 둡니다.
+- revision: 제목·본문에 "2차 견적서", "3차", "수정 견적" 같은 차수 표시가 있으면 그 숫자(수정 견적은 2), 없으면 1.
+- variantLabel: 현장·지점·건물이나 안(옵션)이 따로 적혀 있으면 짧게 적습니다(예: "김포", "방화동 지점", "스탠드", "반분해"). 수신 회사명 자체는 넣지 않습니다.
+- quoteCount: 수신처나 총 견적 금액이 서로 다른 견적이 한 PDF 에 여러 개 있으면 그 수. 이때 첫 번째 견적만 판독하고 warnings 에 적습니다.
 - recipientCompany 는 "수신"(고객) 회사명입니다. 공급자(㈜에어터)를 넣지 않습니다. "귀 OOO 사" 같은 문구로도 확인할 수 있습니다.
 - 담당자 "박재경 주임님" → contactName "박재경", contactPosition "주임". 존칭(님)은 빼고 이름과 직책을 나눕니다.
 - quoteDate: "2026년 10월 16일" → "2026-10-16".
 - equipment 는 "의뢰 대수" 표의 냉난방기 종류별 대수입니다. 이름이 조금 달라도 가장 가까운 종류에 넣습니다:
   벽걸이 → wall, 스탠드형·스탠드 일반형 → standNormal, 스탠드형 대형·스탠드 대형 → standLarge, 1way 천정형 → way1, 2way → way2, 4way → way4, 원형 → round, FCU → fcu, 매립덕트 → duct, 실외기 → outdoor. 해당 없으면 0.
 - 에어컨이 아닌 서비스(방제·소독·공기질 측정 등)는 equipment 를 모두 0 으로 두고 otherItems 에 품목과 수량을 넣습니다.
+  면적·횟수·기간이 기준이면 이름에 단위를 붙입니다(예: "방역 면적(㎡)" 1200, "방문 횟수(회)" 12).
+  월·연 정기 계약이면 quotedTotal 은 문서의 총 견적 금액을 그대로 쓰고, 그 금액의 기준(월/연/회당)을 warnings 에 적습니다.
 - EVENT, 무료, "All" 같은 행은 수량·품목이 아닙니다. lineItems 와 otherItems 에서 뺍니다.
 - quotedTotal 은 문서의 "총 견적 금액"을 그대로 씁니다(천원 단위 절삭·할인 후 최종 금액). 품목 합계와 다르면 warnings 에 두 금액과 이유(예: 천원 단위 절삭)를 적습니다.
 - 회사 소개·실적·포트폴리오 쪽은 무시합니다(notes 에 넣지 않음).
 - 숫자는 쉼표 없는 정수(원)입니다. 읽을 수 없는 값은 0 이나 빈 문자열로 두고 warnings 에 적습니다.
-- 견적서가 아니면 documentType 을 other 로 하고 나머지는 빈 값으로 둡니다.`;
+- 확실하지 않은 값이 있으면 confidence 를 medium 이나 low 로 둡니다.`;
 
 // ─── 판독 결과 ──────────────────────────────────────────────────────────
 
 export interface QuoteExtraction {
   documentType: 'quote' | 'other';
+  /** 견적서가 아닐 때 문서 종류 */
+  otherKind: string;
+  supplierName: string;
+  /** 공급자가 에어터인가 — 아니면 타사 견적서로 거른다 */
+  issuedByAirtor: boolean;
   recipientCompany: string;
   contactName: string;
   contactPosition: string;
   quoteDate: string;
   validDays: number;
+  /** 견적 차수 — 문서 표시와 파일명 "N차견적서" 중 큰 값, 없으면 1 */
+  revision: number;
+  /** 현장·지점·안 구분 라벨 — 문서 또는 파일명 "견적서(김포)" */
+  variantLabel: string;
+  /** PDF 하나에 든 견적서 수 */
+  quoteCount: number;
   serviceName: string;
   serviceCategory: string;
   /** 영업 화면 상세 수량 키(한글) → 대수 */
@@ -123,7 +148,12 @@ export interface QuoteExtraction {
   plannedCrew: { role: string; count: number }[];
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];
+  /** 코드가 판정한 확인 필요 사유 (화면의 "분명한 건" 판정에 쓴다) — QUOTE_FLAGS */
+  flags: string[];
 }
+
+/** 확인 필요 사유 — 이 중 하나라도 있으면 일괄 입력에서 미리 체크하지 않는다 */
+export const QUOTE_FLAGS = ['multi_quote', 'vat_excluded', 'no_date', 'no_amount', 'no_company', 'qty_mismatch', 'amount_mismatch'] as const;
 
 const toInt = (v: unknown) => {
   const n = Math.round(Number(v));
@@ -131,8 +161,64 @@ const toInt = (v: unknown) => {
 };
 const toStr = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
+/** "2차견적서_…", "3차 견적서" → 2·3 (없으면 1) */
+export function fileRevision(fileName: string): number {
+  const m = /(\d{1,2})\s*차\s*견적/.exec(fileName || '');
+  const n = m ? Number(m[1]) : 1;
+  return n >= 1 && n <= 20 ? n : 1;
+}
+
+/** "견적서(김포)_…", "2차견적서(스탠드)_…" → 김포·스탠드 */
+export function fileVariant(fileName: string): string {
+  const m = /견적서\s*\(([^)]{1,20})\)/.exec(fileName || '');
+  return m ? m[1].trim() : '';
+}
+
+const sumEquipment = (ex: Pick<QuoteExtraction, 'equipment' | 'otherItems'>) =>
+  Object.values(ex.equipment ?? {}).reduce((a, b) => a + (Number(b) || 0), 0) + (ex.otherItems ?? []).reduce((a, o) => a + (Number(o.quantity) || 0), 0);
+
+/**
+ * 새 필드 기본값 채우기 + 파일명 정보 + 플래그 다시 계산.
+ * 모델 판독 직후와, sha 로 재사용하는 이전 판독 결과(필드가 없을 수 있음) 모두에 쓴다.
+ */
+export function upgradeExtraction(ex: Partial<QuoteExtraction> & Record<string, unknown>, fileName: string): QuoteExtraction {
+  const out = {
+    otherKind: '',
+    supplierName: '',
+    issuedByAirtor: true,
+    revision: 1,
+    variantLabel: '',
+    quoteCount: 1,
+    equipment: {},
+    otherItems: [],
+    lineItems: [],
+    notes: [],
+    plannedCrew: [],
+    warnings: [],
+    ...ex,
+  } as QuoteExtraction;
+  out.revision = Math.max(toInt(out.revision) || 1, fileRevision(fileName));
+  out.variantLabel = toStr(out.variantLabel, 40) || fileVariant(fileName);
+  out.quoteCount = toInt(out.quoteCount) || 1;
+  out.issuedByAirtor = out.issuedByAirtor !== false;
+
+  const flags: string[] = [];
+  if (out.quoteCount > 1) flags.push('multi_quote');
+  if (out.quotedTotal && out.vatIncluded === false) flags.push('vat_excluded');
+  if (!out.quoteDate) flags.push('no_date');
+  if (!out.quotedTotal) flags.push('no_amount');
+  if (!out.recipientCompany) flags.push('no_company');
+  const eqSum = sumEquipment(out);
+  if (eqSum && out.totalQuantity && eqSum !== out.totalQuantity) flags.push('qty_mismatch');
+  const linesTotal = out.lineItems.reduce((a, l) => a + (Number(l.total) || 0), 0);
+  // 천원 단위 절삭 정도(1% 미만)는 정상으로 본다
+  if (linesTotal && out.quotedTotal && Math.abs(linesTotal - out.quotedTotal) / out.quotedTotal >= 0.01) flags.push('amount_mismatch');
+  out.flags = flags;
+  return out;
+}
+
 /** 모델 출력 검증·정리 + 금액·수량 교차 확인(코드로 다시 계산해 경고를 붙인다) */
-export function normalizeExtraction(raw: unknown): QuoteExtraction | null {
+export function normalizeExtraction(raw: unknown, fileName = ''): QuoteExtraction | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, any>;
   const eq = (r.equipment && typeof r.equipment === 'object' ? r.equipment : {}) as Record<string, unknown>;
@@ -156,7 +242,7 @@ export function normalizeExtraction(raw: unknown): QuoteExtraction | null {
   const quoteDate = /^\d{4}-\d{2}-\d{2}$/.test(toStr(r.quoteDate)) ? toStr(r.quoteDate) : '';
   const warnings = (Array.isArray(r.warnings) ? r.warnings : []).map((w: unknown) => toStr(w, 200)).filter(Boolean).slice(0, 8);
 
-  const equipmentSum = Object.values(equipment).reduce((a, b) => a + b, 0) + otherItems.reduce((a: number, o: { quantity: number }) => a + o.quantity, 0);
+  const equipmentSum = sumEquipment({ equipment, otherItems });
   const totalQuantity = toInt(r.totalQuantity) || equipmentSum;
   if (equipmentSum && totalQuantity && equipmentSum !== totalQuantity) {
     warnings.push(`종류별 대수 합계 ${equipmentSum}대와 총 수량 ${totalQuantity}대가 다릅니다.`);
@@ -169,32 +255,50 @@ export function normalizeExtraction(raw: unknown): QuoteExtraction | null {
   if (!quoteDate) warnings.push('견적일자를 읽지 못했습니다.');
   // 딜 견적 금액·프로젝트 부가세 계산은 VAT 포함 기준이다 (deals_api.php syncDealToProject)
   if (quotedTotal && r.vatIncluded === false) warnings.push('총 견적 금액이 VAT 별도로 보입니다 — 시스템 견적 금액은 VAT 포함 기준이니 확인하세요.');
+  const quoteCount = toInt(r.quoteCount) || 1;
+  if (quoteCount > 1) warnings.push(`이 PDF 에 견적서가 ${quoteCount}개 들어 있습니다 — 첫 번째 견적만 읽었습니다. 한 파일에 하나씩 올려 주세요.`);
 
-  return {
-    documentType: r.documentType === 'quote' ? 'quote' : 'other',
-    recipientCompany: toStr(r.recipientCompany, 100),
-    contactName: toStr(r.contactName, 40),
-    contactPosition: toStr(r.contactPosition, 40),
-    quoteDate,
-    validDays: toInt(r.validDays),
-    serviceName: toStr(r.serviceName, 80),
-    serviceCategory: toStr(r.serviceCategory, 20) || '기타',
-    equipment,
-    otherItems,
-    totalQuantity,
-    lineItems,
-    supplyTotal: toInt(r.supplyTotal),
-    taxTotal: toInt(r.taxTotal),
-    quotedTotal,
-    vatIncluded: r.vatIncluded !== false,
-    notes: (Array.isArray(r.notes) ? r.notes : []).map((n: unknown) => toStr(n, 200)).filter(Boolean).slice(0, 5),
-    plannedCrew: (Array.isArray(r.plannedCrew) ? r.plannedCrew : [])
-      .map((c: any) => ({ role: toStr(c?.role, 30), count: toInt(c?.count) }))
-      .filter((c: { role: string }) => c.role)
-      .slice(0, 12),
-    confidence: r.confidence === 'high' || r.confidence === 'low' ? r.confidence : 'medium',
-    warnings,
-  };
+  return upgradeExtraction(
+    {
+      documentType: r.documentType === 'quote' ? 'quote' : 'other',
+      otherKind: toStr(r.otherKind, 40),
+      supplierName: toStr(r.supplierName, 100),
+      issuedByAirtor: r.issuedByAirtor !== false,
+      recipientCompany: toStr(r.recipientCompany, 100),
+      contactName: toStr(r.contactName, 40),
+      contactPosition: toStr(r.contactPosition, 40),
+      quoteDate,
+      validDays: toInt(r.validDays),
+      revision: toInt(r.revision) || 1,
+      variantLabel: toStr(r.variantLabel, 40),
+      quoteCount,
+      serviceName: toStr(r.serviceName, 80),
+      serviceCategory: toStr(r.serviceCategory, 20) || '기타',
+      equipment,
+      otherItems,
+      totalQuantity,
+      lineItems,
+      supplyTotal: toInt(r.supplyTotal),
+      taxTotal: toInt(r.taxTotal),
+      quotedTotal,
+      vatIncluded: r.vatIncluded !== false,
+      notes: (Array.isArray(r.notes) ? r.notes : []).map((n: unknown) => toStr(n, 200)).filter(Boolean).slice(0, 5),
+      plannedCrew: (Array.isArray(r.plannedCrew) ? r.plannedCrew : [])
+        .map((c: any) => ({ role: toStr(c?.role, 30), count: toInt(c?.count) }))
+        .filter((c: { role: string }) => c.role)
+        .slice(0, 12),
+      confidence: r.confidence === 'high' || r.confidence === 'low' ? r.confidence : 'medium',
+      warnings,
+    },
+    fileName,
+  );
+}
+
+/** 견적서로 받지 않는 이유 — null 이면 받는다 */
+export function rejectReason(ex: QuoteExtraction): string | null {
+  if (ex.documentType !== 'quote') return `견적서로 보이지 않습니다${ex.otherKind ? `(${ex.otherKind})` : ''}. 견적서 PDF 를 올려 주세요.`;
+  if (!ex.issuedByAirtor) return `에어터가 낸 견적서가 아닙니다(공급자: ${ex.supplierName || '확인 불가'}).`;
+  return null;
 }
 
 // ─── 바이트 도구 ────────────────────────────────────────────────────────
@@ -226,7 +330,7 @@ export interface ExtractResult {
 }
 
 /** 판독 모델 = 설정의 AI 어시스턴트 기본 모델(구조화 출력 지원), 추론 강도 low */
-export async function extractQuote(env: AiEnv, pdf: ArrayBuffer, userName: string, ref: string): Promise<ExtractResult> {
+export async function extractQuote(env: AiEnv, pdf: ArrayBuffer, userName: string, ref: string, fileName: string): Promise<ExtractResult> {
   const started = Date.now();
   const settings = await loadSettings(env.AI_DB);
   let spec = getModel(settings.chat.model);
@@ -289,7 +393,7 @@ export async function extractQuote(env: AiEnv, pdf: ArrayBuffer, userName: strin
   } catch {
     raw = null;
   }
-  const extraction = normalizeExtraction(raw);
+  const extraction = normalizeExtraction(raw, fileName);
   if (!extraction) {
     await log('invalid_output', 'invalid_output');
     throw new AiError(502, 'invalid_output', '판독 결과 형식 오류 — 다시 시도해 주세요.', { retryable: true });

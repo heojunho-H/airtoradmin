@@ -24,9 +24,11 @@ import {
   MAX_FILE_BYTES,
   publicFile,
   r2KeyFor,
+  rejectReason,
   saveExtraction,
   sha256Hex,
   softDeleteFile,
+  upgradeExtraction,
   type QuoteExtraction,
 } from '../_lib/ai-files';
 import { AiError, checkOrigin, cleanUserName, errorResponse, ipHash, jsonFor, nowIso, openSse, optionsResponse, readJsonCapped, type AiEnv } from '../_lib/ai-http';
@@ -38,6 +40,21 @@ function toAiError(err: unknown): AiError {
   if (err instanceof AiError) return err;
   console.error('[files] unexpected', String(err).slice(0, 300));
   return new AiError(500, 'internal', '처리 중 오류가 발생했습니다.', { retryable: true });
+}
+
+// 새 판독(AI 호출) 상한 — 화면은 한 번에 10개까지 올리고, 이것은 그 위의 안전장치다
+const INTAKE_WINDOW_MS = 10 * 60_000;
+const INTAKE_MAX_PER_WINDOW = 30;
+
+async function checkIntakeRate(db: D1Database, userName: string): Promise<void> {
+  const since = new Date(Date.now() - INTAKE_WINDOW_MS).toISOString();
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE feature = 'intake' AND user_name = ? AND created_at > ?")
+    .bind(userName, since)
+    .first<{ n: number }>();
+  if ((row?.n ?? 0) >= INTAKE_MAX_PER_WINDOW) {
+    throw new AiError(429, 'rate_limited', `견적서 판독은 10분에 ${INTAKE_MAX_PER_WINDOW}건까지입니다. 잠시 후 다시 시도해 주세요.`, { retryable: true });
+  }
 }
 
 function requireFiles(env: AiEnv): R2Bucket {
@@ -162,23 +179,26 @@ async function handleUpload(context: Ctx): Promise<Response> {
         let model: string | null = null;
         let costUsd = 0;
         if (row.extraction_json) {
-          extraction = JSON.parse(row.extraction_json) as QuoteExtraction;
+          // 이전 판독 결과 — 새 필드·플래그와 이번 파일명(차수·라벨)으로 보강
+          extraction = upgradeExtraction(JSON.parse(row.extraction_json), fileName);
         } else {
+          await checkIntakeRate(db, userName);
           sse.send('status', { phase: 'reading' });
-          const r = await extractQuote(env, buf, userName, row.id);
+          const r = await extractQuote(env, buf, userName, row.id, fileName);
           extraction = r.extraction;
           model = r.model;
           costUsd = r.costUsd;
           await saveExtraction(db, row.id, extraction);
           row = (await getFile(db, row.id)) ?? row;
         }
-        if (extraction.documentType !== 'quote') {
-          // 견적서가 아니면 보관하지 않는다 (목록·고객 파일에 섞이지 않게)
+        const reject = rejectReason(extraction);
+        if (reject) {
+          // 견적서가 아니거나 타사 견적서면 보관하지 않는다 (목록·고객 파일에 섞이지 않게)
           if (!duplicate) {
             await softDeleteFile(db, row.id, 'system', nowIso());
             await bucket.delete(row.r2_key).catch(() => {});
           }
-          sse.send('error', { code: 'not_quote', message: '견적서로 보이지 않습니다. 견적서 PDF 를 올려 주세요.', retryable: false });
+          sse.send('error', { code: 'not_quote', message: reject, retryable: false });
           return;
         }
         sse.send('done', { file: publicFile(row), extraction, duplicate, model, costUsd });

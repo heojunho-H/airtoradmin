@@ -26,11 +26,19 @@ export interface StoredFile {
 /** 서버 판독 결과 (functions/_lib/ai-files.ts QuoteExtraction 과 같은 모양) */
 export interface QuoteExtraction {
   documentType: 'quote' | 'other';
+  otherKind: string;
+  supplierName: string;
+  issuedByAirtor: boolean;
   recipientCompany: string;
   contactName: string;
   contactPosition: string;
   quoteDate: string;
   validDays: number;
+  /** 견적 차수 (문서·파일명 "N차견적서" 중 큰 값, 없으면 1) */
+  revision: number;
+  /** 현장·지점·안 구분 라벨 (예: 김포, 스탠드) */
+  variantLabel: string;
+  quoteCount: number;
   serviceName: string;
   serviceCategory: string;
   /** 영업 화면 상세 수량 키(한글) → 대수 */
@@ -46,7 +54,20 @@ export interface QuoteExtraction {
   plannedCrew: { role: string; count: number }[];
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];
+  /** 서버가 판정한 확인 필요 사유 (functions/_lib/ai-files.ts QUOTE_FLAGS) */
+  flags: string[];
 }
+
+/** 확인 필요 사유 → 화면 문구 */
+export const FLAG_LABELS: Record<string, string> = {
+  multi_quote: '한 파일에 견적서 여러 개',
+  vat_excluded: 'VAT 별도 금액',
+  no_date: '견적일 없음',
+  no_amount: '총 견적 금액 없음',
+  no_company: '수신 회사명 없음',
+  qty_mismatch: '종류별 대수 합 ≠ 총 수량',
+  amount_mismatch: '품목 합계와 총액 차이 큼',
+};
 
 export interface UploadResult {
   file: StoredFile;

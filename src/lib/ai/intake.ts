@@ -102,6 +102,8 @@ export interface DealCandidate {
   alreadyEntered: boolean;
   /** 회사명이 정확히 같지 않고 비슷한 후보 */
   similar: boolean;
+  /** 같은 영업 기회로 볼 수 있는 문의일 (견적일 60일 전 ~ 7일 후) — 창 밖 딜은 기본 선택하지 않는다 */
+  inWindow: boolean;
 }
 
 export interface MatchResult {
@@ -112,23 +114,49 @@ export interface MatchResult {
   similarCompanies: string[];
   /** 기본으로 고를 딜 ID (없으면 새 딜) */
   defaultDealId: number | null;
+  /** 기본 선택이 분명함: 정확한 회사명 + 창 안 + 2위와 15점 이상 차이 (일괄 입력에서 미리 체크하는 조건 중 하나) */
+  clear: boolean;
+  /** 같은 회사 딜이 있지만 모두 창 밖이라 새 딜로 둔 경우 안내 */
+  note: string | null;
+}
+
+/** 같은 영업 기회 창 — 문의일이 견적일 60일 전부터 7일 후까지 */
+export const WINDOW_BEFORE_DAYS = 60;
+export const WINDOW_AFTER_DAYS = 7;
+const CLEAR_MARGIN = 15;
+
+function labelIn(label: string, d: any): boolean {
+  const l = label.replace(/\s+/g, '');
+  if (l.length < 2) return false;
+  return [d.company, d.address, d.requirements, d.managementMemo, d.desiredService].some((v) => String(v || '').replace(/\s+/g, '').includes(l));
 }
 
 function scoreDeal(d: any, ex: QuoteExtraction, quoteDate: string, similar: boolean): DealCandidate {
   let score = similar ? 0 : 40;
   const reasons: string[] = [];
+  let inWindow = false;
   const reg = String(d.registrationDate || '').slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(reg)) {
-    const diff = daysBetween(reg, quoteDate);
+  const diff = /^\d{4}-\d{2}-\d{2}$/.test(reg) ? daysBetween(reg, quoteDate) : NaN;
+  if (Number.isFinite(diff)) {
     if (diff >= 0 && diff <= 30) {
       score += 30 - diff;
+      inWindow = true;
       reasons.push(diff === 0 ? '견적일에 문의' : `견적 ${diff}일 전 문의`);
-    } else if (diff < 0 && diff >= -7) {
+    } else if (diff > 30 && diff <= WINDOW_BEFORE_DAYS) {
+      score += 3;
+      inWindow = true;
+      reasons.push(`견적 ${diff}일 전 문의`);
+    } else if (diff < 0 && diff >= -WINDOW_AFTER_DAYS) {
       score += 10;
+      inWindow = true;
       reasons.push(`견적 ${-diff}일 뒤 등록`);
     } else {
-      reasons.push(`문의 ${reg}`);
+      // 재구매 고객의 지난 딜일 가능성 — 기본 선택하지 않는다
+      score -= 20;
+      reasons.push(diff > 0 ? `견적보다 ${diff}일 전 문의 — 다른 작업건일 수 있음` : `견적보다 ${-diff}일 뒤 등록 — 다른 작업건일 수 있음`);
     }
+  } else {
+    reasons.push('문의일 없음');
   }
   const qty = Number(d.totalQuantity) || 0;
   if (qty && ex.totalQuantity) {
@@ -159,9 +187,13 @@ function scoreDeal(d: any, ex: QuoteExtraction, quoteDate: string, similar: bool
     score += 8;
     reasons.push('서비스 일치');
   }
+  if (ex.variantLabel && labelIn(ex.variantLabel, d)) {
+    score += 10;
+    reasons.push(`"${ex.variantLabel}" 일치`);
+  }
   const alreadyEntered = !!ex.quotedTotal && parseAmount(d.quotationAmount) === ex.quotedTotal;
   if (alreadyEntered) reasons.push('같은 견적 금액이 이미 입력됨');
-  return { deal: d, score, reasons, alreadyEntered, similar };
+  return { deal: d, score, reasons, alreadyEntered, similar, inWindow };
 }
 
 export function matchQuote(ex: QuoteExtraction, deals: any[], customers: any[], today = kstYmd()): MatchResult {
@@ -179,13 +211,24 @@ export function matchQuote(ex: QuoteExtraction, deals: any[], customers: any[], 
   const candidates = [...exact.map((d) => scoreDeal(d, ex, quoteDate, false)), ...similarDeals.map((d) => scoreDeal(d, ex, quoteDate, true))]
     .sort((a, b) => b.score - a.score)
     .slice(0, 12);
-  const top = candidates[0];
+  // 기본 선택: 창 안의 최고점 (비슷한 이름은 50점 이상일 때만). 실패 딜도 창 안이면 같은 기회의 기록이다
+  const pick = candidates.find((c) => c.inWindow && (!c.similar || c.score >= 50)) ?? null;
+  const runnerUp = pick ? candidates.find((c) => c !== pick && c.inWindow) : undefined;
+  const clear = !!pick && !pick.similar && (!runnerUp || pick.score - runnerUp.score >= CLEAR_MARGIN);
+  const note =
+    !pick && candidates.length > 0
+      ? candidates.some((c) => c.inWindow)
+        ? '비슷한 이름의 딜만 있어 새 딜로 둡니다 — 같은 고객이면 직접 고르세요.'
+        : '같은 회사의 지난 딜만 있어 새 딜로 둡니다(재구매) — 같은 작업건이면 직접 고르세요.'
+      : null;
   return {
     companyKey: key,
     customer: customers.find((c) => normalizeCompanyName(c.company) === key) ?? null,
     candidates,
     similarCompanies: [...similarNames].slice(0, 5),
-    defaultDealId: top && (!top.similar || top.score >= 50) && top.deal.successStatus !== 'failed' ? Number(top.deal.id) : null,
+    defaultDealId: pick ? Number(pick.deal.id) : null,
+    clear,
+    note,
   };
 }
 
