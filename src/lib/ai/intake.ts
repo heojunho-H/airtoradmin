@@ -10,6 +10,8 @@ import { parseAmount, RESULT_LABELS, STAGE_LABELS } from './snapshot/common';
 
 /** 영업 화면 상세 수량 키 (SalesPage.tsx) — 저장할 때 10개를 모두 쓴다 */
 export const EQUIPMENT_KEYS = ['벽걸이형', '스탠드 일반형', '스탠드 대형', '1way 천정형', '2way 천정형', '4way 천정형', '원형 천정형', 'FCU형', '매립덕트형', '실외기'];
+/** 예전 딜에 남아 있는 키 이름 (운영 딜 83건이 '스탠드형' 사용) */
+const EQUIPMENT_ALIASES: Record<string, string> = { 스탠드형: '스탠드 일반형' };
 
 /** 딜 견적 금액 문자열 — 만 원 단위면 "₩115만", 아니면 원 단위 정수 "1155000".
  *  서버(deals_api.php parseQuotationAmount)는 "₩115.5만"을 floatval×10000 → intval 로 읽어 부동소수 오차로 1원이 빠질 수 있다. */
@@ -50,6 +52,13 @@ function equipmentEntries(src: QuoteExtraction | string | null | undefined): Arr
     cats = src.equipment;
     others = src.otherItems;
   }
+  // 예전 딜의 키 이름을 지금 키로 (같은 대수면 바뀐 것으로 보지 않는다)
+  const merged: Record<string, number> = {};
+  for (const [k, v] of Object.entries(cats)) {
+    const key = EQUIPMENT_ALIASES[k] ?? k;
+    merged[key] = (merged[key] ?? 0) + (Number(v) || 0);
+  }
+  cats = merged;
   const keys = [...EQUIPMENT_KEYS.filter((k) => k in cats), ...Object.keys(cats).filter((k) => !EQUIPMENT_KEYS.includes(k))];
   const out: Array<[string, number]> = keys.map((k): [string, number] => [k, Number(cats[k]) || 0]).filter(([, n]) => n > 0);
   for (const o of others) {
