@@ -76,7 +76,7 @@ export function supplySections(ctx: Ctx, managers: ManagerFact[], subs: SubFact[
     .filter((s) => s.evaluated > 0)
     .map((s) => ({ s, total: Object.values(s.negatives).reduce((a, b) => a + b, 0) }))
     .sort((a, b) => b.total - a.total)
-    .map(({ s, total }) => [cell(s.name, 10), `${s.evaluated}건`, ...EVAL_ITEMS.map(([, label]) => `${s.negatives[label]}`), `${total}`]);
+    .map(({ s, total }) => [cell(s.name, 10), `${s.evaluated}건`, ...EVAL_ITEMS.map(([, label]) => `감점 ${s.negatives[label]}회`), `${total}회`]);
 
   const watch = sorted.filter((s) => s.grade === '퇴출 심사' || s.grade === '4등급' || (s.recentAvg != null && s.recentAvg < 0));
   const watchRows = watch
@@ -149,7 +149,7 @@ export function supplySections(ctx: Ctx, managers: ManagerFact[], subs: SubFact[
       table('작업팀장 점수표', '최종 점수 높은 순',
         ['이름', '업체', '상태', '권역', '전문분야', '팀규모', '최종 점수', '계산 등급', '기본', '작업 점수 합', '재구매×3', '협력', '작업(전체/90일)', '최근 작업일', '예정 작업', '평가 입력률', '평균 작업 점수', '최근 3건 평균', '이전 3건 평균'],
         scoreRows, 40),
-      table('항목별 감점 횟수 (평가된 작업 기준)', '감점 많은 순',
+      table('항목별 감점 횟수 (평가된 작업 중 그 항목이 0점 미만이었던 횟수)', '감점 많은 순',
         ['이름', '평가 작업', ...EVAL_ITEMS.map(([, label]) => label), '감점 합계'], negRows, 40),
       table('감시 목록 (퇴출 심사·4등급·최근 3건 평균 음수)', '점수 낮은 순',
         ['이름', '최종 점수', '계산 등급', '주된 감점', '최근 3건 평균', '최근 작업일', '예정 작업', '상태', '최근 협력평가 메모'], watchRows, 30),

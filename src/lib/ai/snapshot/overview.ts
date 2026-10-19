@@ -72,6 +72,7 @@ export function overviewSections(ctx: Ctx, deals: DealFact[], customers: Custome
     section('고객 요약', [
       `- 전체 ${customers.length}곳, 2회 이상 재구매율 ${pct(ratio(customers.filter((c) => c.jobCount >= 2).length, customers.length))}, 충성고객 전환율 ${pct(ratio(customers.filter((c) => c.jobCount >= 3).length, customers.length))}`,
       `- 관리 기한 초과 ${overdueAll.length}곳 (S·A ${overdueAll.filter((c) => c.grade === 'S' || c.grade === 'A').length}곳), 30일 이내 예정 ${customers.filter((c) => c.daysToMgmt != null && c.daysToMgmt >= 0 && c.daysToMgmt <= 30).length}곳 — 다음 관리일은 최근 작업일+관리 주기로 다시 계산한 값`,
+      `- S·A 등급 관리 기한 초과 전체(금액순): ${overdueAll.filter((c) => c.grade === 'S' || c.grade === 'A').sort((a, b) => b.amount - a.amount).map((c) => `${cell(c.company, 16)}(${c.grade}, ${-(c.daysToMgmt ?? 0)}일 초과, ${manwon(c.amount)}, 담당 ${c.manager})`).join(', ') || '없음'}`,
       `- RFM 세그먼트: VIP ${segCount('VIP')}, 충성 ${segCount('충성')}, 재구매 ${segCount('재구매')}, 신규 ${segCount('신규')}, 이탈 위험 ${segCount('이탈 위험')}, 관리 지연 ${segCount('관리 지연')}, 휴면 ${segCount('휴면')}`,
     ], [
       table('주요 고객 상위 10곳', '누적 거래 큰 순', ['기업명', '등급', '세그먼트', '누적 거래', '다음 관리일', '담당'],
