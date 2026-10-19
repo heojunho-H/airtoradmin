@@ -1,16 +1,32 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
-import { AiChatPanel } from './components/AiChatPanel';
+import type { AiDatasets } from '../lib/ai/types';
+
+// AI 어시스턴트·설정은 첫 방문 때 내려받는다 (마크다운 렌더러 포함 별도 청크)
+const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
+const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
+
+type PageId = 'sales' | 'ai' | 'profit' | 'customers' | 'supplychain' | 'settings';
+
+// Tailwind 4 는 리터럴 클래스만 인식하므로 강조색을 통째로 적어 둔다
+const NAV_ACCENT = {
+  blue: { side: 'bg-blue-50 text-blue-700 shadow-sm', icon: 'text-blue-700', text: 'text-blue-700', bottom: 'text-blue-600' },
+  purple: { side: 'bg-purple-50 text-purple-700 shadow-sm', icon: 'text-purple-700', text: 'text-purple-700', bottom: 'text-purple-600' },
+} as const;
+
+function PageSpinner() {
+  return <div className="flex h-full items-center justify-center py-20 text-[13px] text-slate-400">불러오는 중…</div>;
+}
 
 export default function App() {
   const navigate = useNavigate();
   const userName = localStorage.getItem('user_name') || '';
-  const [currentPage, setCurrentPage] = useState<'customers' | 'sales' | 'supplychain' | 'profit'>('sales');
+  const [currentPage, setCurrentPage] = useState<PageId>('sales');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
@@ -27,40 +43,78 @@ export default function App() {
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [laborRates, setLaborRates] = useState<LaborRate[]>([]);
+  const [datasetsLoadedAt, setDatasetsLoadedAt] = useState(0);
 
   // DB에서 데이터 로드
   useEffect(() => {
-    fetchDeals()
-      .then((data) => setDeals(data))
-      .catch((err) => console.error('딜 데이터 로드 실패:', err));
-    fetchCustomers()
-      .then((data) => setCustomers(data))
-      .catch((err) => console.error('고객 데이터 로드 실패:', err));
-    fetchManagers()
-      .then((data) => setManagers(data))
-      .catch((err) => console.error('고객책임자 데이터 로드 실패:', err));
-    fetchSubcontractors()
-      .then((data) => setSubcontractors(data))
-      .catch((err) => console.error('작업팀장 데이터 로드 실패:', err));
-    fetchProjects()
-      .then((data) => setProjects(data))
-      .catch((err) => console.error('프로젝트 데이터 로드 실패:', err));
-    fetchLaborRates()
-      .then((data) => setLaborRates(data))
-      .catch((err) => console.error('단가표 데이터 로드 실패:', err));
+    Promise.all([
+      fetchDeals()
+        .then((data) => setDeals(data))
+        .catch((err) => console.error('딜 데이터 로드 실패:', err)),
+      fetchCustomers()
+        .then((data) => setCustomers(data))
+        .catch((err) => console.error('고객 데이터 로드 실패:', err)),
+      fetchManagers()
+        .then((data) => setManagers(data))
+        .catch((err) => console.error('고객책임자 데이터 로드 실패:', err)),
+      fetchSubcontractors()
+        .then((data) => setSubcontractors(data))
+        .catch((err) => console.error('작업팀장 데이터 로드 실패:', err)),
+      fetchProjects()
+        .then((data) => setProjects(data))
+        .catch((err) => console.error('프로젝트 데이터 로드 실패:', err)),
+      fetchLaborRates()
+        .then((data) => setLaborRates(data))
+        .catch((err) => console.error('단가표 데이터 로드 실패:', err)),
+    ]).then(() => setDatasetsLoadedAt(Date.now()));
+  }, []);
+
+  // AI 어시스턴트 데이터 스냅샷 재료
+  const aiDatasets = useMemo<AiDatasets>(
+    () => ({ deals, customers, managers, subcontractors, projects, laborRates, loadedAt: datasetsLoadedAt }),
+    [deals, customers, managers, subcontractors, projects, laborRates, datasetsLoadedAt],
+  );
+  const aiDatasetsRef = useRef(aiDatasets);
+  aiDatasetsRef.current = aiDatasets;
+
+  // '최신 데이터로 갱신' — App 상태는 건드리지 않는다.
+  // (customers 를 갱신하면 아래 동기화 effect 가 고객책임자·작업팀장 전원에게 PUT 을 보낸다)
+  const loadFreshDatasets = useCallback(async (): Promise<AiDatasets> => {
+    const current = aiDatasetsRef.current;
+    const [d, c, m, s, p, l] = await Promise.allSettled([
+      fetchDeals(),
+      fetchCustomers(),
+      fetchManagers(),
+      fetchSubcontractors(),
+      fetchProjects(),
+      fetchLaborRates(),
+    ]);
+    const pick = <T,>(r: PromiseSettledResult<T>, fallback: T): T => (r.status === 'fulfilled' ? r.value : fallback);
+    return {
+      deals: pick(d, current.deals),
+      customers: pick(c, current.customers),
+      managers: pick(m, current.managers),
+      subcontractors: pick(s, current.subcontractors),
+      projects: pick(p, current.projects),
+      laborRates: pick(l, current.laborRates),
+      loadedAt: Date.now(),
+    };
   }, []);
 
   // 알림 시스템
   type Notification = {
     id: number;
-    type: 'deal_success' | 'customer_registered' | 'management_due' | 'admin_action';
+    type: 'deal_success' | 'customer_registered' | 'management_due' | 'admin_action' | 'ai_reply';
     message: string;
     timestamp: Date;
     read: boolean;
   };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  // AI 어시스턴트는 첫 방문 때 마운트하고 이후 숨김으로 유지 (진행 중인 응답·대화 보존)
+  const [aiMounted, setAiMounted] = useState(false);
+  const [aiStreaming, setAiStreaming] = useState(false);
+  const [aiUnread, setAiUnread] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
 
   const addNotification = (type: Notification['type'], message: string) => {
@@ -116,6 +170,28 @@ export default function App() {
   const handleAdminNotification = (message: string) => {
     addNotification('admin_action', message);
   };
+
+  // AI 응답이 다른 탭을 보고 있는 동안 끝나면 알림
+  const handleAiBackgroundReply = useCallback((title: string) => {
+    setNotifications(prev => [{
+      id: Date.now() + Math.random(),
+      type: 'ai_reply',
+      message: `AI 답변이 도착했습니다 — ${title}`,
+      timestamp: new Date(),
+      read: false,
+    }, ...prev]);
+    setAiUnread(true);
+  }, []);
+
+  const goTo = (page: PageId) => {
+    if (page === 'ai') {
+      setAiMounted(true);
+      setAiUnread(false);
+    }
+    setCurrentPage(page);
+    if (isMobile) setSidebarOpen(false);
+  };
+  const openSettings = useCallback(() => setCurrentPage('settings'), []);
 
   const handleLogout = () => {
     localStorage.removeItem('user_name');
@@ -256,15 +332,17 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const navigation = [
-    { id: 'sales' as const, name: '영업 관리', icon: TrendingUp },
-    { id: 'profit' as const, name: '프로젝트 관리', icon: Calculator },
-    { id: 'customers' as const, name: '고객 관리', icon: Users },
-    { id: 'supplychain' as const, name: '공급망 관리', icon: Package },
+  const navigation: { id: PageId; name: string; short: string; icon: typeof TrendingUp; accent: keyof typeof NAV_ACCENT }[] = [
+    { id: 'sales', name: '영업 관리', short: '영업', icon: TrendingUp, accent: 'blue' },
+    { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'purple' },
+    { id: 'profit', name: '프로젝트 관리', short: '프로젝트', icon: Calculator, accent: 'blue' },
+    { id: 'customers', name: '고객 관리', short: '고객', icon: Users, accent: 'blue' },
+    { id: 'supplychain', name: '공급망 관리', short: '공급망', icon: Package, accent: 'blue' },
   ];
+  const aiBadge = currentPage !== 'ai' && (aiStreaming || aiUnread);
 
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-slate-50">
+    <div className="h-dvh flex flex-col md:flex-row bg-slate-50">
       {/* Sidebar */}
       <aside
         className={`${
@@ -301,25 +379,26 @@ export default function App() {
           {navigation.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
+            const accent = NAV_ACCENT[item.accent];
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  setCurrentPage(item.id);
-                  if (isMobile) setSidebarOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                onClick={() => goTo(item.id)}
+                aria-current={isActive ? 'page' : undefined}
+                title={item.name}
+                className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700 shadow-sm'
+                    ? accent.side
                     : 'text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-blue-700' : 'text-slate-500'}`} />
+                <Icon className={`w-5 h-5 ${isActive ? accent.icon : 'text-slate-500'}`} />
                 {(sidebarOpen || isMobile) && (
-                  <span className={`text-[15px] font-medium ${isActive ? 'text-blue-700' : 'text-slate-700'}`}>
+                  <span className={`text-[15px] font-medium ${isActive ? accent.text : 'text-slate-700'}`}>
                     {item.name}
                   </span>
                 )}
+                {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white" />}
               </button>
             );
           })}
@@ -327,8 +406,15 @@ export default function App() {
 
         {/* Settings */}
         <div className="p-3 border-t border-slate-200">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors">
-            <Settings className="w-5 h-5 text-slate-500" />
+          <button
+            onClick={() => goTo('settings')}
+            aria-current={currentPage === 'settings' ? 'page' : undefined}
+            title="설정"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+              currentPage === 'settings' ? NAV_ACCENT.blue.side : 'text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Settings className={`w-5 h-5 ${currentPage === 'settings' ? NAV_ACCENT.blue.icon : 'text-slate-500'}`} />
             {(sidebarOpen || isMobile) && <span className="text-[15px] font-medium">설정</span>}
           </button>
         </div>
@@ -360,13 +446,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 ml-2">
-            {/* AI 비서 */}
+            {/* AI 어시스턴트 바로가기 (모바일은 하단 내비에 있음) */}
             <button
-              onClick={() => setAiPanelOpen(!aiPanelOpen)}
-              className="p-2.5 hover:bg-purple-50 rounded-xl transition-colors"
-              title="AI 비서"
+              onClick={() => goTo('ai')}
+              className={`relative hidden md:inline-flex p-2.5 rounded-xl transition-colors ${currentPage === 'ai' ? 'bg-purple-50' : 'hover:bg-purple-50'}`}
+              title="AI 어시스턴트"
+              aria-label="AI 어시스턴트"
             >
               <Sparkles className="w-5 h-5 text-purple-500" />
+              {aiBadge && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white motion-safe:animate-pulse" />}
             </button>
             {/* 알림 벨 */}
             <div className="relative" ref={notificationRef}>
@@ -412,12 +500,13 @@ export default function App() {
                           <div className={`mt-0.5 p-1.5 rounded-lg ${
                             n.type === 'deal_success' ? 'bg-green-100 text-green-600' :
                             n.type === 'customer_registered' ? 'bg-blue-100 text-blue-600' :
-                            n.type === 'admin_action' ? 'bg-purple-100 text-purple-600' :
+                            n.type === 'admin_action' || n.type === 'ai_reply' ? 'bg-purple-100 text-purple-600' :
                             'bg-amber-100 text-amber-600'
                           }`}>
                             {n.type === 'deal_success' ? <TrendingUp className="w-4 h-4" /> :
                              n.type === 'customer_registered' ? <UserPlus className="w-4 h-4" /> :
                              n.type === 'admin_action' ? <FileEdit className="w-4 h-4" /> :
+                             n.type === 'ai_reply' ? <Sparkles className="w-4 h-4" /> :
                              <CalendarClock className="w-4 h-4" />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -451,53 +540,66 @@ export default function App() {
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
           {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} />}
+          {currentPage === 'settings' && (
+            <Suspense fallback={<PageSpinner />}>
+              <SettingsPage userName={userName} onNotification={handleAdminNotification} />
+            </Suspense>
+          )}
+          {aiMounted && (
+            <div className={currentPage === 'ai' ? 'h-full' : 'hidden'}>
+              <Suspense fallback={<PageSpinner />}>
+                <AiAssistantPage
+                  isActive={currentPage === 'ai'}
+                  userName={userName}
+                  datasets={aiDatasets}
+                  loadFreshDatasets={loadFreshDatasets}
+                  onStreamingChange={setAiStreaming}
+                  onBackgroundReply={handleAiBackgroundReply}
+                  onOpenSettings={openSettings}
+                />
+              </Suspense>
+            </div>
+          )}
         </main>
       </div>
 
       {/* 모바일 하단 네비게이션 */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 z-40 safe-area-bottom">
-          <div className="flex items-center justify-around max-w-md mx-auto">
+          <div className="grid grid-cols-6 max-w-md mx-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
+              const accent = NAV_ACCENT[item.accent];
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentPage(item.id)}
-                  className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${
-                    isActive ? 'text-blue-600' : 'text-slate-500'
+                  onClick={() => goTo(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative flex flex-col items-center gap-1 px-1 py-2 rounded-xl transition-all ${
+                    isActive ? accent.bottom : 'text-slate-500'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span className={`text-[10px] font-medium ${isActive ? 'text-blue-600' : 'text-slate-600'}`}>
-                    {item.name.replace(' 관리', '')}
+                  <Icon className={`w-5 h-5 ${isActive ? accent.bottom : 'text-slate-400'}`} />
+                  <span className={`text-[10px] font-medium truncate max-w-full ${isActive ? accent.bottom : 'text-slate-600'}`}>
+                    {item.short}
                   </span>
+                  {item.id === 'ai' && aiBadge && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white" />}
                 </button>
               );
             })}
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all text-slate-500"
+              onClick={() => goTo('settings')}
+              aria-current={currentPage === 'settings' ? 'page' : undefined}
+              className={`flex flex-col items-center gap-1 px-1 py-2 rounded-xl transition-all ${currentPage === 'settings' ? 'text-blue-600' : 'text-slate-500'}`}
             >
-              <Settings className="w-5 h-5 text-slate-400" />
-              <span className="text-[10px] font-medium text-slate-600">설정</span>
+              <Settings className={`w-5 h-5 ${currentPage === 'settings' ? 'text-blue-600' : 'text-slate-400'}`} />
+              <span className={`text-[10px] font-medium ${currentPage === 'settings' ? 'text-blue-600' : 'text-slate-600'}`}>설정</span>
             </button>
           </div>
         </nav>
       )}
 
-      {/* AI 채팅 패널 */}
-      <AiChatPanel
-        isOpen={aiPanelOpen}
-        onClose={() => setAiPanelOpen(false)}
-        deals={deals}
-        customers={customers}
-        managers={managers}
-        subcontractors={subcontractors}
-        projects={projects}
-        laborRates={laborRates}
-      />
     </div>
   );
 }

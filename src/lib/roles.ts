@@ -36,7 +36,7 @@ export function isValidRole(code: string): code is RoleCode {
 
 // 단가표 배열을 항상 ROLE_ORDER 순서로 정렬 (카드형 UI 렌더 시 사용)
 export function sortRatesByRole<T extends { role: string }>(rates: T[]): T[] {
-  const orderMap = new Map(ROLE_ORDER.map((r, i) => [r, i] as const));
+  const orderMap = new Map<string, number>(ROLE_ORDER.map((r, i) => [r, i]));
   return [...rates].sort(
     (a, b) => (orderMap.get(a.role) ?? 99) - (orderMap.get(b.role) ?? 99),
   );

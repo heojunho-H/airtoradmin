@@ -29,3 +29,8 @@ dist-ssr
 
 # 로컬 스크래치/스펙 노트 (커밋 대상 아님)
 _notes/
+
+# Cloudflare wrangler 로컬 산출물/비밀값
+.wrangler/
+.dev.vars
+.gstack/

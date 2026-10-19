@@ -183,8 +183,9 @@ function computeAiVsActualDiff(
 }
 
 /**
- * AI 프롬프트에 주입할 학습 컨텍스트 텍스트 생성.
- * Gemini 시스템 프롬프트의 [과거 유사 프로젝트 학습 데이터] 섹션에 들어감.
+ * AI 프롬프트에 주입할 학습 컨텍스트 텍스트 생성 (현재 미사용).
+ * 파이프·콜론 구분 라인이 WAF 오탐을 일으켜, 서버(functions/_lib/ai-staffing.ts)의 산문형
+ * formatLearningContextSoft 로 대체되었다.
  */
 export function formatLearningContextForPrompt(stats: LearningStats): string {
   if (stats.sampleSize === 0) {

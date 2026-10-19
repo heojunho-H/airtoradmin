@@ -431,7 +431,8 @@ export function ProfitPage({
   //   - failed 는 사용자 수동 재시도(handleReRunAi)만 허용 (자동 재시도 금지)
   // ============================================================
   const MAX_PARALLEL_AI_CALLS = 3;
-  const AI_CALL_TIMEOUT_MS = 30000;
+  // 추론(thinking) 모델로 바꾸면 느려질 수 있어 90초. 서버 SDK 타임아웃(80초)보다 길게 둔다.
+  const AI_CALL_TIMEOUT_MS = 90_000;
 
   const [aiQueue, setAiQueue] = useState<{
     processing: Set<number>;
@@ -528,33 +529,38 @@ export function ProfitPage({
       const ym = (project.workDate || new Date().toISOString()).substring(0, 7);
       const rates = resolveCurrentRates(laborRates, ym);
 
-      // 4) Gemini 호출 — 30초 타임아웃 race
-      const suggestion = await Promise.race<StaffingSuggestion>([
-        suggestProjectStaffing({
-          service: project.serviceType,
-          totalQuantity,
-          detailedQuantity,
-          netRevenue: project.netRevenue,
-          laborRates: rates,
-          learningStats,
-          availableSubcontractors: (subcontractors || [])
-            .filter((s: any) => s.status === 'available')
-            .slice(0, 10)
-            .map((s: any) => ({
-              name: s.name,
-              grade: s.grade,
-              cooperationScore: s.cooperationScore || 0,
-              ongoingProjects: s.ongoingProjects || 0,
-            })),
-          targetProfitRatio: 0.40,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('AI 호출 타임아웃 (30초)')),
-            AI_CALL_TIMEOUT_MS,
-          ),
-        ),
-      ]);
+      // 4) Claude 호출 (모델은 설정 화면에서 지정) — 시간 초과 시 요청 자체를 취소해 과금도 멈춘다
+      const timeoutCtrl = new AbortController();
+      const timeoutId = setTimeout(() => timeoutCtrl.abort(), AI_CALL_TIMEOUT_MS);
+      let suggestion: StaffingSuggestion;
+      try {
+        suggestion = await suggestProjectStaffing(
+          {
+            service: project.serviceType,
+            totalQuantity,
+            detailedQuantity,
+            netRevenue: project.netRevenue,
+            laborRates: rates,
+            learningStats,
+            availableSubcontractors: (subcontractors || [])
+              .filter((s: any) => s.status === 'available')
+              .slice(0, 10)
+              .map((s: any) => ({
+                name: s.name,
+                grade: s.grade,
+                cooperationScore: s.cooperationScore || 0,
+                ongoingProjects: s.ongoingProjects || 0,
+              })),
+            targetProfitRatio: 0.40,
+          },
+          { projectId, signal: timeoutCtrl.signal },
+        );
+      } catch (err: any) {
+        if (timeoutCtrl.signal.aborted) throw new Error(`AI 호출 타임아웃 (${AI_CALL_TIMEOUT_MS / 1000}초)`);
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       // 5) 결과 저장 — 자동 생성이지 사용자 채택 아님 (aiApplied=false)
       await updateProject(projectId, {

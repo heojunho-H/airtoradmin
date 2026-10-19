@@ -17,14 +17,6 @@ export default defineConfig({
     host: '0.0.0.0',
     port: Number(process.env.PORT) || 3000,
     proxy: {
-      // dev 환경 한정: Vite 프록시는 요청 본문을 읽을 수 없어서 _model 기반 동적 분기 불가.
-      // 운영(Cloudflare Pages Function)은 본문에서 _model을 읽어 모델을 선택한다.
-      // dev는 단일 모델로 고정 — flash로 두면 AI 기업정보·AI 비서 둘 다 동작 (비서 품질은 약간 떨어짐).
-      '/api/gemini': {
-        target: 'https://generativelanguage.googleapis.com',
-        changeOrigin: true,
-        rewrite: () => `/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      },
       '/api/deals': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
@@ -64,6 +56,16 @@ export default defineConfig({
       // /api/newsletter/webhook도 같은 prefix로 함께 넘어간다.
       '/api/newsletter': {
         target: 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
+      // AI(Claude) 엔드포인트도 Cloudflare Function 에만 존재 — 기본은 배포된 운영 Function(운영 D1·API 키 사용).
+      // 로컬 D1 로 시험하려면 `npm run functions:dev` 후 AI_FUNCTIONS_TARGET=http://127.0.0.1:8788 npm run dev
+      '/api/assistant': {
+        target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
+      '/api/staffing': {
+        target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
         changeOrigin: true,
       },
       '/api': {
