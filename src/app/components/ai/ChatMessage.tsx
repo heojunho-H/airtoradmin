@@ -1,7 +1,8 @@
 import { lazy, memo, Suspense, useEffect, useState } from 'react';
-import { AlertTriangle, Check, Copy, Database, RotateCcw, ShieldAlert, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Database, RotateCcw, ShieldAlert } from 'lucide-react';
 import { formatKrw, formatTokens, formatUsd, prettyModelId } from '../../../lib/ai/format';
 import type { AiModel } from '../../../lib/ai/types';
+import { AiSparkle } from './AiSparkle';
 import type { UiMessage } from './useAiChat';
 
 const Markdown = lazy(() => import('./Markdown'));
@@ -44,14 +45,14 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
         {(showAuthor || m.hasSnapshot) && (
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             {m.hasSnapshot && (
-              <span className="inline-flex items-center gap-1 text-purple-500">
+              <span className="inline-flex items-center gap-1 text-blue-500">
                 <Database className="w-3 h-3" /> 최신 데이터 반영
               </span>
             )}
             {showAuthor && <span>{m.userName}</span>}
           </div>
         )}
-        <div className="max-w-[88%] md:max-w-[75%] rounded-2xl rounded-br-md bg-purple-600 px-4 py-2.5 text-[14px] leading-relaxed text-white whitespace-pre-wrap break-words">
+        <div className="max-w-[88%] md:max-w-[75%] rounded-2xl rounded-br-md bg-[#f1f3f6] px-4 py-2.5 text-[14px] leading-relaxed text-slate-800 whitespace-pre-wrap break-keep wrap-anywhere">
           {m.text}
         </div>
       </div>
@@ -75,16 +76,16 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
 
   return (
     <div className="flex gap-3">
-      <div className="hidden sm:flex flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 items-center justify-center">
-        <Sparkles className="w-4 h-4 text-purple-600" />
+      <div className="hidden sm:flex flex-shrink-0 w-7 h-7 mt-0.5 rounded-full bg-[#eef5ff] items-center justify-center">
+        <AiSparkle className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
         {m.status === 'streaming' && !m.text && (
           <div className="flex items-center gap-2 py-2 text-[13px] text-slate-500" role="status">
             <span className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 motion-safe:animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 motion-safe:animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 motion-safe:animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
             <span>{PHASE_LABELS[m.phase ?? 'connecting']}…</span>
             <Elapsed since={m.phaseSince} />
@@ -92,11 +93,11 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
         )}
 
         {m.text && !refusal && (
-          <div className="rounded-2xl rounded-tl-md bg-white border border-slate-200 px-4 py-3 shadow-sm">
-            <Suspense fallback={<div className="text-[14px] text-slate-800 whitespace-pre-wrap break-words">{m.text}</div>}>
+          <div className="pt-0.5 text-[14px] text-slate-800 break-keep wrap-anywhere">
+            <Suspense fallback={<div className="whitespace-pre-wrap break-words">{m.text}</div>}>
               <Markdown text={m.text} />
             </Suspense>
-            {m.status === 'streaming' && <span className="inline-block w-2 h-4 align-text-bottom bg-purple-400 motion-safe:animate-pulse" />}
+            {m.status === 'streaming' && <span className="inline-block w-2 h-4 align-text-bottom bg-blue-400 motion-safe:animate-pulse" />}
           </div>
         )}
 
@@ -136,7 +137,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
           <div className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-400">
             <span>중지됨 · 저장되지 않음</span>
             {isLast && (
-              <button onClick={onRetry} className="inline-flex items-center gap-1 text-[12px] text-purple-600 hover:text-purple-700 font-medium">
+              <button onClick={onRetry} className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
                 <RotateCcw className="w-3 h-3" /> 다시 묻기
               </button>
             )}
@@ -160,7 +161,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
               </button>
             )}
             {m.stopReason === 'max_tokens' && isLast && (
-              <button onClick={onContinue} className="ml-1 text-[11px] font-medium text-purple-600 hover:text-purple-700">
+              <button onClick={onContinue} className="ml-1 text-[11px] font-medium text-blue-600 hover:text-blue-700">
                 응답이 길이 제한으로 잘렸습니다 · 이어서 작성
               </button>
             )}

@@ -51,7 +51,7 @@ export function ChatThread({ messages, me, models, isActive, conversationKey, on
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={ref} onScroll={onScroll} className="h-full overflow-y-auto px-4 md:px-8 py-6" role="log" aria-live="off" aria-label="대화 내용">
-        <div className="mx-auto max-w-3xl space-y-5">
+        <div className="mx-auto max-w-[800px] space-y-6">
           {messages.map((m, i) => (
             <ChatMessage key={m.key} message={m} isLast={i === messages.length - 1} me={me} models={models} onRetry={onRetry} onContinue={onContinue} />
           ))}

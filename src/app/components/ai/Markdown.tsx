@@ -22,9 +22,9 @@ const COMPONENTS: Components = {
   li: ({ node: _node, ...props }) => <li className="leading-relaxed" {...props} />,
   strong: ({ node: _node, ...props }) => <strong className="font-semibold text-slate-900" {...props} />,
   a: ({ node: _node, ...props }) => (
-    <a className="text-purple-600 underline underline-offset-2 hover:text-purple-700 break-all" target="_blank" rel="noopener noreferrer" {...props} />
+    <a className="text-blue-600 underline underline-offset-2 hover:text-blue-700 break-all" target="_blank" rel="noopener noreferrer" {...props} />
   ),
-  blockquote: ({ node: _node, ...props }) => <blockquote className="my-2 border-l-4 border-purple-200 pl-3 text-slate-600" {...props} />,
+  blockquote: ({ node: _node, ...props }) => <blockquote className="my-2 border-l-4 border-blue-200 pl-3 text-slate-600" {...props} />,
   hr: () => <hr className="my-4 border-slate-200" />,
   table: ({ node: _node, ...props }) => (
     <div className="my-3 overflow-x-auto rounded-lg border border-slate-200">

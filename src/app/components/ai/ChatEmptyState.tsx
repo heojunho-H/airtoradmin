@@ -1,66 +1,70 @@
-import { Users } from 'lucide-react';
-import { PERSONA_ORDER, PERSONA_STYLES, PERSONAS } from '../../../lib/ai/personas';
+import { Fragment, type ReactNode } from 'react';
+import { PERSONA_ORDER, PERSONAS } from '../../../lib/ai/personas';
 import type { PersonaId } from '../../../lib/ai/types';
+import { AiSparkle } from './AiSparkle';
 
 interface Props {
   persona: PersonaId;
   onPersona: (p: PersonaId) => void;
   onAsk: (text: string) => void;
   disabled?: boolean;
+  /** 가운데 큰 입력창 (ChatComposer variant="hero") */
+  composer: ReactNode;
 }
 
-export function ChatEmptyState({ persona, onPersona, onAsk, disabled }: Props) {
+/** 새 대화 첫 화면 — ✦ 제목, 큰 입력창, 분석 유형 탭이 달린 추천 질문 카드 */
+export function ChatEmptyState({ persona, onPersona, onAsk, disabled, composer }: Props) {
   const config = PERSONAS[persona];
-  const style = PERSONA_STYLES[persona];
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 py-8">
-      <div className="mx-auto max-w-3xl">
-        <h2 className="text-[20px] font-bold text-slate-900 tracking-tight">무엇을 분석해 드릴까요?</h2>
-        <p className="mt-1 text-[13px] text-slate-500">분석 유형을 고르면 해당 데이터를 바탕으로 Claude가 답합니다.</p>
-
-        <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-2" role="radiogroup" aria-label="분석 유형">
-          {PERSONA_ORDER.map((id) => {
-            const p = PERSONAS[id];
-            const s = PERSONA_STYLES[id];
-            const Icon = p.icon;
-            const active = id === persona;
-            return (
-              <button
-                key={id}
-                role="radio"
-                aria-checked={active}
-                onClick={() => onPersona(id)}
-                className={`flex flex-col items-start gap-1.5 rounded-xl border bg-white p-3 text-left transition-colors ${active ? s.active : `border-slate-200 ${s.card}`}`}
-              >
-                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${s.iconBg}`}>
-                  <Icon className={`h-4 w-4 ${s.icon}`} />
-                </span>
-                <span className="text-[13px] font-semibold text-slate-800">{p.label}</span>
-                <span className="text-[11px] leading-snug text-slate-500">{p.description}</span>
-              </button>
-            );
-          })}
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 md:px-8">
+      <div className="mx-auto flex min-h-full max-w-[800px] flex-col justify-center py-10 md:py-14">
+        <div className="flex flex-col items-center text-center">
+          <AiSparkle className="h-7 w-7 md:h-8 md:w-8" />
+          <h2 className="mt-3 bg-gradient-to-r from-[#8cc2f6] via-[#4a8ce8] to-[#2a5fc4] bg-clip-text text-[24px] font-bold leading-tight tracking-tight text-transparent break-keep text-balance md:text-[30px]">
+            에어터 운영 현황을 한눈에 정리해드려요
+          </h2>
         </div>
 
-        <div className="mt-6">
-          <p className={`mb-2 text-[12px] font-semibold ${style.icon}`}>{config.label} 추천 질문</p>
-          <div className="grid gap-2 md:grid-cols-2">
-            {config.prompts.map((q) => (
-              <button
-                key={q}
-                onClick={() => onAsk(q)}
-                disabled={disabled}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-[13px] text-slate-700 hover:border-purple-300 hover:bg-purple-50/50 hover:text-purple-800 disabled:opacity-50 transition-colors"
-              >
-                {q}
-              </button>
-            ))}
+        <div className="mt-8 md:mt-10">{composer}</div>
+
+        <section className="mt-6 rounded-xl border border-[#e6e9ee] bg-white px-4 py-4 md:px-6 md:py-5" aria-label="추천 질문">
+          <div role="tablist" aria-label="분석 유형" className="flex items-center overflow-x-auto pb-1">
+            {PERSONA_ORDER.map((id, i) => {
+              const p = PERSONAS[id];
+              const Icon = p.icon;
+              const active = id === persona;
+              return (
+                <Fragment key={id}>
+                  {i > 0 && <span className="mx-2 h-3.5 w-px flex-shrink-0 bg-slate-200 md:mx-2.5" aria-hidden="true" />}
+                  <button
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => onPersona(id)}
+                    className={`inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap py-1 text-[13px] transition-colors ${
+                      active ? 'font-semibold text-slate-900' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
+                    {p.tab}
+                  </button>
+                </Fragment>
+              );
+            })}
           </div>
-        </div>
-
-        <p className="mt-6 flex items-center gap-1.5 text-[12px] text-slate-400">
-          <Users className="h-3.5 w-3.5" /> 모든 AI 대화는 팀 전체에 공유됩니다. 개인정보는 입력하지 마세요.
-        </p>
+          <ul role="tabpanel" aria-label={`${config.tab} 추천 질문`} className="mt-2">
+            {config.prompts.map((q) => (
+              <li key={q}>
+                <button
+                  onClick={() => onAsk(q)}
+                  disabled={disabled}
+                  className="-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-2 text-left text-[14px] text-slate-800 transition-colors hover:bg-slate-50 hover:text-blue-700 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-800"
+                >
+                  {q}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     </div>
   );

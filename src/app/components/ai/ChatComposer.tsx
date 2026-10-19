@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { Send, Square } from 'lucide-react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Square } from 'lucide-react';
+import { AiSparkle } from './AiSparkle';
 
 interface Props {
+  /** hero = 빈 화면 가운데의 큰 입력창(파란 테두리), dock = 대화 화면 하단 */
+  variant: 'hero' | 'dock';
+  /** 초안은 페이지가 보관한다 — 빈 화면 ↔ 대화 화면으로 바뀌어도 지워지지 않게 */
+  value: string;
+  onChange: (text: string) => void;
   streaming: boolean;
   disabled?: boolean;
   maxChars: number;
@@ -9,12 +15,15 @@ interface Props {
   placeholder?: string;
   onSend: (text: string) => void;
   onStop: () => void;
+  /** 왼쪽 — `+` 데이터 메뉴 */
+  leading?: ReactNode;
+  /** 전송 버튼 앞 — 모델 칩 */
+  trailing?: ReactNode;
 }
 
 const isTouch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
-export function ChatComposer({ streaming, disabled, maxChars, autoFocus, placeholder, onSend, onStop }: Props) {
-  const [text, setText] = useState('');
+export function ChatComposer({ variant, value, onChange, streaming, disabled, maxChars, autoFocus, placeholder, onSend, onStop, leading, trailing }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -27,16 +36,17 @@ export function ChatComposer({ streaming, disabled, maxChars, autoFocus, placeho
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [text]);
+  }, [value]);
 
-  const over = text.length > maxChars;
+  const over = value.length > maxChars;
+  const canSend = !!value.trim() && !over && !disabled;
 
   const submit = () => {
-    const t = text.trim();
+    const t = value.trim();
     // 글자 수 초과면 보내지도 지우지도 않는다 (붙여넣은 긴 질문이 사라지지 않게)
     if (!t || streaming || disabled || over) return;
     onSend(t);
-    setText('');
+    onChange('');
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -48,55 +58,57 @@ export function ChatComposer({ streaming, disabled, maxChars, autoFocus, placeho
     submit();
   };
 
+  const frame =
+    variant === 'hero'
+      ? 'border-[#5b9cf2] shadow-[0_6px_24px_rgba(59,130,246,0.08)]'
+      : 'border-slate-200 shadow-[0_2px_12px_rgba(15,23,42,0.05)] focus-within:border-[#5b9cf2]';
+
   return (
-    <div className="border-t border-slate-200 bg-white px-4 md:px-8 py-3">
-      <div className="mx-auto max-w-3xl">
-        <div className="flex items-end gap-2">
-          <label htmlFor="ai-composer" className="sr-only">
-            질문 입력
-          </label>
-          <textarea
-            id="ai-composer"
-            ref={ref}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            disabled={disabled}
-            placeholder={placeholder ?? '질문을 입력하세요'}
-            aria-describedby="ai-composer-hint"
-            className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[14px] leading-relaxed placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-60"
-            style={{ minHeight: 44 }}
-          />
-          {streaming ? (
-            <button
-              onClick={onStop}
-              className="flex-shrink-0 h-11 w-11 inline-flex items-center justify-center rounded-xl bg-slate-800 text-white hover:bg-slate-900"
-              aria-label="응답 중지"
-              title="응답 중지"
-            >
-              <Square className="w-4 h-4" fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              onClick={submit}
-              disabled={!text.trim() || over || disabled}
-              className="flex-shrink-0 h-11 w-11 inline-flex items-center justify-center rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:bg-slate-200 disabled:cursor-not-allowed"
-              aria-label="보내기"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <div id="ai-composer-hint" className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
-          <span>{isTouch ? '전송은 버튼으로 · 대화는 팀 전체에 공유됩니다' : 'Enter 전송 · Shift+Enter 줄바꿈 · 대화는 팀 전체에 공유됩니다'}</span>
-          {text.length > maxChars * 0.4 && (
-            <span className={over ? 'text-red-500 font-medium' : ''}>
-              {text.length.toLocaleString()} / {maxChars.toLocaleString()}
-            </span>
-          )}
-        </div>
+    <div>
+      <div className={`flex items-end gap-1 rounded-xl border bg-white p-2 transition-colors ${frame} ${disabled ? 'opacity-70' : ''}`}>
+        {leading}
+        <label htmlFor={`ai-composer-${variant}`} className="sr-only">
+          질문 입력
+        </label>
+        <textarea
+          id={`ai-composer-${variant}`}
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          rows={1}
+          disabled={disabled}
+          placeholder={placeholder ?? '질문을 입력하세요'}
+          className="min-w-0 flex-1 resize-none bg-transparent px-2 py-[7px] text-[15px] leading-[22px] text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+        />
+        {trailing && <div className="flex h-9 flex-shrink-0 items-center">{trailing}</div>}
+        {streaming ? (
+          <button
+            type="button"
+            onClick={onStop}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-slate-800 text-white hover:bg-slate-900"
+            aria-label="응답 중지"
+            title="응답 중지"
+          >
+            <Square className="h-3.5 w-3.5" fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSend}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#3b82f6] text-white transition-colors hover:bg-[#2f6fe0] disabled:cursor-not-allowed disabled:bg-[#dfe3e8]"
+            aria-label="보내기"
+          >
+            <AiSparkle variant="white" className="h-[18px] w-[18px]" />
+          </button>
+        )}
       </div>
+      {value.length > maxChars * 0.4 && (
+        <p className={`mt-1 pr-1 text-right text-[11px] ${over ? 'font-medium text-red-500' : 'text-slate-400'}`}>
+          {value.length.toLocaleString()} / {maxChars.toLocaleString()}
+        </p>
+      )}
     </div>
   );
 }

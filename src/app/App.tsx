@@ -16,7 +16,6 @@ type PageId = 'sales' | 'ai' | 'profit' | 'customers' | 'supplychain' | 'setting
 // Tailwind 4 는 리터럴 클래스만 인식하므로 강조색을 통째로 적어 둔다
 const NAV_ACCENT = {
   blue: { side: 'bg-blue-50 text-blue-700 shadow-sm', icon: 'text-blue-700', text: 'text-blue-700', bottom: 'text-blue-600' },
-  purple: { side: 'bg-purple-50 text-purple-700 shadow-sm', icon: 'text-purple-700', text: 'text-purple-700', bottom: 'text-purple-600' },
 } as const;
 
 function PageSpinner() {
@@ -334,7 +333,7 @@ export default function App() {
 
   const navigation: { id: PageId; name: string; short: string; icon: typeof TrendingUp; accent: keyof typeof NAV_ACCENT }[] = [
     { id: 'sales', name: '영업 관리', short: '영업', icon: TrendingUp, accent: 'blue' },
-    { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'purple' },
+    { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'blue' },
     { id: 'profit', name: '프로젝트 관리', short: '프로젝트', icon: Calculator, accent: 'blue' },
     { id: 'customers', name: '고객 관리', short: '고객', icon: Users, accent: 'blue' },
     { id: 'supplychain', name: '공급망 관리', short: '공급망', icon: Package, accent: 'blue' },
@@ -398,7 +397,7 @@ export default function App() {
                     {item.name}
                   </span>
                 )}
-                {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white" />}
+                {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />}
               </button>
             );
           })}
@@ -449,12 +448,12 @@ export default function App() {
             {/* AI 어시스턴트 바로가기 (모바일은 하단 내비에 있음) */}
             <button
               onClick={() => goTo('ai')}
-              className={`relative hidden md:inline-flex p-2.5 rounded-xl transition-colors ${currentPage === 'ai' ? 'bg-purple-50' : 'hover:bg-purple-50'}`}
+              className={`relative hidden md:inline-flex p-2.5 rounded-xl transition-colors ${currentPage === 'ai' ? 'bg-blue-50' : 'hover:bg-blue-50'}`}
               title="AI 어시스턴트"
               aria-label="AI 어시스턴트"
             >
-              <Sparkles className="w-5 h-5 text-purple-500" />
-              {aiBadge && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white motion-safe:animate-pulse" />}
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              {aiBadge && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white motion-safe:animate-pulse" />}
             </button>
             {/* 알림 벨 */}
             <div className="relative" ref={notificationRef}>
@@ -500,7 +499,8 @@ export default function App() {
                           <div className={`mt-0.5 p-1.5 rounded-lg ${
                             n.type === 'deal_success' ? 'bg-green-100 text-green-600' :
                             n.type === 'customer_registered' ? 'bg-blue-100 text-blue-600' :
-                            n.type === 'admin_action' || n.type === 'ai_reply' ? 'bg-purple-100 text-purple-600' :
+                            n.type === 'admin_action' ? 'bg-purple-100 text-purple-600' :
+                            n.type === 'ai_reply' ? 'bg-blue-100 text-blue-600' :
                             'bg-amber-100 text-amber-600'
                           }`}>
                             {n.type === 'deal_success' ? <TrendingUp className="w-4 h-4" /> :
@@ -584,7 +584,7 @@ export default function App() {
                   <span className={`text-[10px] font-medium truncate max-w-full ${isActive ? accent.bottom : 'text-slate-600'}`}>
                     {item.short}
                   </span>
-                  {item.id === 'ai' && aiBadge && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-white" />}
+                  {item.id === 'ai' && aiBadge && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />}
                 </button>
               );
             })}
