@@ -1,9 +1,9 @@
 // 견적서 입력 도우미 — 판독 결과를 딜·프로젝트 변경으로 바꾼다: 매칭(후보·점수), 변경표, 페이로드, 반영.
-// 딜 PUT 은 행 전체를 덮어쓰므로(deals_api.php) 반영 직전에 최신 딜을 다시 받아 필요한 필드만 바꾼다.
-// 수주 딜은 서버가 고객 작업 이력을 dealId 로 갱신하지만, 프로젝트는 생성 후 갱신되지 않고 부가세·순매출도
-// 다시 계산하지 않으므로(projects_api.php) 견적·부가세·순매출을 직접 보낸다.
+// 반영 직전에 최신 딜을 다시 받아 바뀐 칸만 보낸다(api/deals_api_v2.php 부분 수정).
+// 연결된 수주 딜이면 서버가 고객 작업이력과 프로젝트(견적·부가세·순매출·손익)를 함께 고친다 — docs/data-sync.md
 
 import { normalizeCompanyName } from '../company';
+import { diffDeal, isWonDeal, patchDeal, postDeal, type SyncResult } from '../dealSync';
 import { daysBetween, kstYmd } from './format';
 import type { QuoteExtraction } from './files';
 import { parseAmount, RESULT_LABELS, STAGE_LABELS } from './snapshot/common';
@@ -182,7 +182,7 @@ function scoreDeal(d: any, ex: QuoteExtraction, quoteDate: string, similar: bool
   if (d.successStatus === 'in-progress') {
     score += 15;
     reasons.push('진행중');
-  } else if (d.successStatus === 'success' || d.status === 'confirmed') {
+  } else if (isWonDeal(d)) {
     score += 12;
     reasons.push('수주');
   } else if (d.successStatus === 'no-quote') {
@@ -376,11 +376,11 @@ export function planDeal(ex: QuoteExtraction, deal: any | null, opts: PlanOption
     mode: 'update',
     payload,
     changes,
-    dealSuccess: payload.successStatus === 'success' || payload.status === 'confirmed',
+    dealSuccess: isWonDeal(payload),
   };
 }
 
-/** 프로젝트 금액 (견적은 VAT 포함 — deals_api.php syncDealToProject 와 같은 계산) */
+/** 프로젝트 금액 (견적은 VAT 포함 — api/sync_lib.php sl_project_amounts 와 같은 계산) — 확인 카드 표시용 */
 export function projectAmounts(quoted: number) {
   const taxAmount = Math.round((quoted * 10) / 110);
   return { quotationAmount: quoted, taxAmount, netRevenue: quoted - taxAmount };
@@ -402,21 +402,16 @@ async function getList(url: string, what: string): Promise<any[]> {
   return (await readJson(res))?.data ?? [];
 }
 
-/** 딜 저장 — 서버가 고객·프로젝트 동기화에 실패해도 딜이 저장됐으면(deal_persisted) 성공으로 보고 표시한다 */
-async function saveDeal(method: 'POST' | 'PUT', payload: any): Promise<{ id: number; syncFailed: boolean }> {
-  const res = await fetch('/api/deals', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  const body = await readJson(res);
-  if (res.ok) return { id: Number(body?.id ?? payload.id), syncFailed: false };
-  if (body?.deal_persisted) return { id: Number(body.id ?? payload.id), syncFailed: true };
-  throw new Error(body?.error ? `딜 저장 실패: ${body.error}` : `딜 저장 실패 (${res.status})`);
-}
-
-/** 서버가 저장 후 손익 지표(인건비율·순익)를 다시 계산한다 — 실패하면 500 + project_persisted */
-async function patchProject(id: number, updates: Record<string, unknown>): Promise<void> {
-  const res = await fetch('/api/projects', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...updates }) });
-  if (res.ok) return;
-  const body = await readJson(res);
-  throw new Error(body?.project_persisted ? '프로젝트 금액은 저장됐지만 손익 재계산에 실패했습니다' : `프로젝트 금액 갱신 실패 (${res.status})`);
+/** 딜 저장 — 새 딜은 등록, 기존 딜은 새로 받은 값과의 차이만 보낸다.
+ *  서버가 고객·프로젝트 반영에 실패해도 딜이 저장됐으면(partial) 성공으로 보고 표시한다 */
+async function saveDeal(mode: 'create' | 'update', payload: any, fresh: any): Promise<{ id: number; result: SyncResult }> {
+  if (mode === 'create') {
+    const r = await postDeal(payload);
+    return { id: r.id, result: r };
+  }
+  const id = Number(payload.id);
+  const r = await patchDeal(id, diffDeal(fresh, payload));
+  return { id, result: r };
 }
 
 export interface ApplyResult {
@@ -432,30 +427,16 @@ export interface ApplyResult {
 
 export async function applyQuote(ex: QuoteExtraction, dealId: number | null, opts: PlanOptions): Promise<ApplyResult> {
   let plan: DealPlan;
-  let saved: { id: number; syncFailed: boolean };
+  let saved: { id: number; result: SyncResult };
   if (dealId != null) {
-    // 행 전체를 덮어쓰므로 최신 값을 다시 받아 합친다
+    // 다른 사람이 그사이 고쳤을 수 있으니 최신 값을 다시 받아 그 위에서 바꾼다
     const fresh = (await getList('/api/deals', '딜')).find((d) => Number(d.id) === dealId);
     if (!fresh) throw new Error('선택한 딜을 찾을 수 없습니다. 다른 사람이 삭제했을 수 있습니다.');
     plan = planDeal(ex, fresh, opts);
-    saved = await saveDeal('PUT', plan.payload);
+    saved = await saveDeal('update', plan.payload, fresh);
   } else {
     plan = planDeal(ex, null, opts);
-    saved = await saveDeal('POST', plan.payload);
-  }
-
-  let projectUpdated = false;
-  let projectError: string | null = null;
-  if (plan.dealSuccess && ex.quotedTotal > 0) {
-    try {
-      const project = (await getList('/api/projects', '프로젝트')).find((p) => Number(p.dealId) === saved.id);
-      if (project && Number(project.quotationAmount) !== ex.quotedTotal) {
-        await patchProject(Number(project.id), projectAmounts(ex.quotedTotal));
-        projectUpdated = true;
-      }
-    } catch (err) {
-      projectError = err instanceof Error ? err.message : String(err);
-    }
+    saved = await saveDeal('create', plan.payload, null);
   }
 
   return {
@@ -463,9 +444,10 @@ export async function applyQuote(ex: QuoteExtraction, dealId: number | null, opt
     created: plan.mode === 'create',
     company: String(plan.payload.company || ex.recipientCompany),
     dealSuccess: plan.dealSuccess,
-    syncFailed: saved.syncFailed,
-    projectUpdated,
-    projectError,
+    syncFailed: saved.result.partial,
+    // 프로젝트 견적·부가세·순매출은 서버가 딜과 함께 고친다 (api/sync_lib.php sl_push_deal)
+    projectUpdated: saved.result.synced.projects.length > 0,
+    projectError: null,
     changes: plan.changes,
   };
 }

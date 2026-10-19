@@ -1,7 +1,8 @@
 // Cloudflare Pages Function — /api/deals 프록시
 // 프론트엔드 → 같은 도메인(/api/deals) → Cafe24 서버로 전달 (CORS 우회)
 
-const TARGET = 'https://airtor.co.kr/api/deals_api.php';
+// v2: 부분 수정 + 딜·고객·프로젝트 동기화 (api/sync_lib.php, docs/data-sync.md). 되돌리려면 deals_api.php 로.
+const TARGET = 'https://airtor.co.kr/api/deals_api_v2.php';
 
 async function proxyRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);

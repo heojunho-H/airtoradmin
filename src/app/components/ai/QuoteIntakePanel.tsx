@@ -648,7 +648,7 @@ function DoneRow({ item, expanded, onToggle, onRelink, relinking }: { item: Batc
           {a.syncFailed && (
             <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              딜은 저장됐지만 고객·프로젝트 동기화에 실패했습니다. 영업 화면에서 이 딜을 한 번 더 저장해 주세요.
+              딜은 저장됐지만 고객관리·프로젝트에 반영하지 못했습니다. 두 페이지에서 금액·수량을 확인해 주세요.
             </p>
           )}
           {a.projectError && (

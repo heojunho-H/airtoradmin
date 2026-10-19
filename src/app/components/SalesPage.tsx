@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -38,6 +38,7 @@ import {
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
+import { diffDeal, isValidYmd, isWonDeal, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
 
 interface Deal {
   id: number;
@@ -77,26 +78,10 @@ export async function fetchDeals(): Promise<Deal[]> {
   return result.data || [];
 }
 
-// API에 딜 데이터를 저장 (추가)
+// API에 딜 데이터를 저장 (추가) — 처음부터 수주면 서버가 고객·프로젝트 연결을 만든다
 export async function createDeal(deal: Omit<Deal, 'id'>): Promise<number> {
-  const response = await fetch('/api/deals', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(deal),
-  });
-  if (!response.ok) throw new Error('딜 추가 실패');
-  const result = await response.json();
-  return result.id;
-}
-
-// API에 딜 데이터를 수정
-export async function updateDeal(deal: Deal): Promise<void> {
-  const response = await fetch('/api/deals', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(deal),
-  });
-  if (!response.ok) throw new Error('딜 수정 실패');
+  const r = await postDeal<Deal>(deal as unknown as Record<string, unknown>);
+  return r.id;
 }
 
 // API에 딜 데이터를 삭제
@@ -190,6 +175,10 @@ const DEFAULT_VIEW_STATE: SalesViewState = {
 
 interface SalesPageProps {
   onDealSuccess?: (deal: Deal) => void;
+  /** 저장 결과 — 서버가 함께 바꾼 고객·프로젝트가 있으면 App 이 목록을 다시 불러온다 */
+  onSynced?: (result: SyncResult) => void;
+  /** 고객 작업이력·프로젝트와 연결된 딜 (삭제 안내용) */
+  linkedDealIds?: Set<number>;
   externalDealsState?: [Deal[], (deals: Deal[] | ((prev: Deal[]) => Deal[])) => void];
   externalDateFilterState?: [DateFilter, (s: DateFilter | ((prev: DateFilter) => DateFilter)) => void];
   externalViewState?: [SalesViewState, (s: SalesViewState | ((prev: SalesViewState) => SalesViewState)) => void];
@@ -197,7 +186,7 @@ interface SalesPageProps {
   onNotification?: (message: string) => void;
 }
 
-export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
@@ -238,6 +227,43 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   const setSortDirection = (v: SalesViewState['sortDirection']) => setViewState((prev) => ({ ...prev, sortDirection: v }));
   const [isAddingNewDeal, setIsAddingNewDeal] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // 상세 화면의 바로 저장 칸(관리 메모·확정작업일) — 포커스를 얻었을 때 값. 벗어날 때 바뀌었으면 저장한다.
+  const inlineStartRef = useRef<{ memo: string; workDate: string }>({ memo: '', workDate: '' });
+  const inlineFocusRef = useRef(false);
+
+  // 목록을 새로 불러오면(고객·프로젝트 페이지에서 고친 값) 열린 상세도 최신으로 — 편집·입력 중에는 그대로
+  useEffect(() => {
+    if (!selectedDeal || isEditMode || isAddingNewDeal || inlineFocusRef.current) return;
+    const fresh = dealsData.find((d) => d.id === selectedDeal.id);
+    if (fresh && fresh !== selectedDeal) setSelectedDeal(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealsData]);
+
+  // 저장 결과 처리 — 서버 경고·부분 실패 알림, App 에 동기화 결과 전달
+  const reportSync = (deal: Pick<Deal, 'company'>, r: SyncResult) => {
+    for (const w of r.warnings) {
+      const text = syncWarningText(w);
+      if (text) onNotification?.(`[${deal.company}] ${text}`);
+    }
+    if (r.partial && r.error) onNotification?.(`[${deal.company}] ${r.error}`);
+    onSynced?.(r);
+  };
+
+  // 바뀐 칸만 저장 (서버가 연결된 고객 작업이력·프로젝트에 퍼뜨린다). 실패하면 알림을 남기고 null.
+  const saveDealFields = async (deal: Deal, fields: Record<string, unknown>, what: string): Promise<SyncResult | null> => {
+    if (Object.keys(fields).length === 0) return null;
+    try {
+      const r = await patchDeal<Deal>(deal.id, fields);
+      reportSync(deal, r);
+      return r;
+    } catch (err) {
+      console.error(`${what} 저장 실패:`, err);
+      const reason = err instanceof Error ? err.message : '다시 시도해 주세요';
+      if (err instanceof SyncError && err.code === 'reload_required') alert(reason);
+      else onNotification?.(`[${deal.company}] ${what} 저장 실패 — ${reason}`);
+      return null;
+    }
+  };
   
   // DB에서 딜 데이터 로드
   useEffect(() => {
@@ -267,8 +293,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
   // 문의 등록일 기준 15일 초과 시 성공여부 자동 실패 처리
   useEffect(() => {
     const today = new Date();
+    // 진행상태 '수주확정'은 건너뛴다 — 성공여부만 늦게 바뀐 수주 건을 실패로 돌리지 않게
     const expiredDeals = dealsData.filter((deal) => {
-      if (deal.successStatus !== 'in-progress') return false;
+      if (deal.successStatus !== 'in-progress' || deal.status === 'confirmed') return false;
       const regDate = new Date(deal.registrationDate);
       const diffDays = Math.floor((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays > 15;
@@ -279,9 +306,9 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
         prev.map((deal) => {
           const regDate = new Date(deal.registrationDate);
           const diffDays = Math.floor((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (deal.successStatus === 'in-progress' && diffDays > 15) {
+          if (deal.successStatus === 'in-progress' && deal.status !== 'confirmed' && diffDays > 15) {
             const updatedDeal = { ...deal, successStatus: 'failed' as const };
-            updateDeal(updatedDeal).catch(err => console.error('자동 실패 처리 API 실패:', err));
+            void saveDealFields(deal, { successStatus: 'failed' }, '자동 실패 처리');
             return updatedDeal;
           }
           return deal;
@@ -600,7 +627,10 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const dealToDelete = dealsData.find(d => d.id === dealId);
     if (!dealToDelete) return;
 
-    if (window.confirm(`"${dealToDelete.company}" 거래를 삭제하시겠습니까?`)) {
+    const linkedNote = linkedDealIds?.has(dealId)
+      ? '\n\n이 거래는 고객관리 작업이력·프로젝트와 연결되어 있습니다. 그쪽 기록은 남고 \'딜 삭제됨\'으로 표시됩니다.'
+      : '';
+    if (window.confirm(`"${dealToDelete.company}" 거래를 삭제하시겠습니까?${linkedNote}`)) {
       try {
         await deleteDeal(dealId);
         setDealsData(dealsData.filter(deal => deal.id !== dealId));
@@ -621,7 +651,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
       const updatedDeal = { ...deal, isChecked: true };
       setSelectedDeal(updatedDeal);
       setDealsData(dealsData.map(d => d.id === deal.id ? updatedDeal : d));
-      updateDeal(updatedDeal).catch(err => console.error('확인 상태 저장 실패:', err));
+      void saveDealFields(deal, { isChecked: true }, '확인 상태');
     } else {
       setSelectedDeal(deal);
     }
@@ -635,7 +665,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const updatedDeal = { ...targetDeal, isChecked: !targetDeal.isChecked };
     setDealsData(dealsData.map(d => d.id === dealId ? updatedDeal : d));
     if (selectedDeal?.id === dealId) setSelectedDeal(updatedDeal);
-    updateDeal(updatedDeal).catch(err => console.error('확인 상태 저장 실패:', err));
+    void saveDealFields(targetDeal, { isChecked: updatedDeal.isChecked }, '확인 상태');
   };
 
   const handleStatusChange = async (dealId: number, newStatus: Deal['status']) => {
@@ -685,17 +715,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
 
     onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
 
-    try {
-      await updateDeal(updatedDeal);
-    } catch (err) {
-      console.error('상태 변경 저장 실패:', err);
-      return;
-    }
-
-    const becameSuccess = newStatus === 'confirmed' || updatedDeal.successStatus === 'success';
-    if (becameSuccess && onDealSuccess) {
-      onDealSuccess(updatedDeal);
-    }
+    const r = await saveDealFields(targetDeal, diffDeal(targetDeal as unknown as Record<string, unknown>, updatedDeal as unknown as Record<string, unknown>), '진행상태');
+    if (r?.transition === 'won') onDealSuccess?.(updatedDeal);
   };
 
   const handleSuccessStatusChange = async (dealId: number, newSuccessStatus: Deal['successStatus']) => {
@@ -739,16 +760,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : newSuccessStatus === 'no-quote' ? '미견적' : '진행중';
     onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
 
-    try {
-      await updateDeal(updatedDeal);
-    } catch (err) {
-      console.error('성공여부 변경 저장 실패:', err);
-      return;
-    }
-
-    if (newSuccessStatus === 'success' && onDealSuccess) {
-      onDealSuccess(updatedDeal);
-    }
+    const r = await saveDealFields(targetDeal, diffDeal(targetDeal as unknown as Record<string, unknown>, updatedDeal as unknown as Record<string, unknown>), '성공여부');
+    if (r?.transition === 'won') onDealSuccess?.(updatedDeal);
   };
 
   const handleSalesManagerInlineChange = (dealId: number, newManager: string) => {
@@ -757,8 +770,8 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
 
     const updatedDeal = { ...targetDeal, salesManager: newManager };
 
-    // DB에 저장
-    updateDeal(updatedDeal).catch((err) => console.error('담당자 변경 저장 실패:', err));
+    // DB에 저장 — 수주 건이면 고객 작업이력의 고객책임자도 함께 바뀐다
+    void saveDealFields(targetDeal, { salesManager: newManager }, '담당자');
 
     setDealsData((prevDeals) =>
       prevDeals.map((deal) => deal.id === dealId ? updatedDeal : deal)
@@ -790,8 +803,7 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
     if (!editedDeal) return;
 
     // 수주확정/성공으로 가는 저장은 확정작업일 필수 — 미입력이면 팝업.
-    const goingToSuccess =
-      editedDeal.status === 'confirmed' || editedDeal.successStatus === 'success';
+    const goingToSuccess = isWonDeal(editedDeal);
     if (goingToSuccess && !editedDeal.confirmedWorkDate?.trim()) {
       setWorkDateModal({
         companyName: editedDeal.company || '신규 거래',
@@ -815,33 +827,38 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
         return;
       }
       try {
-        const newId = await createDeal(dealToSave);
-        const newDeal = { ...dealToSave, id: newId };
+        const r = await postDeal<Deal>(dealToSave as unknown as Record<string, unknown>);
+        const newDeal = r.deal ? { ...dealToSave, ...r.deal } : { ...dealToSave, id: r.id };
         setDealsData((prevDeals) => [...prevDeals, newDeal]);
         setSelectedDeal(null);
         setIsAddingNewDeal(false);
         onNotification?.(`[${dealToSave.company}] 새 거래가 등록되었습니다`);
+        reportSync(dealToSave, r);
+        if (r.transition === 'won') onDealSuccess?.(newDeal);
       } catch (err) {
-        alert('거래 등록에 실패했습니다. 다시 시도해주세요.');
+        alert(err instanceof SyncError ? err.message : '거래 등록에 실패했습니다. 다시 시도해주세요.');
         console.error(err);
         return;
       }
     } else {
-      try {
-        await updateDeal(dealToSave);
-        setDealsData((prevDeals) =>
-          prevDeals.map((deal) => (deal.id === dealToSave.id ? dealToSave : deal))
-        );
-        setSelectedDeal(dealToSave);
-        onNotification?.(`[${dealToSave.company}] 거래 정보가 수정되었습니다`);
-        const becameSuccess = dealToSave.status === 'confirmed' || dealToSave.successStatus === 'success';
-        if (becameSuccess && onDealSuccess) {
-          onDealSuccess(dealToSave);
+      // 원본(편집 시작 때 값)과 비교해 바뀐 칸만 보낸다 — 다른 사람이 그사이 고친 칸을 되돌리지 않게
+      const original = selectedDeal && selectedDeal.id === dealToSave.id ? selectedDeal : dealToSave;
+      const fields = diffDeal(original as unknown as Record<string, unknown>, dealToSave as unknown as Record<string, unknown>);
+      if (Object.keys(fields).length > 0) {
+        try {
+          const r = await patchDeal<Deal>(dealToSave.id, fields);
+          setDealsData((prevDeals) =>
+            prevDeals.map((deal) => (deal.id === dealToSave.id ? dealToSave : deal))
+          );
+          setSelectedDeal(dealToSave);
+          onNotification?.(`[${dealToSave.company}] 거래 정보가 수정되었습니다`);
+          reportSync(dealToSave, r);
+          if (r.transition === 'won') onDealSuccess?.(dealToSave);
+        } catch (err) {
+          alert(err instanceof SyncError ? err.message : '거래 수정에 실패했습니다. 다시 시도해주세요.');
+          console.error(err);
+          return;
         }
-      } catch (err) {
-        alert('거래 수정에 실패했습니다. 다시 시도해주세요.');
-        console.error(err);
-        return;
       }
     }
     setIsEditMode(false);
@@ -2422,9 +2439,15 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                         setDealsData(prev => prev.map(d => d.id === updatedDeal.id ? updatedDeal : d));
                       }
                     }}
+                    onFocus={() => {
+                      inlineFocusRef.current = true;
+                      inlineStartRef.current.memo = selectedDeal.managementMemo || '';
+                    }}
                     onBlur={() => {
-                      if (!isEditMode && selectedDeal) {
-                        updateDeal(selectedDeal).catch(err => console.error('관리 메모 저장 실패:', err));
+                      inlineFocusRef.current = false;
+                      if (!isEditMode && selectedDeal && (selectedDeal.managementMemo || '') !== inlineStartRef.current.memo) {
+                        inlineStartRef.current.memo = selectedDeal.managementMemo || '';
+                        void saveDealFields(selectedDeal, { managementMemo: selectedDeal.managementMemo || '' }, '관리 메모');
                       }
                     }}
                     placeholder="내부 관리용 메모를 입력하세요"
@@ -2499,13 +2522,29 @@ export function SalesPage({ onDealSuccess, externalDealsState, externalDateFilte
                       if (isEditMode) {
                         handleFieldChange('confirmedWorkDate', value);
                       } else {
+                        // 입력 중(연도 타이핑 등)에는 화면에만 두고, 칸을 벗어날 때 저장한다
                         const updatedDeal = { ...selectedDeal, confirmedWorkDate: value };
                         setSelectedDeal(updatedDeal);
                         setDealsData(prev => prev.map(d => d.id === updatedDeal.id ? updatedDeal : d));
-                        updateDeal(updatedDeal)
-                          .then(() => onNotification?.(`[${updatedDeal.company}] 확정작업일이 ${value || '미정'}(으)로 변경되었습니다`))
-                          .catch(err => console.error('확정작업일 저장 실패:', err));
                       }
+                    }}
+                    onFocus={() => {
+                      inlineFocusRef.current = true;
+                      inlineStartRef.current.workDate = selectedDeal.confirmedWorkDate || '';
+                    }}
+                    onBlur={() => {
+                      inlineFocusRef.current = false;
+                      if (isEditMode || !selectedDeal) return;
+                      const value = selectedDeal.confirmedWorkDate || '';
+                      if (value === inlineStartRef.current.workDate) return;
+                      if (value && !isValidYmd(value)) {
+                        onNotification?.(`[${selectedDeal.company}] 확정작업일 "${value}"은(는) 올바른 날짜가 아니어서 저장하지 않았습니다`);
+                        return;
+                      }
+                      inlineStartRef.current.workDate = value;
+                      void saveDealFields(selectedDeal, { confirmedWorkDate: value }, '확정작업일').then((r) => {
+                        if (r) onNotification?.(`[${selectedDeal.company}] 확정작업일이 ${value || '미정'}(으)로 변경되었습니다`);
+                      });
                     }}
                     className="w-full px-3 py-2 text-base font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
                   />

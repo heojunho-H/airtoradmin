@@ -1,6 +1,7 @@
 // Cloudflare Pages Function — /api/customers 프록시
 
-const TARGET = 'https://airtor.co.kr/api/customers_api.php';
+// v2: 작업이력 패치 + 연결 딜·프로젝트 동기화 (api/sync_lib.php, docs/data-sync.md). 되돌리려면 customers_api.php 로.
+const TARGET = 'https://airtor.co.kr/api/customers_api_v2.php';
 
 async function proxyRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);

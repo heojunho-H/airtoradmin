@@ -7,6 +7,7 @@
 //   현장 견적  견적서(김포)/(방화)       합산한다 (사용자 결정)
 // 화면은 항목의 결정(회사명·대상 딜·고객책임자·포함 여부)과 묶음 선택만 들고, 나머지는 여기서 계산한다.
 
+import { isWonDeal } from '../dealSync';
 import { normalizeCompanyName } from '../company';
 import { FLAG_LABELS, linkFile, type QuoteExtraction, type UploadResult } from './files';
 import { applyQuote, matchQuote, type ApplyResult, type FieldChange, type MatchResult } from './intake';
@@ -245,7 +246,7 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
             const dAmt = parseAmount(deal.quotationAmount);
             const dQty = Number(deal.totalQuantity) || 0;
             // 수주 딜의 금액·수량은 합의된 값 — 견적서가 달라도 사람이 확인하고 바꾼다 (예: 수주 후 낸 3차 견적)
-            if (deal.successStatus === 'success' || deal.status === 'confirmed') {
+            if (isWonDeal(deal)) {
               if ((cmp.quotedTotal > 0 && dAmt !== cmp.quotedTotal) || (cmp.totalQuantity > 0 && dQty !== cmp.totalQuantity)) reasons.push('수주 딜 금액·수량 변경');
             }
             // 기존 값과 30% 넘게 다르면 부분·대안 견적일 수 있다 (예: 109대 딜에 8대 기본세척 견적)

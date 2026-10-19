@@ -13,7 +13,8 @@ export const STIBEE_BASE_URL = 'https://api.stibee.com/v2';
 export const STIBEE_AUTO_URL = 'https://stibee.com/api/v1.0/auto';
 export const BATCH_MAX = 1000;
 // 고객 데이터 원본 (cafe24 PHP). Functions는 /api/customers 프록시가 아니라 원본을 직접 호출한다.
-export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api.php';
+// v2 — 작업이력·메일 기록은 _v + 패치로만 고친다 (functions/api/newsletter.ts 실행기 참고)
+export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api_v2.php';
 
 export interface StibeeEnv {
   STIBEE_API_KEY: string;

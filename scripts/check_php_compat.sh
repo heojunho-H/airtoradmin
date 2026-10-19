@@ -112,12 +112,50 @@ check_silent_failure() {
   return 0
 }
 
+# ============================================================
+# Pattern 6: PHP 5.3+/5.4+ 함수·문법 — 운영 PHP(5.4 미만, 2026-10-19 실측)에 없음
+#  http_response_code() 는 호출 순간 Fatal error → 오류 응답이 빈 500(또는 200 + HTML)으로 나간다.
+#  ?: / ?? 는 파싱 에러, json_last_error/array_column 은 Fatal, __DIR__ 는 리터럴로 해석될 수 있다.
+# ============================================================
+check_modern_php() {
+  local files="$1"
+  local hits=$(grep -nE 'http_response_code[[:space:]]*\(|json_last_error[[:space:]]*\(|array_column[[:space:]]*\(|__DIR__|\?\?|\?:' $files 2>/dev/null \
+              | grep -vE ':[[:space:]]*(\*|//|#)')
+  if [ -n "$hits" ]; then
+    echo "❌ [6] PHP 5.3+/5.4+ 함수·문법 — 카페24에서 Fatal/파싱 에러"
+    echo "$hits" | sed 's/^/    /'
+    echo "    → header('HTTP/1.1 …') (sync_lib.php sl_status), 일반 삼항, dirname(__FILE__)"
+    echo ""
+    return 1
+  fi
+  return 0
+}
+
+# ============================================================
+# Pattern 7: empty()/isset() 안의 함수 호출, 호출 결과 바로 인덱싱 — PHP 5.5/5.4 미만 Fatal
+# ============================================================
+check_call_in_empty() {
+  local files="$1"
+  local hits=$(grep -nE '(empty|isset)[[:space:]]*\([[:space:]]*[A-Za-z_]+[[:space:]]*\(|[A-Za-z_]\([^()]*\)\[' $files 2>/dev/null \
+              | grep -vE ':[[:space:]]*(\*|//|#)')
+  if [ -n "$hits" ]; then
+    echo "❌ [7] empty(함수()) 또는 함수()[...] — 카페24 PHP 에서 Fatal"
+    echo "$hits" | sed 's/^/    /'
+    echo "    → 결과를 변수에 담은 뒤 검사/인덱싱"
+    echo ""
+    return 1
+  fi
+  return 0
+}
+
 # 실행
 check_closures "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
 check_json_encode_2arg "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
 check_json_flag_constants "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
 check_short_array "$TARGETS"  # 경고만
 check_silent_failure "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
+check_modern_php "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
+check_call_in_empty "$TARGETS" || VIOLATIONS=$((VIOLATIONS+1))
 
 if [ "$VIOLATIONS" -eq 0 ]; then
   echo "✅ 모든 PHP 호환성 검사 통과"

@@ -13,6 +13,10 @@
 | `JSON_UNESCAPED_UNICODE`, `JSON_PRETTY_PRINT` 등 JSON flag 상수 | 5.4 | 상수 미정의 → 문자열 리터럴 `"JSON_UNESCAPED_UNICODE"`로 해석 | flag 인자 자체를 사용 안 함. unicode는 `\uXXXX` escape로 출력되어도 디코드 결과는 동일 |
 | 단축 배열 `[]` 리터럴 | 5.4 | (이론상 작동하지만 안전을 위해) | `array()` 사용 |
 | `__DIR__` 매직 상수 | 5.3 | 업로드 과정에서 간헐적으로 리터럴로 해석되는 사례 보고됨 | `dirname(__FILE__)` 사용 |
+| `http_response_code()` | 5.4 | **실측(2026-10-19): 정의되지 않은 함수 → Fatal error.** 오류 응답이 빈 500(또는 display_errors 가 켜진 파일은 200 + HTML)으로 나간다 | `header('HTTP/1.1 500 Internal Server Error')` — `sync_lib.php` `sl_status()` |
+| `?:` 축약 삼항, `??` | 5.3 / 7.0 | 파싱 에러 | 일반 삼항 `isset($a) ? $a : $b` |
+| `json_last_error()`, `array_column()` | 5.3 / 5.5 | Fatal error | `json_decode` 결과를 `is_array` 로 검사, 반복문 |
+| `empty(함수())`, `함수()[0]` | 5.5 / 5.4 | Fatal error | 결과를 변수에 담은 뒤 검사·인덱싱 |
 | 단축 echo 태그 `<?=` | (short_open_tag 의존) | 호스팅 설정에 따라 미작동 가능 | `<?php echo ?>` 명시 |
 | 네임스페이스 `namespace` | 5.3 | 미검증 (피하는 게 안전) | 함수명 prefix |
 | Late Static Binding `static::` | 5.3 | 미검증 | 명시적 클래스명 참조 |
@@ -58,6 +62,16 @@ bash scripts/check_php_compat.sh
 ```
 
 위 스크립트가 위 금지 패턴을 grep으로 잡아냅니다. CI(GitHub Actions)에서도 같은 스크립트를 돌리는 게 권장됩니다.
+
+## 딜·고객·프로젝트 동기화 (v2, 2026-10-19)
+
+- 세 API 의 v2(`deals_api_v2.php` · `customers_api_v2.php` · `projects_api_v2.php`)는 공용 함수 `sync_lib.php` 를 `require_once dirname(__FILE__) . '/sync_lib.php'` 로 쓴다.
+  함수는 모두 `sl_` 접두사(다른 파일의 `normalizeCompanyName` 등과 이름 충돌 방지), 닫는 `?>` 없음, BOM 없음.
+- 쓰기는 `GET_LOCK('airtor2014_sync', 5)` 로 한 줄로 세운다(이름은 공유 MySQL 서버 전체에서 유일해야 함). 못 얻어도 저장은 진행하고 로그만 남긴다.
+- 상태 코드는 `sl_status()` / `sl_out()` 로 보낸다. 규칙·API: `docs/data-sync.md`.
+- 예전 `*_api.php` 는 되돌리기용으로 서버에 남겨 둔다(프록시는 v2 를 가리킴).
+- DB 접속 정보는 서버 전용 `db_config.php`(.gitignore)에만 둔다 — v2 파일은 인라인 접속 정보 없이 이 파일만 읽는다.
+- 업로드 전 검사: `bash scripts/check_php_compat.sh api/sync_lib.php api/*_v2.php` (예전 파일은 `http_response_code` 때문에 [6] 에 걸린다 — 고칠 때 함께 정리).
 
 ## 데이터 정합성 체크
 

@@ -30,6 +30,7 @@ import {
   type ProjectForLearning,
 } from '../../lib/staffing-learning';
 import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments, type RoleCode } from '../../lib/roles';
+import { DEAL_LINK_LABEL, dealLinkState, type DealStateMap } from '../../lib/dealSync';
 
 // ============================================================
 // 타입
@@ -228,6 +229,8 @@ interface ProfitPageProps {
   customers?: any[];
   subcontractors?: any[];
   onNotification?: (msg: string) => void;
+  /** 딜 ID → 수주 여부 — 영업관리에서 수주가 아니게 됐거나 삭제된 딜의 프로젝트에 '수주 취소'·'딜 삭제됨' 표시 */
+  dealStates?: DealStateMap | null;
 }
 
 export function ProfitPage({
@@ -236,6 +239,7 @@ export function ProfitPage({
   customers = [],
   subcontractors = [],
   onNotification,
+  dealStates = null,
 }: ProfitPageProps = {}) {
   // ============================================================
   // 상태 — hoisting 패턴 (CustomersPage와 동일)
@@ -394,6 +398,12 @@ export function ProfitPage({
   // ============================================================
   // 룩업 헬퍼
   // ============================================================
+  // 연결된 영업 딜이 수주가 아니거나(실패·미견적) 삭제됐으면 표시 — 프로젝트는 그대로 두고 사용자가 정리한다
+  const linkLabelOf = (p: Project): string | null => {
+    const state = dealLinkState(p.dealId, dealStates);
+    return state && state !== 'won' ? DEAL_LINK_LABEL[state] : null;
+  };
+
   const getCustomerName = (customerId: number | null): string => {
     if (!customerId) return '—';
     const c = customers.find((c: any) => c.id === customerId);
@@ -453,6 +463,9 @@ export function ProfitPage({
     return projects
       .filter((p) => {
         if (p.status !== 'in-progress') return false;
+        // 영업관리에서 수주가 취소·삭제된 딜의 프로젝트는 AI 인력 추천을 돌리지 않는다
+        const linkState = dealLinkState(p.dealId, dealStates);
+        if (linkState === 'lost' || linkState === 'deleted') return false;
         if (p.aiStatus === 'pending') return true;
         if (
           p.aiStatus === 'success' ||
@@ -476,7 +489,7 @@ export function ProfitPage({
         return !hasAssignments && !p.aiApplied;
       })
       .map((p) => p.id);
-  }, [projects]);
+  }, [projects, dealStates]);
 
   const enqueuePendingAi = useCallback(() => {
     const pending = findPendingAiProjects();
@@ -998,6 +1011,7 @@ export function ProfitPage({
               key={p.id}
               project={p}
               companyName={getCustomerName(p.customerId)}
+              linkLabel={linkLabelOf(p)}
               isCompleted={activeTab === 'completed'}
               isExpanded={expandedRowId === p.id}
               onToggleExpand={() => setExpandedRowId(expandedRowId === p.id ? null : p.id)}
@@ -1061,6 +1075,7 @@ export function ProfitPage({
                       key={p.id}
                       project={p}
                       companyName={getCustomerName(p.customerId)}
+                      linkLabel={linkLabelOf(p)}
                       isCompleted={activeTab === 'completed'}
                       isExpanded={expandedRowId === p.id}
                       onToggleExpand={() =>
@@ -1088,12 +1103,26 @@ export function ProfitPage({
   );
 }
 
+// 영업 딜이 수주가 아니거나 삭제된 프로젝트 표시 (데이터는 그대로 — 필요하면 직접 삭제)
+function LinkBadge({ label }: { label: string }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-rose-50 text-rose-600 whitespace-nowrap"
+      title="영업관리에서 이 딜이 수주가 아닌 상태이거나 삭제되었습니다. 프로젝트는 그대로 두었으니 필요하면 직접 삭제해 주세요."
+    >
+      {label}
+    </span>
+  );
+}
+
 // ============================================================
 // 테이블 행 (데스크톱) — SalesPage/CustomersPage 스타일
 // ============================================================
 interface RowProps {
   project: Project;
   companyName: string;
+  /** '수주 취소'·'딜 삭제됨' — 연결된 영업 딜이 수주가 아닐 때 */
+  linkLabel?: string | null;
   isCompleted: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
@@ -1112,6 +1141,7 @@ interface RowProps {
 function ProjectTableRow({
   project: p,
   companyName,
+  linkLabel,
   isCompleted,
   isExpanded,
   onToggleExpand,
@@ -1144,6 +1174,7 @@ function ProjectTableRow({
           <div className="flex items-center gap-2 text-sm text-slate-900 font-medium">
             <Building2 className="w-4 h-4 text-slate-400" />
             {companyName}
+            {linkLabel && <LinkBadge label={linkLabel} />}
           </div>
         </td>
         <td className="px-4 py-4">
@@ -1257,6 +1288,7 @@ function ProjectTableRow({
 function ProjectMobileCard({
   project: p,
   companyName,
+  linkLabel,
   isCompleted,
   isExpanded,
   onToggleExpand,
@@ -1285,6 +1317,7 @@ function ProjectMobileCard({
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
               <p className="text-[15px] font-semibold text-slate-900 truncate">{companyName}</p>
+              {linkLabel && <LinkBadge label={linkLabel} />}
             </div>
             <div className="flex items-center gap-2 text-[12px] text-slate-500">
               <Package className="w-3.5 h-3.5" />

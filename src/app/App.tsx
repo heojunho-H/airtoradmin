@@ -7,6 +7,8 @@ import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, upd
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
 import type { AiDatasets } from '../lib/ai/types';
 import type { IntakeDataChange } from './components/ai/QuoteIntakePanel';
+import { buildDealStateMap, currentWriteEpoch, hasSynced, linkedDealId, type SyncResult } from '../lib/dealSync';
+import { managerActivities, sameActivities, subcontractorActivities } from '../lib/activitySync';
 
 // AI 어시스턴트·설정은 첫 방문 때 내려받는다 (마크다운 렌더러 포함 별도 청크)
 const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
@@ -66,8 +68,63 @@ export default function App() {
       fetchLaborRates()
         .then((data) => setLaborRates(data))
         .catch((err) => console.error('단가표 데이터 로드 실패:', err)),
-    ]).then(() => setDatasetsLoadedAt(Date.now()));
+    ]).then(() => {
+      const now = Date.now();
+      setDatasetsLoadedAt(now);
+      lastLoadedRef.current = now;
+    });
   }, []);
+
+  // ── 세 페이지(영업·고객·프로젝트) 최신 상태 유지 ─────────────────────────
+  // 저장하면 서버가 연결된 딜·고객 작업이력·프로젝트를 함께 고친다(api/sync_lib.php, docs/data-sync.md).
+  // 그 결과(synced)가 오면 세 목록을 다시 불러온다. 페이지를 옮기거나 탭으로 돌아올 때도 오래됐으면 새로 받는다.
+  const lastLoadedRef = useRef(0);
+  const refreshTimerRef = useRef<number | null>(null);
+  const refreshAllRef = useRef<() => void>(() => {});
+  const refreshAll = useCallback(() => {
+    if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = window.setTimeout(async () => {
+      refreshTimerRef.current = null;
+      const epoch = currentWriteEpoch();
+      const [d, c, p] = await Promise.allSettled([fetchDeals(), fetchCustomers(), fetchProjects()]);
+      // 불러오는 사이 다른 저장이 있었으면 이 결과는 낡았다 — 버리고 다시 받는다
+      if (epoch !== currentWriteEpoch()) {
+        refreshAllRef.current();
+        return;
+      }
+      if (d.status === 'fulfilled') setDeals(d.value);
+      if (c.status === 'fulfilled') setCustomers(c.value);
+      if (p.status === 'fulfilled') setProjects(p.value);
+      lastLoadedRef.current = Date.now();
+    }, 300);
+  }, []);
+  refreshAllRef.current = refreshAll;
+
+  // 페이지가 저장 결과를 알려 줌 — null 은 결과를 모르는 경우(실패·충돌·고객 삭제)라 서버 값으로 맞춘다
+  const handleSynced = useCallback((result: SyncResult | null) => {
+    if (!result || hasSynced(result)) refreshAll();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && lastLoadedRef.current && Date.now() - lastLoadedRef.current > 60_000) refreshAll();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshAll]);
+
+  // 연결 작업·프로젝트의 '수주 취소'·'딜 삭제됨' 표시용 (딜 목록을 못 불러왔으면 표시하지 않는다)
+  const dealStates = useMemo(() => (deals.length > 0 ? buildDealStateMap(deals) : null), [deals]);
+  // 고객 작업이력·프로젝트와 연결된 딜 (영업 페이지 삭제 안내용)
+  const linkedDealIds = useMemo(() => {
+    const set = new Set<number>();
+    for (const c of customers) for (const w of c.workHistory || []) {
+      const id = linkedDealId(w);
+      if (id) set.add(id);
+    }
+    for (const p of projects) if (p.dealId) set.add(Number(p.dealId));
+    return set;
+  }, [customers, projects]);
 
   // AI 어시스턴트 데이터 스냅샷 재료
   const aiDatasets = useMemo<AiDatasets>(
@@ -183,8 +240,8 @@ export default function App() {
     setAiUnread(true);
   }, []);
 
-  // 견적서 입력 도우미가 딜을 바꾸면(한 번 실행에 여러 딜일 수 있음) 영업 목록을 다시 불러온다.
-  // 수주 딜이 있으면 서버가 고객 작업 이력·프로젝트를 갱신하므로 둘도 다시 불러온다 (handleDealSuccess 와 같음)
+  // 견적서 입력 도우미가 딜을 바꾸면(한 번 실행에 여러 딜일 수 있음) 세 목록을 다시 불러온다
+  // (연결된 딜이면 서버가 고객 작업이력·프로젝트도 함께 고친다)
   const handleAiDataChanged = useCallback(async (changes: IntakeDataChange[]) => {
     if (!changes.length) return;
     const [first] = changes;
@@ -199,22 +256,17 @@ export default function App() {
       timestamp: new Date(),
       read: false,
     }, ...prev]);
-    try {
-      await Promise.all([
-        fetchDeals().then(setDeals),
-        ...(changes.some(c => c.dealSuccess)
-          ? [fetchCustomers().then(setCustomers), fetchProjects().then(setProjects)]
-          : []),
-      ]);
-    } catch (err) {
-      console.error('견적서 입력 후 데이터 새로고침 실패:', err);
-    }
-  }, []);
+    refreshAll();
+  }, [refreshAll]);
 
   const goTo = (page: PageId) => {
     if (page === 'ai') {
       setAiMounted(true);
       setAiUnread(false);
+    }
+    // 영업·프로젝트·고객 페이지로 옮길 때 20초 넘게 지난 목록이면 새로 받는다 (다른 사람·탭이 고친 값)
+    if ((page === 'sales' || page === 'profit' || page === 'customers') && lastLoadedRef.current && Date.now() - lastLoadedRef.current > 20_000) {
+      refreshAll();
     }
     setCurrentPage(page);
     if (isMobile) setSidebarOpen(false);
@@ -227,123 +279,55 @@ export default function App() {
     navigate('/login');
   };
 
-  // 영업에서 성공한 딜은 서버(deals_api.php PUT 핸들러)에서 자동으로
-  //   1) airtor_customers (syncDealToCustomer)
-  //   2) airtor_projects (syncDealToProject)  ← Phase 4부터
-  // 두 곳에 동기화됨. 클라이언트는 알림 + 두 목록 모두 새로고침.
-  const handleDealSuccess = async (deal: any) => {
-    addNotification('deal_success', `[${deal.company}] 딜이 수주확정되었습니다`);
-    addNotification('customer_registered', `[${deal.company}] 고객이 자동 등록되었습니다`);
-    addNotification('admin_action', `[${deal.company}] 프로젝트 관리에 자동 등록되었습니다`);
-    try {
-      const [refreshedCustomers, refreshedProjects] = await Promise.all([
-        fetchCustomers(),
-        fetchProjects(),
-      ]);
-      setCustomers(refreshedCustomers);
-      setProjects(refreshedProjects);
-    } catch (err) {
-      console.error('데이터 새로고침 실패:', err);
-    }
+  // 딜이 수주로 바뀌면 서버(api/sync_lib.php sl_link_deal)가 고객 작업이력·프로젝트를 만들거나 맞춘다.
+  // 목록 새로고침은 저장 결과(handleSynced)가 맡고, 여기서는 알림만.
+  const handleDealSuccess = (deal: any) => {
+    addNotification('deal_success', `[${deal.company}] 딜이 수주확정되었습니다 — 고객관리 작업이력·프로젝트 관리에 반영했습니다`);
   };
 
-  // 고객관리 작업이력 → 공급망관리 고객책임자 작업히스토리 동기화
-  useEffect(() => {
-    setManagers((prevManagers) => {
-      const updatedManagers = prevManagers.map((manager) => {
-        const activitiesFromCustomers: typeof manager.recentActivities = [];
-        customers.forEach((customer) => {
-          customer.workHistory
-            .filter((work: any) => work.accountManager === manager.name)
-            .forEach((work: any) => {
-              activitiesFromCustomers.push({
-                inquiryDate: work.inquiryDate,
-                customerCompany: customer.company,
-                projectName: work.projectName,
-                totalQuantity: work.totalQuantity,
-                detailQuantity: work.detailedQuantity,
-                estimateAmount: work.quotationAmount,
-                customerManager: work.accountManager,
-                workDate: work.workDate,
-                subcontractor: work.subcontractorManager,
-              });
-            });
-        });
-        // 날짜 내림차순 정렬
-        activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
-        return { ...manager, recentActivities: activitiesFromCustomers };
-      });
-      // DB에 동기화된 매니저 데이터 저장
-      updatedManagers.forEach((manager) => {
-        updateManager(manager).catch(err => console.error('고객책임자 활동내역 동기화 API 실패:', err));
-      });
-      return updatedManagers;
-    });
-  }, [customers]);
+  // 고객관리 작업이력 → 공급망관리 고객책임자·작업팀장 작업 히스토리 (src/lib/activitySync.ts)
+  // 활동이 실제로 바뀐 사람만 저장한다 — 예전에는 고객 목록이 바뀔 때마다 전원을 PUT 했다.
+  // 공급망 화면에서 직접 고친 값(평가 등)은 고객 목록이 바뀔 때 합쳐지므로 managers·subcontractors 변경에는 반응하지 않는다.
+  const managersRef = useRef(managers);
+  managersRef.current = managers;
+  const subcontractorsRef = useRef(subcontractors);
+  subcontractorsRef.current = subcontractors;
+  const managersReady = managers.length > 0;
+  const subcontractorsReady = subcontractors.length > 0;
 
-  // 고객관리 작업이력 → 공급망관리 작업팀장(하청) 작업히스토리 동기화
   useEffect(() => {
-    setSubcontractors((prevSubs) => {
-      const updatedSubs = prevSubs.map((sub) => {
-        // 기존 평가 데이터를 키로 보존 (projectName + customerCompany + workDate)
-        const existingEvalMap = new Map<string, any>();
-        sub.recentActivities.forEach((act) => {
-          const key = `${act.projectName}|${act.customerCompany}|${act.workDate}`;
-          existingEvalMap.set(key, {
-            workEvaluation: act.workEvaluation,
-            workEvaluationScore: act.workEvaluationScore,
-            evalCustomerClaim: act.evalCustomerClaim,
-            evalAllDevices: act.evalAllDevices,
-            evalOnTime: act.evalOnTime,
-            evalAfterService: act.evalAfterService,
-            evalUniform: act.evalUniform,
-            evalKindness: act.evalKindness,
-          });
-        });
-
-        const activitiesFromCustomers: typeof sub.recentActivities = [];
-        customers.forEach((customer) => {
-          customer.workHistory
-            .filter((work: any) => {
-              const managers = work.subcontractorManager
-                ? work.subcontractorManager.split(', ').map((s: string) => s.trim())
-                : [];
-              return managers.includes(sub.name);
-            })
-            .forEach((work: any) => {
-              const key = `${work.projectName}|${customer.company}|${work.workDate}`;
-              const existingEval = existingEvalMap.get(key) || {};
-              activitiesFromCustomers.push({
-                inquiryDate: work.inquiryDate,
-                customerCompany: customer.company,
-                projectName: work.projectName,
-                totalQuantity: work.totalQuantity,
-                detailQuantity: work.detailedQuantity,
-                estimateAmount: work.quotationAmount,
-                customerManager: work.accountManager,
-                workDate: work.workDate,
-                subcontractor: sub.name,
-                workEvaluation: existingEval.workEvaluation || '',
-                workEvaluationScore: existingEval.workEvaluationScore || 0,
-                evalCustomerClaim: existingEval.evalCustomerClaim,
-                evalAllDevices: existingEval.evalAllDevices,
-                evalOnTime: existingEval.evalOnTime,
-                evalAfterService: existingEval.evalAfterService,
-                evalUniform: existingEval.evalUniform,
-                evalKindness: existingEval.evalKindness,
-              });
-            });
-        });
-        activitiesFromCustomers.sort((a, b) => b.inquiryDate.localeCompare(a.inquiryDate));
-        return { ...sub, recentActivities: activitiesFromCustomers };
-      });
-      // DB에 동기화된 작업팀장 데이터 저장
-      updatedSubs.forEach((sub) => {
-        updateSubcontractor(sub).catch(err => console.error('작업팀장 활동내역 동기화 API 실패:', err));
-      });
-      return updatedSubs;
+    if (!customers.length || !managersReady) return;
+    const changed: any[] = [];
+    const next = managersRef.current.map((manager) => {
+      const acts = managerActivities(manager.name, customers);
+      if (sameActivities(acts, manager.recentActivities)) return manager;
+      const updated = { ...manager, recentActivities: acts };
+      changed.push(updated);
+      return updated;
     });
-  }, [customers]);
+    if (!changed.length) return;
+    setManagers(next);
+    changed.forEach((manager) => {
+      updateManager(manager).catch(err => console.error('고객책임자 활동내역 동기화 API 실패:', err));
+    });
+  }, [customers, managersReady]);
+
+  useEffect(() => {
+    if (!customers.length || !subcontractorsReady) return;
+    const changed: any[] = [];
+    const next = subcontractorsRef.current.map((sub) => {
+      const acts = subcontractorActivities(sub, customers);
+      if (sameActivities(acts, sub.recentActivities)) return sub;
+      const updated = { ...sub, recentActivities: acts };
+      changed.push(updated);
+      return updated;
+    });
+    if (!changed.length) return;
+    setSubcontractors(next);
+    changed.forEach((sub) => {
+      updateSubcontractor(sub).catch(err => console.error('작업팀장 활동내역 동기화 API 실패:', err));
+    });
+  }, [customers, subcontractorsReady]);
 
   // 모바일 화면 감지
   useEffect(() => {
@@ -565,10 +549,10 @@ export default function App() {
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
-          {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} />}
+          {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} />}
           {currentPage === 'settings' && (
             <Suspense fallback={<PageSpinner />}>
               <SettingsPage userName={userName} onNotification={handleAdminNotification} />

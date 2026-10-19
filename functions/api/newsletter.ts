@@ -347,9 +347,13 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
           continue;
         }
         const applied = applyResult(fresh, item, results, today);
-        const body: Record<string, unknown> = { id: item.customerId, emailHistory: applied.emailHistory };
-        if (applied.workHistory) body.workHistory = applied.workHistory;
-        else errors.push(`고객 ${item.customerId}(${item.company}) 작업 항목 ${item.jobKey} 을 찾지 못함 — 장부만 기록`);
+        // customers_api_v2: 장부는 덧붙이기, 리마인드 체크는 작업이력 패치 — 그사이 다른 수정(작업일 등)을 덮지 않는다
+        const body: Record<string, unknown> = { id: item.customerId, _v: 2, emailHistoryAppend: applied.appended };
+        if (applied.entryFound) {
+          if (Object.keys(applied.flags).length > 0) body.workHistoryPatch = [{ op: 'update', key: item.jobKey, set: applied.flags }];
+        } else {
+          errors.push(`고객 ${item.customerId}(${item.company}) 작업 항목 ${item.jobKey} 을 찾지 못함 — 장부만 기록`);
+        }
         const putRes = await fetch(CUSTOMERS_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!putRes.ok) errors.push(`고객 ${item.customerId}(${item.company}) PUT 실패 HTTP ${putRes.status} — 장부 미기록`);
       } catch (err) {

@@ -1175,7 +1175,7 @@ export function ProjectRowExpand({
       {showDeleteConfirm && onDelete && (
         <ConfirmModal
           title="이 프로젝트를 삭제하시겠습니까?"
-          description="DB에서 영구 삭제되며 되돌릴 수 없습니다. AI 추천·인력 배치·메모 등 모든 정보가 사라집니다. (단, 원본 영업 딜이 수주확정 상태에서 다시 수정되면 빈 프로젝트가 자동 재생성될 수 있습니다.)"
+          description="DB에서 영구 삭제되며 되돌릴 수 없습니다. AI 추천·인력 배치·메모 등 모든 정보가 사라집니다. (영업관리에서 이 딜이 다시 수주로 바뀌면 빈 프로젝트가 새로 만들어집니다.)"
           confirmLabel="영구 삭제"
           destructive
           onConfirm={() => {

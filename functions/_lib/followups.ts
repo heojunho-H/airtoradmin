@@ -302,6 +302,10 @@ export interface RecipientResult {
 export interface ApplyResult {
   workHistory: WorkEntry[] | null; // null이면 항목을 못 찾음 → emailHistory만 PUT
   emailHistory: LedgerEntry[];
+  /** 이번에 덧붙인 장부 항목 — customers_api_v2 emailHistoryAppend 로 보낸다 */
+  appended: LedgerEntry[];
+  /** 이번에 체크할 리마인드 칸 — customers_api_v2 workHistoryPatch update 로 보낸다 */
+  flags: Record<string, boolean>;
   entryFound: boolean;
   flagSet: boolean;
 }
@@ -309,6 +313,7 @@ export interface ApplyResult {
 // 최신 조회본(fresh)에 발송 결과를 반영. 항목은 jobKey로 찾는다 (사용자가 그 사이 편집했을 수 있음).
 export function applyResult(fresh: CustomerRow, item: DueItem, results: RecipientResult[], today: string): ApplyResult {
   const ledger: LedgerEntry[] = Array.isArray(fresh.emailHistory) ? fresh.emailHistory.slice() : [];
+  const before = ledger.length;
   const type = `팔로업 ${item.stage}단계 (+${item.days}d)`;
   for (const r of results) {
     ledger.push({
@@ -332,17 +337,22 @@ export function applyResult(fresh: CustomerRow, item: DueItem, results: Recipien
 
   const wh = Array.isArray(fresh.workHistory) ? fresh.workHistory.map((e) => ({ ...e })) : [];
   const idx = wh.findIndex((e) => e && jobKeyOf(e) === item.jobKey);
-  if (idx < 0) return { workHistory: null, emailHistory: ledger, entryFound: false, flagSet: false };
+  if (idx < 0) return { workHistory: null, emailHistory: ledger, appended: ledger.slice(before), flags: {}, entryFound: false, flagSet: false };
 
   // 이 작업·단계의 모든 담당자가 sent|skipped 이면 리마인드 N차 체크
   const recipientsAll = recipientsOf(fresh);
   const everyDone = recipientsAll.length > 0 && recipientsAll.every((r) => alreadyDone(ledger, item.jobKey, item.stage, r.email));
   let flagSet = false;
+  const flags: Record<string, boolean> = {};
   if (everyDone) {
     wh[idx][reminderKey(item.stage)] = true;
+    flags[reminderKey(item.stage)] = true;
     flagSet = true;
   }
-  for (const s of item.supersededStages) wh[idx][reminderKey(s)] = true;
+  for (const s of item.supersededStages) {
+    wh[idx][reminderKey(s)] = true;
+    flags[reminderKey(s)] = true;
+  }
 
-  return { workHistory: wh, emailHistory: ledger, entryFound: true, flagSet };
+  return { workHistory: wh, emailHistory: ledger, appended: ledger.slice(before), flags, entryFound: true, flagSet };
 }

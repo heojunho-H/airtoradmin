@@ -20,12 +20,12 @@ export default defineConfig({
       '/api/deals': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
-        rewrite: () => '/api/deals_api.php',
+        rewrite: () => '/api/deals_api_v2.php',
       },
       '/api/customers': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
-        rewrite: () => '/api/customers_api.php',
+        rewrite: () => '/api/customers_api_v2.php',
       },
       '/api/managers': {
         target: 'https://airtor.co.kr',
@@ -40,7 +40,7 @@ export default defineConfig({
       '/api/projects': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
-        rewrite: () => '/api/projects_api.php',
+        rewrite: () => '/api/projects_api_v2.php',
       },
       '/api/labor_rates': {
         target: 'https://airtor.co.kr',

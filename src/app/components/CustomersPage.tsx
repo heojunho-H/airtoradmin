@@ -52,6 +52,22 @@ import {
   type SyncSummary,
   type FollowupConfig,
 } from '../../lib/newsletter';
+import {
+  buildWorkHistoryPatch,
+  contactPairs,
+  DEAL_LINK_LABEL,
+  dealLinkState,
+  linkedDealId,
+  patchCustomer,
+  stripContactKeys,
+  SyncError,
+  syncConflictText,
+  syncWarningText,
+  workHistoryKeys,
+  type CustomerPatch,
+  type DealStateMap,
+  type SyncResult,
+} from '../../lib/dealSync';
 
 interface WorkHistory {
   dealId?: number; // 영업관리 딜 ID — syncDealToCustomer가 채움 (legacy 엔트리는 없을 수 있음)
@@ -191,18 +207,9 @@ export function recomputeCustomerTotals<T extends Pick<Customer, 'workHistory' |
   } as T;
 }
 
-// API에 고객 데이터를 수정 (workHistory 포함, 전체 갱신)
-export async function updateCustomer(customer: Customer): Promise<void> {
-  const response = await fetch('/api/customers', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(customer),
-  });
-  if (!response.ok) throw new Error('고객 수정 실패');
-}
-
 // workHistory를 건드리지 않는 부분 업데이트 (인라인 편집·메모·등급·담당자 등).
 // 서버는 omit된 필드를 그대로 유지하므로 다른 탭/세션에서 workHistory를 추가했더라도 클로버되지 않는다.
+// 작업이력·회사명·주소·담당자처럼 영업관리·프로젝트와 겹치는 값은 patchCustomer(src/lib/dealSync.ts)로 저장한다.
 export async function updateCustomerFields(id: number, fields: Partial<Omit<Customer, 'id' | 'workHistory'>>): Promise<void> {
   const response = await fetch('/api/customers', {
     method: 'PUT',
@@ -789,6 +796,20 @@ export const initialCustomers: Customer[] = [
   },
 ];
 
+// 작업 표 정렬 — 상태 배열은 그대로 두고(편집·저장은 원래 위치 기준) 사본을 작업일 최신순으로. 작업일이 없으면 맨 뒤.
+function sortWorkRows(list: WorkHistory[]): Array<{ work: WorkHistory; index: number }> {
+  return list
+    .map((work, index) => ({ work, index }))
+    .sort((a, b) => {
+      const da = a.work.workDate || '';
+      const db = b.work.workDate || '';
+      if (!da || !db) return da === db ? a.index - b.index : da ? -1 : 1;
+      return db.localeCompare(da) || a.index - b.index;
+    });
+}
+
+type EditContact = Contact & { _k?: number };
+
 interface CustomersPageProps {
   externalCustomersState?: [Customer[], (customers: Customer[] | ((prev: Customer[]) => Customer[])) => void];
   subcontractorNames?: string[];
@@ -797,6 +818,10 @@ interface CustomersPageProps {
   // 작업이력 행에서 "손익 보기" 클릭 시 프로젝트 관리 탭으로 이동
   // dealId 인자는 향후 ProfitPage에서 해당 프로젝트 자동 스크롤/하이라이트할 때 활용
   onNavigateToProfit?: (dealId: number) => void;
+  /** 저장 결과 — 서버가 함께 바꾼 딜·프로젝트가 있으면(또는 null: 결과를 모름) App 이 목록을 다시 불러온다 */
+  onSynced?: (result: SyncResult | null) => void;
+  /** 딜 ID → 수주 여부 (연결 작업의 '수주 취소'·'딜 삭제됨' 표시). 딜 목록을 아직 못 불러왔으면 null */
+  dealStates?: DealStateMap | null;
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -872,7 +897,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -962,6 +987,48 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState<Customer | null>(null);
+  // 편집 시작 때 값 — 저장할 때 이것과 비교해 바뀐 칸·작업만 보낸다
+  const editOriginalRef = useRef<{ customer: Customer; workHistory: WorkHistory[]; contacts: Contact[] } | null>(null);
+  const memoFocusedRef = useRef(false);
+
+  // 목록을 새로 불러오면(다른 페이지에서 고친 값) 열려 있는 상세도 최신으로 — 편집·메모 입력 중에는 그대로
+  useEffect(() => {
+    if (!selectedCustomer || isEditing || memoFocusedRef.current) return;
+    const fresh = customers.find((c) => c.id === selectedCustomer.id);
+    if (fresh && fresh !== selectedCustomer) setSelectedCustomer(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers]);
+
+  // 서버가 돌려준 최신 고객으로 목록·상세를 맞춘다
+  const applyServerCustomer = (fresh: Customer | null) => {
+    if (!fresh) return;
+    setCustomers((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)));
+    setSelectedCustomer((cur) => (cur && cur.id === fresh.id && !memoFocusedRef.current ? fresh : cur));
+  };
+
+  // 바뀐 칸·작업이력 연산 저장 — 서버가 연결된 영업 딜·프로젝트에 퍼뜨린다
+  const saveCustomerPatch = async (customer: Customer, patch: CustomerPatch, what: string): Promise<(SyncResult & { customer: Customer | null }) | null> => {
+    try {
+      const r = await patchCustomer<Customer>(customer.id, patch);
+      applyServerCustomer(r.customer);
+      for (const w of r.warnings) {
+        const text = syncWarningText(w);
+        if (text) onNotification?.(`[${customer.company}] ${text}`);
+      }
+      const conflict = syncConflictText(r.conflicts);
+      if (conflict) onNotification?.(`[${customer.company}] ${conflict}`);
+      if (r.partial && r.error) onNotification?.(`[${customer.company}] ${r.error}`);
+      onSynced?.(r.conflicts.length > 0 ? null : r);
+      return r;
+    } catch (err) {
+      console.error(`${what} 실패:`, err);
+      const reason = err instanceof Error ? err.message : '다시 시도해 주세요';
+      if (err instanceof SyncError && err.code === 'reload_required') alert(reason);
+      else onNotification?.(`[${customer.company}] ${what} 실패 — ${reason}`);
+      onSynced?.(null); // 화면에 먼저 반영한 값을 서버 값으로 되돌린다
+      return null;
+    }
+  };
   const [newCustomer, setNewCustomer] = useState<Partial<Customer>>({
     company: '',
     grade: 'B',
@@ -1273,71 +1340,96 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
 
   // 고객 삭제 핸들러
   const handleDeleteCustomer = (customerId: any, customerName: string) => {
-    if (confirm(`${customerName} 고객을 삭제하시겠습니까?`)) {
+    const target = customers.find(customer => customer.id === customerId);
+    const linked = (target?.workHistory || []).filter(w => linkedDealId(w)).length;
+    const note = linked
+      ? `\n\n영업관리 딜 ${linked}건과 연결된 작업이 있습니다. 딜과 프로젝트는 그대로 남고, 프로젝트의 고객 표시만 비워집니다.`
+      : '';
+    if (confirm(`${customerName} 고객을 삭제하시겠습니까?${note}`)) {
       setCustomers(customers.filter(customer => customer.id !== customerId));
       onNotification?.(`[${customerName}] 고객이 삭제되었습니다`);
-      deleteCustomer(Number(customerId)).catch(err => console.error('고객 삭제 API 실패:', err));
+      deleteCustomer(Number(customerId))
+        .then(() => { if (linked) onSynced?.(null); })
+        .catch(err => console.error('고객 삭제 API 실패:', err));
     }
   };
 
-  // 리마인드 상태 토글 핸들러
+  // 리포트전송·리마인드 체크 — 작업이력 연산 한 건만 보낸다 (리포트 전송은 서버가 프로젝트를 완료로 바꾼다)
+  // workIndex 는 상태 배열의 원래 위치 (표는 정렬한 사본을 그린다)
+  const toggleWorkFlag = (workIndex: number, field: 'reportSent' | 'reminder1' | 'reminder2' | 'reminder3') => {
+    if (!selectedCustomer || isEditing) return;
+    const list = selectedCustomer.workHistory || [];
+    const work = list[workIndex];
+    if (!work) return;
+    const key = workHistoryKeys(list)[workIndex];
+    const value = !work[field];
+    const updatedCustomer = { ...selectedCustomer, workHistory: list.map((w, i) => (i === workIndex ? { ...w, [field]: value } : w)) };
+    setSelectedCustomer(updatedCustomer);
+    setCustomers(customers.map(customer => customer.id === updatedCustomer.id ? updatedCustomer : customer));
+    void saveCustomerPatch(updatedCustomer, { workHistoryPatch: [{ op: 'update', key, set: { [field]: value } }] },
+      field === 'reportSent' ? '리포트전송 상태 저장' : '리마인드 상태 저장');
+  };
+
   const toggleReminderStatus = (workIndex: number, reminderType: 'reminder1' | 'reminder2' | 'reminder3') => {
-    if (!selectedCustomer) return;
-
-    const updatedWorkHistory = selectedCustomer.workHistory.map((work, index) => {
-      if (index === workIndex) {
-        return { ...work, [reminderType]: !work[reminderType] };
-      }
-      return work;
-    });
-
-    const updatedCustomer = { ...selectedCustomer, workHistory: updatedWorkHistory };
-    setSelectedCustomer(updatedCustomer);
-    setCustomers(customers.map(customer =>
-      customer.id === selectedCustomer.id ? updatedCustomer : customer
-    ));
-    // workHistory만 PUT — 팔로업 러너가 기록하는 emailHistory 장부를 덮어쓰지 않도록
-    updateCustomerFields(selectedCustomer.id, { workHistory: updatedWorkHistory } as any).catch(err => console.error('리마인드 상태 업데이트 API 실패:', err));
+    toggleWorkFlag(workIndex, reminderType);
   };
 
-  // 리포트전송 상태 토글 핸들러
   const toggleReportSentStatus = (workIndex: number) => {
-    if (!selectedCustomer) return;
-
-    const updatedWorkHistory = selectedCustomer.workHistory.map((work, index) => {
-      if (index === workIndex) {
-        return { ...work, reportSent: !work.reportSent };
-      }
-      return work;
-    });
-
-    const updatedCustomer = { ...selectedCustomer, workHistory: updatedWorkHistory };
-    setSelectedCustomer(updatedCustomer);
-    setCustomers(customers.map(customer =>
-      customer.id === selectedCustomer.id ? updatedCustomer : customer
-    ));
-    // workHistory만 PUT — emailHistory 장부 보호 (서버의 syncReportSentToProject는 workHistory 키만 있으면 동작)
-    updateCustomerFields(selectedCustomer.id, { workHistory: updatedWorkHistory } as any).catch(err => console.error('리포트전송 상태 업데이트 API 실패:', err));
+    toggleWorkFlag(workIndex, 'reportSent');
   };
 
-  // 수정 모드 시작
+  // 수정 모드 시작 — 원래 값을 따로 보관하고, 담당자에는 원래 순번(_k)을 붙인다
   const handleStartEdit = () => {
     if (!selectedCustomer) return;
+    const contacts = getContacts(selectedCustomer);
+    const workHistory = selectedCustomer.workHistory || [];
+    editOriginalRef.current = {
+      customer: selectedCustomer,
+      workHistory: workHistory.map(w => ({ ...w })),
+      contacts: contacts.map(c => ({ ...c })),
+    };
+    setShowAddWorkForm(false);
     setIsEditing(true);
-    setEditedCustomer({ ...selectedCustomer, contacts: getContacts(selectedCustomer) });
+    setEditedCustomer({
+      ...selectedCustomer,
+      contacts: contacts.map((c, i): EditContact => ({ ...c, _k: i })),
+      workHistory: workHistory.map(w => ({ ...w })),
+    });
   };
 
   // 수정 취소
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditedCustomer(null);
+    editOriginalRef.current = null;
   };
 
-  // 수정 저장 — workHistory 편집 가능하므로 totals 재계산 후 저장
+  // 수정 저장 — 바뀐 고객 칸, 담당자 변경 쌍, 작업이력 연산만 보낸다.
+  // 서버가 현재 값에 적용하고 연결된 영업 딜·프로젝트에 퍼뜨린 뒤 최신 고객을 돌려준다.
   const handleSaveEdit = () => {
     if (!editedCustomer || !selectedCustomer) return;
+    const orig = editOriginalRef.current;
+    if (!orig || orig.customer.id !== selectedCustomer.id) return;
 
-    const contacts = editedCustomer.contacts || [];
+    const editedContacts = (editedCustomer.contacts || []) as EditContact[];
+    const contacts = stripContactKeys(editedContacts);
+    const fields: Record<string, unknown> = {};
+    for (const k of ['company', 'address', 'managementCycle'] as const) {
+      if (String(editedCustomer[k] ?? '') !== String(orig.customer[k] ?? '')) fields[k] = editedCustomer[k];
+    }
+    if (JSON.stringify(contacts) !== JSON.stringify(orig.contacts)) fields.contacts = contacts;
+    const pairs = contactPairs(orig.contacts, editedContacts);
+    const ops = buildWorkHistoryPatch(
+      orig.workHistory as unknown as Array<Record<string, unknown>>,
+      editedCustomer.workHistory as unknown as Array<Record<string, unknown>>,
+    );
+
+    setIsEditing(false);
+    setEditedCustomer(null);
+    editOriginalRef.current = null;
+    if (Object.keys(fields).length === 0 && ops.length === 0) return;
+
+    // 화면 먼저 반영 → 서버 응답(최신값)으로 다시 맞춘다
     const saved: Customer = recomputeCustomerTotals({
       ...editedCustomer,
       contacts,
@@ -1346,15 +1438,14 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       phone: contacts[0]?.phone || '',
       email: contacts[0]?.email || '',
     });
-
     setCustomers(customers.map(c => c.id === selectedCustomer.id ? saved : c));
     setSelectedCustomer(saved);
-    setIsEditing(false);
-    setEditedCustomer(null);
-    onNotification?.(`[${saved.company}] 고객 정보가 수정되었습니다`);
-    updateCustomer(saved)
-      .then(() => syncOneQuietly(saved, applyNewsletterSyncResult)) // 저장 성공 시 스티비 주소록 자동 push (실패 무시)
-      .catch(err => console.error('고객 수정 API 실패:', err));
+    void saveCustomerPatch(saved, { fields, workHistoryPatch: ops, contactPairs: pairs }, '고객 정보 저장').then((r) => {
+      if (!r) return;
+      const spread = r.synced.deals.length + r.synced.projects.length > 0 ? ' — 영업관리·프로젝트에도 반영했습니다' : '';
+      onNotification?.(`[${saved.company}] 고객 정보가 수정되었습니다${spread}`);
+      syncOneQuietly(r.customer || saved, applyNewsletterSyncResult); // 스티비 주소록 자동 push (실패 무시)
+    });
   };
 
   // 편집 중인 고객 필드 업데이트
@@ -2304,7 +2395,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                           );
                           setSelectedCustomer({ ...selectedCustomer, memo: updatedMemo });
                         }}
+                        onFocus={() => {
+                          memoFocusedRef.current = true;
+                        }}
                         onBlur={() => {
+                          memoFocusedRef.current = false;
                           // 포커스 해제 시 DB에 저장 — workHistory를 보내지 않아 다른 탭 변경분 보호
                           updateCustomerFields(selectedCustomer.id, { memo: selectedCustomer.memo }).catch(err => console.error('메모 저장 API 실패:', err));
                         }}
@@ -2427,7 +2522,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   <div className="flex justify-end mb-4">
                     <button
                       onClick={() => setShowAddWorkForm(!showAddWorkForm)}
-                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 font-medium"
+                      disabled={isEditing}
+                      title={isEditing ? '수정 중에는 작업을 추가할 수 없습니다 — 먼저 저장하거나 취소해 주세요' : undefined}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-4 h-4" />
                       {showAddWorkForm ? '취소' : '작업 추가'}
@@ -2560,8 +2657,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                       <div className="flex justify-end mt-4">
                         <button
                           onClick={() => {
-                            if (newWork.inquiryDate && newWork.projectName && selectedCustomer) {
-                              // 새 작업을 workHistory에 추가하고 totalAmount/totalQuantity/deals/lastWorkDate를 재계산
+                            if (newWork.inquiryDate && newWork.projectName && selectedCustomer && !isEditing) {
+                              // 새 작업을 workHistory에 추가하고 totalAmount/totalQuantity/deals/lastWorkDate를 재계산 (화면 먼저)
                               const updatedWorkHistory = [...selectedCustomer.workHistory, newWork];
                               const updatedCustomer = recomputeCustomerTotals({
                                 ...selectedCustomer,
@@ -2575,8 +2672,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               );
                               setSelectedCustomer(updatedCustomer);
 
-                              // DB에 저장
-                              updateCustomer(updatedCustomer).catch(err => console.error('작업 추가 API 실패:', err));
+                              // DB에 저장 — 추가 연산 한 건 (서버가 현재 작업이력 뒤에 붙이고 합계를 다시 계산)
+                              void saveCustomerPatch(updatedCustomer, { workHistoryPatch: [{ op: 'add', entry: { ...newWork } }] }, '작업 추가');
 
                               // 폼 초기화
                               setNewWork({
@@ -2652,15 +2749,17 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                          {selectedCustomer.workHistory
-                            .sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime())
-                            .map((work, index) => (
+                          {sortWorkRows(selectedCustomer.workHistory || []).map(({ work, index }) => {
+                            const ew = isEditing && editedCustomer ? editedCustomer.workHistory[index] : undefined;
+                            const dealId = linkedDealId(work);
+                            const linkState = dealLinkState(dealId, dealStates);
+                            return (
                               <tr key={index} className="hover:bg-slate-50 transition-colors">
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
                                     <input
                                       type="date"
-                                      value={editedCustomer.workHistory[index]?.inquiryDate || work.inquiryDate}
+                                      value={ew?.inquiryDate ?? work.inquiryDate ?? ''}
                                       onChange={(e) => updateEditedWorkHistory(index, 'inquiryDate', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
@@ -2675,19 +2774,27 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   {isEditing && editedCustomer ? (
                                     <input
                                       type="text"
-                                      value={editedCustomer.workHistory[index]?.projectName || work.projectName}
+                                      value={ew?.projectName ?? work.projectName ?? ''}
                                       onChange={(e) => updateEditedWorkHistory(index, 'projectName', e.target.value)}
                                       className="text-sm font-medium text-slate-900 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
                                     <span className="text-sm font-medium text-slate-900">{work.projectName}</span>
                                   )}
+                                  {linkState && linkState !== 'won' && (
+                                    <span
+                                      className="mt-1 inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-rose-50 text-rose-600 whitespace-nowrap"
+                                      title={`영업관리 딜 #${dealId}이(가) ${linkState === 'lost' ? '수주가 아닌 상태(실패·미견적)' : '삭제된 상태'}입니다. 기록은 그대로 둡니다.`}
+                                    >
+                                      {DEAL_LINK_LABEL[linkState]}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
                                     <input
                                       type="number"
-                                      value={editedCustomer.workHistory[index]?.totalQuantity || work.totalQuantity}
+                                      value={ew?.totalQuantity ?? work.totalQuantity ?? 0}
                                       onChange={(e) => updateEditedWorkHistory(index, 'totalQuantity', Number(e.target.value))}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
@@ -2699,22 +2806,27 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
-                                  {isEditing && editedCustomer ? (
+                                  {isEditing && editedCustomer && !dealId ? (
                                     <input
                                       type="text"
-                                      value={editedCustomer.workHistory[index]?.detailedQuantity || work.detailedQuantity}
+                                      value={ew?.detailedQuantity ?? work.detailedQuantity ?? ''}
                                       onChange={(e) => updateEditedWorkHistory(index, 'detailedQuantity', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
-                                    formatDetailedQuantity(work.detailedQuantity)
+                                    <div>
+                                      {formatDetailedQuantity(work.detailedQuantity)}
+                                      {isEditing && dealId > 0 && (
+                                        <p className="mt-1 text-[11px] text-slate-400 whitespace-nowrap">영업관리 딜 #{dealId}에서 수정</p>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
                                     <input
                                       type="number"
-                                      value={editedCustomer.workHistory[index]?.quotationAmount || work.quotationAmount}
+                                      value={ew?.quotationAmount ?? work.quotationAmount ?? 0}
                                       onChange={(e) => updateEditedWorkHistory(index, 'quotationAmount', Number(e.target.value))}
                                       className="text-sm font-semibold text-blue-600 border border-slate-300 rounded px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
@@ -2725,7 +2837,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
                                     <select
-                                      value={editedCustomer.workHistory[index]?.accountManager || work.accountManager}
+                                      value={ew?.accountManager ?? work.accountManager ?? ''}
                                       onChange={(e) => updateEditedWorkHistory(index, 'accountManager', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
@@ -2745,7 +2857,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   {isEditing && editedCustomer ? (
                                     <input
                                       type="date"
-                                      value={editedCustomer.workHistory[index]?.workDate || work.workDate}
+                                      value={ew?.workDate ?? work.workDate ?? ''}
                                       onChange={(e) => updateEditedWorkHistory(index, 'workDate', e.target.value)}
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
@@ -2759,7 +2871,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 <td className="px-3 py-3">
                                   {isEditing && editedCustomer ? (
                                     <SubcontractorMultiSelect
-                                      value={editedCustomer.workHistory[index]?.subcontractorManager || work.subcontractorManager}
+                                      value={ew?.subcontractorManager ?? work.subcontractorManager ?? ''}
                                       onChange={(val) => updateEditedWorkHistory(index, 'subcontractorManager', val)}
                                       names={subcontractorNames}
                                     />
@@ -2776,7 +2888,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       e.stopPropagation();
                                       toggleReportSentStatus(index);
                                     }}
-                                    className="cursor-pointer hover:opacity-70 transition-opacity"
+                                    disabled={isEditing}
+                                    className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                   >
                                     {work.reportSent ? (
                                       <CheckCircle className="w-5 h-5 text-green-600" />
@@ -2792,7 +2905,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         e.stopPropagation();
                                         toggleReminderStatus(index, 'reminder1');
                                       }}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity"
+                                      disabled={isEditing}
+                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder1 ? (
                                         <CheckCircle className="w-5 h-5 text-green-600" />
@@ -2815,7 +2929,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         e.stopPropagation();
                                         toggleReminderStatus(index, 'reminder2');
                                       }}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity"
+                                      disabled={isEditing}
+                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder2 ? (
                                         <CheckCircle className="w-5 h-5 text-green-600" />
@@ -2838,7 +2953,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         e.stopPropagation();
                                         toggleReminderStatus(index, 'reminder3');
                                       }}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity"
+                                      disabled={isEditing}
+                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder3 ? (
                                         <CheckCircle className="w-5 h-5 text-green-600" />
@@ -2873,24 +2989,32 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (selectedCustomer && window.confirm('이 작업을 삭제하시겠습니까?')) {
-                                          const updatedWorkHistory = selectedCustomer.workHistory.filter((_, i) => i !== index);
-                                          const updatedCustomer = recomputeCustomerTotals({
-                                            ...selectedCustomer,
-                                            workHistory: updatedWorkHistory,
-                                          });
+                                        if (!selectedCustomer || isEditing) return;
+                                        // 영업 딜과 연결된 작업을 지우면 그 딜은 '실패'로 바뀌고, 프로젝트는 남아 '수주 취소'로 표시된다
+                                        const message = dealId
+                                          ? `이 작업은 영업관리 딜 #${dealId}과(와) 연결되어 있습니다.\n삭제하면 그 딜이 '실패'로 바뀌고, 프로젝트는 남아서 '수주 취소'로 표시됩니다.\n\n삭제할까요?`
+                                          : '이 작업을 삭제하시겠습니까?';
+                                        if (!window.confirm(message)) return;
+                                        const key = workHistoryKeys(selectedCustomer.workHistory)[index];
+                                        const updatedWorkHistory = selectedCustomer.workHistory.filter((_, i) => i !== index);
+                                        const updatedCustomer = recomputeCustomerTotals({
+                                          ...selectedCustomer,
+                                          workHistory: updatedWorkHistory,
+                                        });
 
-                                          setCustomers((prevCustomers) =>
-                                            prevCustomers.map((customer) =>
-                                              customer.id === selectedCustomer.id ? updatedCustomer : customer
-                                            )
-                                          );
-                                          setSelectedCustomer(updatedCustomer);
+                                        setCustomers((prevCustomers) =>
+                                          prevCustomers.map((customer) =>
+                                            customer.id === selectedCustomer.id ? updatedCustomer : customer
+                                          )
+                                        );
+                                        setSelectedCustomer(updatedCustomer);
 
-                                          updateCustomer(updatedCustomer).catch(err => console.error('작업 삭제 API 실패:', err));
-                                        }
+                                        void saveCustomerPatch(updatedCustomer, {
+                                          workHistoryPatch: [dealId ? { op: 'remove', key, cascade: 'fail-deal' } : { op: 'remove', key }],
+                                        }, '작업 삭제');
                                       }}
-                                      className="p-1.5 hover:bg-red-50 rounded transition-colors group"
+                                      disabled={isEditing}
+                                      className="p-1.5 hover:bg-red-50 rounded transition-colors group disabled:cursor-not-allowed disabled:opacity-40"
                                       title="작업 삭제"
                                     >
                                       <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
@@ -2898,7 +3022,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
