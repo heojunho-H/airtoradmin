@@ -27,7 +27,7 @@ export function ModelPicker({ config, value, onChange, disabled }: ModelPickerPr
   const label = (id: string) => config.models.find((m) => m.id === id)?.label ?? id;
   if (!chat.allowOverride) {
     return (
-      <span className="inline-flex items-center gap-1 px-1 text-[12px] text-slate-400" title="관리자가 모델을 고정했습니다">
+      <span className="inline-flex items-center gap-1 px-1 text-[13px] text-slate-400" title="관리자가 모델을 고정했습니다">
         <Lock className="h-3 w-3" /> {shortModelLabel(label(chat.model))}
       </span>
     );
@@ -35,7 +35,7 @@ export function ModelPicker({ config, value, onChange, disabled }: ModelPickerPr
   const allowed = config.models.filter((m) => (chat.overrideModels ?? []).includes(m.id) || m.id === chat.model);
   const current = value && allowed.some((m) => m.id === value) ? value : chat.model;
   return (
-    <span className={`relative inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-slate-500 ${disabled ? 'opacity-50' : 'hover:bg-slate-100 hover:text-slate-700'}`}>
+    <span className={`relative inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[13px] font-medium text-slate-500 ${disabled ? 'opacity-50' : 'hover:bg-slate-100 hover:text-slate-700'}`}>
       {shortModelLabel(label(current))}
       <ChevronDown className="h-3 w-3" />
       <select
@@ -107,11 +107,11 @@ export function DataMenu({ meta, pending, hasConversation, datasetSummary, onRef
         <div
           role="dialog"
           aria-label="분석에 쓰는 데이터"
-          className={`absolute left-0 z-30 w-72 rounded-xl border border-slate-200 bg-white p-3.5 text-[13px] shadow-lg ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'}`}
+          className={`absolute left-0 z-30 w-72 rounded-xl border border-slate-200 bg-white p-3.5 text-[14px] shadow-lg ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'}`}
         >
           <p className="font-semibold text-slate-800">분석에 쓰는 데이터</p>
           {hasConversation && meta ? (
-            <div className="mt-1.5 space-y-1 text-[12px] leading-relaxed text-slate-500">
+            <div className="mt-1.5 space-y-1 text-[13px] leading-relaxed text-slate-500">
               <p>
                 기준 {formatKstDateTime(meta.builtAt)}
                 {meta.summary && ` · ${meta.summary}`}
@@ -120,13 +120,13 @@ export function DataMenu({ meta, pending, hasConversation, datasetSummary, onRef
               {stale && <p className="font-medium text-amber-600">하루 넘게 지난 데이터입니다. 갱신을 권장합니다.</p>}
             </div>
           ) : (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500">
+            <p className="mt-1.5 text-[13px] leading-relaxed text-slate-500">
               질문을 보내면 지금 불러온 데이터{datasetSummary && `(${datasetSummary})`}를 함께 보냅니다. 연락처는 보내지 않습니다.
             </p>
           )}
           {hasConversation &&
             (pending ? (
-              <p className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-medium text-blue-600">
+              <p className="mt-2.5 inline-flex items-center gap-1 text-[13px] font-medium text-blue-600">
                 <Check className="h-3.5 w-3.5" /> 다음 질문에 최신 데이터가 반영됩니다
               </p>
             ) : (
@@ -137,7 +137,7 @@ export function DataMenu({ meta, pending, hasConversation, datasetSummary, onRef
                   setOpen(false);
                 }}
                 disabled={disabled}
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[12px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> 최신 데이터로 갱신
               </button>

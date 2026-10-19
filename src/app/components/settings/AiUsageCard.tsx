@@ -27,23 +27,23 @@ export function AiUsageCard() {
     <div className="rounded-xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold text-slate-900">AI 사용량</h2>
-          <p className="mt-0.5 text-[13px] text-slate-500">정가 기준 추정치 · 환율 {USD_TO_KRW.toLocaleString()}원/$ 가정 · 실제 청구는 Anthropic Console 기준</p>
+          <h2 className="text-[18px] font-semibold text-slate-900">AI 사용량</h2>
+          <p className="mt-0.5 text-[14px] text-slate-500">정가 기준 추정치 · 환율 {USD_TO_KRW.toLocaleString()}원/$ 가정 · 실제 청구는 Anthropic Console 기준</p>
         </div>
-        <label className="flex items-center gap-2 text-[13px] text-slate-600">
+        <label className="flex items-center gap-2 text-[14px] text-slate-600">
           <input
             type="month"
             aria-label="조회 월"
             value={month}
             max={kstMonth()}
             onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </label>
       </div>
 
-      {error && <p className="mt-4 text-[13px] text-red-600">{error}</p>}
-      {loading && !report && <p className="mt-4 text-[13px] text-slate-400">불러오는 중…</p>}
+      {error && <p className="mt-4 text-[14px] text-red-600">{error}</p>}
+      {loading && !report && <p className="mt-4 text-[14px] text-slate-400">불러오는 중…</p>}
 
       {t && (
         <>
@@ -55,11 +55,11 @@ export function AiUsageCard() {
           </div>
 
           {report.byFeatureModel.length === 0 ? (
-            <p className="mt-5 text-[13px] text-slate-400">이 달에는 사용 기록이 없습니다.</p>
+            <p className="mt-5 text-[14px] text-slate-400">이 달에는 사용 기록이 없습니다.</p>
           ) : (
             <div className="mt-5 grid gap-5 lg:grid-cols-[2fr_1fr]">
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full text-[13px]">
+                <table className="min-w-full text-[14px]">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">기능</th>
@@ -90,7 +90,7 @@ export function AiUsageCard() {
                 </table>
               </div>
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full text-[13px]">
+                <table className="min-w-full text-[14px]">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">사용자</th>
@@ -120,9 +120,9 @@ export function AiUsageCard() {
 function Kpi({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div className="rounded-xl border border-slate-200 p-4">
-      <p className="text-[12px] font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-[22px] font-bold tracking-tight text-slate-900">{value}</p>
-      <p className="mt-0.5 text-[11px] text-slate-400">{sub}</p>
+      <p className="text-[13px] font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-[24px] font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-0.5 text-[12px] text-slate-400">{sub}</p>
     </div>
   );
 }

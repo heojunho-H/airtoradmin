@@ -79,7 +79,7 @@ export function ChatComposer({ variant, value, onChange, streaming, disabled, ma
           rows={1}
           disabled={disabled}
           placeholder={placeholder ?? '질문을 입력하세요'}
-          className="min-w-0 flex-1 resize-none bg-transparent px-2 py-[7px] text-[15px] leading-[22px] text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 resize-none bg-transparent px-2 py-[6px] text-[16px] leading-[24px] text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
         />
         {trailing && <div className="flex h-9 flex-shrink-0 items-center">{trailing}</div>}
         {streaming ? (
@@ -105,7 +105,7 @@ export function ChatComposer({ variant, value, onChange, streaming, disabled, ma
         )}
       </div>
       {value.length > maxChars * 0.4 && (
-        <p className={`mt-1 pr-1 text-right text-[11px] ${over ? 'font-medium text-red-500' : 'text-slate-400'}`}>
+        <p className={`mt-1 pr-1 text-right text-[12px] ${over ? 'font-medium text-red-500' : 'text-slate-400'}`}>
           {value.length.toLocaleString()} / {maxChars.toLocaleString()}
         </p>
       )}

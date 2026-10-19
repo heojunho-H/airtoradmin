@@ -13,10 +13,10 @@ const DISALLOWED = ['img'];
 
 const COMPONENTS: Components = {
   p: ({ node: _node, ...props }) => <p className="my-2 leading-relaxed first:mt-0 last:mb-0" {...props} />,
-  h1: ({ node: _node, ...props }) => <h3 className="text-[16px] font-semibold text-slate-900 mt-4 mb-2 first:mt-0" {...props} />,
-  h2: ({ node: _node, ...props }) => <h3 className="text-[15px] font-semibold text-slate-900 mt-4 mb-2 first:mt-0" {...props} />,
-  h3: ({ node: _node, ...props }) => <h4 className="text-[14px] font-semibold text-slate-900 mt-3 mb-1.5 first:mt-0" {...props} />,
-  h4: ({ node: _node, ...props }) => <h4 className="text-[14px] font-semibold text-slate-800 mt-3 mb-1.5" {...props} />,
+  h1: ({ node: _node, ...props }) => <h3 className="text-[19px] font-semibold text-slate-900 mt-4 mb-2 first:mt-0" {...props} />,
+  h2: ({ node: _node, ...props }) => <h3 className="text-[18px] font-semibold text-slate-900 mt-4 mb-2 first:mt-0" {...props} />,
+  h3: ({ node: _node, ...props }) => <h4 className="text-[17px] font-semibold text-slate-900 mt-3 mb-1.5 first:mt-0" {...props} />,
+  h4: ({ node: _node, ...props }) => <h4 className="text-[16px] font-semibold text-slate-800 mt-3 mb-1.5" {...props} />,
   ul: ({ node: _node, ...props }) => <ul className="my-2 list-disc pl-5 space-y-1" {...props} />,
   ol: ({ node: _node, ...props }) => <ol className="my-2 list-decimal pl-5 space-y-1" {...props} />,
   li: ({ node: _node, ...props }) => <li className="leading-relaxed" {...props} />,
@@ -28,7 +28,7 @@ const COMPONENTS: Components = {
   hr: () => <hr className="my-4 border-slate-200" />,
   table: ({ node: _node, ...props }) => (
     <div className="my-3 overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full text-[13px] border-collapse" {...props} />
+      <table className="min-w-full text-[15px] border-collapse" {...props} />
     </div>
   ),
   thead: ({ node: _node, ...props }) => <thead className="bg-slate-50" {...props} />,
@@ -37,20 +37,20 @@ const COMPONENTS: Components = {
   td: ({ node: _node, ...props }) => <td className="px-3 py-2 align-top border-b border-slate-100 text-slate-700" {...props} />,
   code: ({ node: _node, className, children, ...props }) =>
     className ? (
-      <code className={`${className} text-[12px]`} {...props}>
+      <code className={`${className} text-[14px]`} {...props}>
         {children}
       </code>
     ) : (
-      <code className="rounded bg-slate-100 px-1 py-0.5 text-[12px] text-slate-800" {...props}>
+      <code className="rounded bg-slate-100 px-1 py-0.5 text-[14px] text-slate-800" {...props}>
         {children}
       </code>
     ),
-  pre: ({ node: _node, ...props }) => <pre className="my-3 overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100 text-[12px] leading-relaxed" {...props} />,
+  pre: ({ node: _node, ...props }) => <pre className="my-3 overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100 text-[14px] leading-relaxed" {...props} />,
 };
 
 export default function Markdown({ text }: { text: string }) {
   return (
-    <div className="text-[14px] text-slate-800 break-words">
+    <div className="text-[16px] text-slate-800 break-words">
       <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS} skipHtml disallowedElements={DISALLOWED} unwrapDisallowed>
         {text.replace(/<br\s*\/?>/gi, '  \n')}
       </ReactMarkdown>

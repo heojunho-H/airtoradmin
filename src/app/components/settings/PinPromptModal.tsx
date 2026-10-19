@@ -40,7 +40,7 @@ export function PinPromptModal({ open, title, description, submitting, error, on
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100">
               <KeyRound className="h-4 w-4 text-purple-600" />
             </span>
-            <h2 id="pin-title" className="text-[16px] font-semibold text-slate-900">
+            <h2 id="pin-title" className="text-[17px] font-semibold text-slate-900">
               {title}
             </h2>
           </div>
@@ -48,7 +48,7 @@ export function PinPromptModal({ open, title, description, submitting, error, on
             <X className="h-4 w-4" />
           </button>
         </div>
-        {description && <p className="mt-3 text-[13px] text-slate-500">{description}</p>}
+        {description && <p className="mt-3 text-[14px] text-slate-500">{description}</p>}
         <form
           className="mt-4 space-y-3"
           onSubmit={(e) => {
@@ -67,14 +67,14 @@ export function PinPromptModal({ open, title, description, submitting, error, on
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             placeholder="관리자 PIN"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          {error && <p className="text-[12px] text-red-600">{error}</p>}
+          {error && <p className="text-[13px] text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} disabled={submitting} className="rounded-xl px-4 py-2 text-[14px] font-medium text-slate-600 hover:bg-slate-100">
+            <button type="button" onClick={onClose} disabled={submitting} className="rounded-xl px-4 py-2 text-[15px] font-medium text-slate-600 hover:bg-slate-100">
               취소
             </button>
-            <button type="submit" disabled={!pin || submitting} className="rounded-xl bg-purple-600 px-5 py-2 text-[14px] font-semibold text-white hover:bg-purple-700 disabled:bg-slate-300">
+            <button type="submit" disabled={!pin || submitting} className="rounded-xl bg-purple-600 px-5 py-2 text-[15px] font-semibold text-white hover:bg-purple-700 disabled:bg-slate-300">
               {submitting ? '저장 중…' : '확인'}
             </button>
           </div>

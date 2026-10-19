@@ -59,12 +59,12 @@ export function AiModelSettingsCard({ userName, onNotification }: { userName: st
     if (base) setDraft(base);
   }, [base]);
 
-  if (loading && !config) return <Card><p className="text-[13px] text-slate-400">AI 설정을 불러오는 중…</p></Card>;
+  if (loading && !config) return <Card><p className="text-[14px] text-slate-400">AI 설정을 불러오는 중…</p></Card>;
   if (!config || !draft || !base) {
     return (
       <Card>
-        <p className="text-[13px] text-red-600">AI 설정을 불러오지 못했습니다{error ? `: ${error}` : ''}</p>
-        <button onClick={reload} className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-[13px] hover:bg-slate-50">
+        <p className="text-[14px] text-red-600">AI 설정을 불러오지 못했습니다{error ? `: ${error}` : ''}</p>
+        <button onClick={reload} className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-[14px] hover:bg-slate-50">
           다시 시도
         </button>
       </Card>
@@ -99,11 +99,11 @@ export function AiModelSettingsCard({ userName, onNotification }: { userName: st
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold text-slate-900">AI 모델 설정</h2>
-          <p className="mt-0.5 text-[13px] text-slate-500">기능별 기본 Claude 모델과 추론 강도를 정합니다. 가격은 100만 토큰당 입력/출력(USD)입니다.</p>
+          <h2 className="text-[18px] font-semibold text-slate-900">AI 모델 설정</h2>
+          <p className="mt-0.5 text-[14px] text-slate-500">기능별 기본 Claude 모델과 추론 강도를 정합니다. 가격은 100만 토큰당 입력/출력(USD)입니다.</p>
         </div>
         {!config.pinConfigured && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
             관리자 PIN이 설정되지 않아 읽기 전용입니다 (Cloudflare 환경변수 <code>AI_ADMIN_PIN</code>)
           </p>
         )}
@@ -115,13 +115,13 @@ export function AiModelSettingsCard({ userName, onNotification }: { userName: st
         ))}
       </div>
 
-      {saveError && <p className="mt-3 text-[13px] text-red-600">{saveError}</p>}
+      {saveError && <p className="mt-3 text-[14px] text-red-600">{saveError}</p>}
       {config.pinConfigured && (
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={() => setDraft(base)}
             disabled={!dirty || saving}
-            className="rounded-xl px-4 py-2.5 text-[14px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            className="rounded-xl px-4 py-2.5 text-[15px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
           >
             되돌리기
           </button>
@@ -131,7 +131,7 @@ export function AiModelSettingsCard({ userName, onNotification }: { userName: st
               setPinOpen(true);
             }}
             disabled={!dirty || saving}
-            className="rounded-xl bg-blue-600 px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+            className="rounded-xl bg-blue-600 px-5 py-2.5 text-[15px] font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
           >
             변경사항 저장
           </button>
@@ -195,11 +195,11 @@ function FeatureRow({
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
             <Icon className="h-4 w-4 text-purple-600" />
           </span>
-          <span className="text-[15px] font-semibold text-slate-800">{FEATURE_LABELS[feature]}</span>
+          <span className="text-[16px] font-semibold text-slate-800">{FEATURE_LABELS[feature]}</span>
         </div>
-        <p className="mt-2 text-[12px] leading-relaxed text-slate-500">{FEATURE_META[feature].help}</p>
+        <p className="mt-2 text-[13px] leading-relaxed text-slate-500">{FEATURE_META[feature].help}</p>
         {server.updatedBy && (
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[12px] text-slate-400">
             최근 변경: {server.updatedBy}
             {server.updatedAt ? ` · ${server.updatedAt.slice(0, 10)}` : ''}
           </p>
@@ -209,12 +209,12 @@ function FeatureRow({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[12px] font-medium text-slate-600">모델</span>
+            <span className="text-[13px] font-medium text-slate-600">모델</span>
             <select
               value={value.model}
               disabled={readOnly}
               onChange={(e) => changeModel(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[15px] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
             >
               {!model && <option value={value.model}>{value.model} (목록에 없음)</option>}
               {models.map((m) => (
@@ -228,12 +228,12 @@ function FeatureRow({
           </label>
           {effortLevels.length > 0 && (
             <label className="flex w-40 flex-col gap-1">
-              <span className="text-[12px] font-medium text-slate-600">추론 강도</span>
+              <span className="text-[13px] font-medium text-slate-600">추론 강도</span>
               <select
                 value={value.effort ?? ''}
                 disabled={readOnly}
                 onChange={(e) => onChange({ effort: (e.target.value || null) as Effort | null })}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[15px] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
               >
                 <option value="">모델 기본값{model?.defaultEffort ? ` (${EFFORT_LABELS[model.defaultEffort].split(' ')[0]})` : ''}</option>
                 {effortLevels.map((e) => (
@@ -245,13 +245,13 @@ function FeatureRow({
             </label>
           )}
           <label className="flex flex-col items-start gap-2">
-            <span className="text-[12px] font-medium text-slate-600">사용</span>
+            <span className="text-[13px] font-medium text-slate-600">사용</span>
             <Toggle checked={value.enabled} onChange={(v) => !readOnly && onChange({ enabled: v })} label={`${FEATURE_LABELS[feature]} 사용`} />
           </label>
         </div>
-        {model && <p className="text-[12px] text-slate-500">{model.description}{effortLevels.length === 0 ? ' · 추론 강도 설정 없음' : ''}</p>}
+        {model && <p className="text-[13px] text-slate-500">{model.description}{effortLevels.length === 0 ? ' · 추론 강도 설정 없음' : ''}</p>}
         {risky && (
-          <p className="flex items-center gap-1.5 text-[12px] text-amber-700">
+          <p className="flex items-center gap-1.5 text-[13px] text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5" /> 인력배치는 90초 안에 끝나야 합니다. 이 조합은 시간 초과로 실패할 수 있습니다.
           </p>
         )}
@@ -260,8 +260,8 @@ function FeatureRow({
           <div className="rounded-lg bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[13px] font-medium text-slate-700">대화별 모델 변경 허용</p>
-                <p className="text-[12px] text-slate-500">켜면 직원이 대화마다 아래 모델 중에서 고를 수 있습니다.</p>
+                <p className="text-[14px] font-medium text-slate-700">대화별 모델 변경 허용</p>
+                <p className="text-[13px] text-slate-500">켜면 직원이 대화마다 아래 모델 중에서 고를 수 있습니다.</p>
               </div>
               <Toggle checked={!!value.allowOverride} onChange={(v) => !readOnly && onChange({ allowOverride: v })} label="대화별 모델 변경 허용" />
             </div>
@@ -270,7 +270,7 @@ function FeatureRow({
                 {models.map((m) => {
                   const checked = (value.overrideModels ?? []).includes(m.id) || m.id === value.model;
                   return (
-                    <label key={m.id} className={`flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-[12px] ${checked ? 'border-purple-300 text-purple-800' : 'border-slate-200 text-slate-600'}`}>
+                    <label key={m.id} className={`flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-[13px] ${checked ? 'border-purple-300 text-purple-800' : 'border-slate-200 text-slate-600'}`}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -284,7 +284,7 @@ function FeatureRow({
                         className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                       />
                       {m.label}
-                      {m.badge ? <span className="text-[10px] text-slate-400">({m.badge})</span> : null}
+                      {m.badge ? <span className="text-[11px] text-slate-400">({m.badge})</span> : null}
                     </label>
                   );
                 })}

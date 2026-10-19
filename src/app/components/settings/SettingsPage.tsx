@@ -12,7 +12,7 @@ export default function SettingsPage({ userName, onNotification }: { userName: s
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">설정</h1>
-        <p className="mt-1 text-[14px] text-slate-500">AI 모델 · 사용량 · 연결 상태</p>
+        <p className="mt-1 text-[15px] text-slate-500">AI 모델 · 사용량 · 연결 상태</p>
       </div>
       <AiModelSettingsCard userName={userName} onNotification={onNotification} />
       <AiUsageCard />
@@ -48,14 +48,14 @@ function ConnectionStatusCard() {
     <div className="rounded-xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold text-slate-900">AI 연결 상태</h2>
-          <p className="mt-0.5 text-[13px] text-slate-500">Cloudflare 환경변수·D1 연결 확인 (설정 방법: docs/ai-claude.md)</p>
+          <h2 className="text-[18px] font-semibold text-slate-900">AI 연결 상태</h2>
+          <p className="mt-0.5 text-[14px] text-slate-500">Cloudflare 환경변수·D1 연결 확인 (설정 방법: docs/ai-claude.md)</p>
         </div>
-        <button onClick={check} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[13px] text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+        <button onClick={check} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[14px] text-slate-600 hover:bg-slate-50 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> 다시 확인
         </button>
       </div>
-      {error && <p className="mt-4 text-[13px] text-red-600">{error}</p>}
+      {error && <p className="mt-4 text-[14px] text-red-600">{error}</p>}
       {status && (
         <ul className="mt-4 grid gap-2 md:grid-cols-3">
           <StatusItem ok={status.apiKey} label="Anthropic API 키" detail={status.apiKey ? '설정됨' : 'ANTHROPIC_API_KEY 없음'} />
@@ -72,8 +72,8 @@ function StatusItem({ ok, label, detail }: { ok: boolean; label: string; detail:
     <li className={`flex items-start gap-2 rounded-lg border p-3 ${ok ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'}`}>
       {ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <XCircle className="mt-0.5 h-4 w-4 text-red-500" />}
       <div>
-        <p className="text-[13px] font-medium text-slate-800">{label}</p>
-        <p className="text-[12px] text-slate-500">{detail}</p>
+        <p className="text-[14px] font-medium text-slate-800">{label}</p>
+        <p className="text-[13px] text-slate-500">{detail}</p>
       </div>
     </li>
   );

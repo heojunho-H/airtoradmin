@@ -83,15 +83,15 @@ function IntakeHeader({ panelCollapsed, onExpandPanel, onOpenList, onBack }: Pic
           <ChevronLast className="h-[18px] w-[18px]" />
         </button>
       )}
-      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-[#eef5ff] px-2 py-1 text-[12px] font-semibold text-[#1d4fb8]">
+      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-[#eef5ff] px-2 py-1 text-[13px] font-semibold text-[#1d4fb8]">
         <Icon className="h-3.5 w-3.5" strokeWidth={2} />
         {INTAKE_AGENT.label}
       </span>
-      <h1 className="hidden min-w-0 flex-1 truncate pl-1 text-[14px] font-semibold text-slate-800 sm:block">{INTAKE_AGENT.description}</h1>
+      <h1 className="hidden min-w-0 flex-1 truncate pl-1 text-[15px] font-semibold text-slate-800 sm:block">{INTAKE_AGENT.description}</h1>
       <span className="flex-1 sm:hidden" />
       <button
         onClick={onBack}
-        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
         title="AI 대화 화면으로"
       >
         <MessageSquare className="h-3.5 w-3.5" />
@@ -114,11 +114,11 @@ function DropZone({ onFile, dragging }: { onFile: (f: File) => void; dragging: b
       <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#eef5ff] text-[#3b82f6]">
         <Upload className="h-6 w-6" strokeWidth={1.9} />
       </span>
-      <p className="mt-4 text-[15px] font-semibold text-slate-800">견적서 PDF를 끌어놓거나 선택하세요</p>
-      <p className="mt-1 text-[13px] text-slate-500">PDF · 20MB 이하 · 한 번에 한 장</p>
+      <p className="mt-4 text-[16px] font-semibold text-slate-800">견적서 PDF를 끌어놓거나 선택하세요</p>
+      <p className="mt-1 text-[14px] text-slate-500">PDF · 20MB 이하 · 한 번에 한 장</p>
       <button
         onClick={() => inputRef.current?.click()}
-        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#2f6fe0]"
+        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[15px] font-semibold text-white hover:bg-[#2f6fe0]"
       >
         <FileText className="h-4 w-4" />
         파일 선택
@@ -159,10 +159,10 @@ function ProgressCard({ stage, onCancel }: { stage: Extract<Stage, { kind: 'uplo
           <FileText className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-slate-800">{stage.fileName}</p>
-          <p className="text-[12px] text-slate-500">{formatBytes(stage.size)}</p>
+          <p className="truncate text-[15px] font-semibold text-slate-800">{stage.fileName}</p>
+          <p className="text-[13px] text-slate-500">{formatBytes(stage.size)}</p>
         </div>
-        <button onClick={onCancel} className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-500 hover:bg-slate-100">
+        <button onClick={onCancel} className="rounded-lg px-2.5 py-1.5 text-[14px] font-medium text-slate-500 hover:bg-slate-100">
           취소
         </button>
       </div>
@@ -172,12 +172,12 @@ function ProgressCard({ stage, onCancel }: { stage: Extract<Stage, { kind: 'uplo
           return (
             <li key={p.key} className="flex flex-col gap-1.5">
               <span className={`h-1 rounded-full ${state === 'done' ? 'bg-[#3b82f6]' : state === 'active' ? 'animate-pulse bg-[#93c0fa]' : 'bg-slate-200'}`} />
-              <span className={`text-[12px] ${state === 'todo' ? 'text-slate-400' : 'font-medium text-slate-700'}`}>{p.label}</span>
+              <span className={`text-[13px] ${state === 'todo' ? 'text-slate-400' : 'font-medium text-slate-700'}`}>{p.label}</span>
             </li>
           );
         })}
       </ol>
-      <p className="mt-4 flex items-center gap-2 text-[13px] text-slate-600">
+      <p className="mt-4 flex items-center gap-2 text-[14px] text-slate-600">
         <Loader2 className="h-4 w-4 animate-spin text-[#3b82f6]" />
         {reading ? `AI가 견적서를 읽고 있어요… ${seconds}초 (보통 20~60초)` : '파일을 올리는 중…'}
       </p>
@@ -189,9 +189,9 @@ function ProgressCard({ stage, onCancel }: { stage: Extract<Stage, { kind: 'uplo
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex gap-3 py-1.5 text-[13px]">
-      <dt className="w-[4.5rem] flex-shrink-0 text-slate-500">{label}</dt>
-      <dd className="min-w-0 flex-1 break-keep text-slate-800">{children}</dd>
+    <div className="flex gap-3 py-1.5">
+      <dt className="w-[4.5rem] flex-shrink-0 pt-px text-[14px] text-slate-500">{label}</dt>
+      <dd className="min-w-0 flex-1 break-keep text-[16px] text-slate-800">{children}</dd>
     </div>
   );
 }
@@ -266,14 +266,14 @@ function ReviewCard({
     <section className="rounded-xl border border-[#e6e9ee] bg-white" aria-label="견적서 판독 결과">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 md:px-5">
         <FileText className="h-4 w-4 flex-shrink-0 text-slate-500" />
-        <a href={downloadUrl(file.id)} className="min-w-0 flex-1 truncate text-[14px] font-semibold text-slate-800 hover:text-blue-700 hover:underline" title="원본 내려받기">
+        <a href={downloadUrl(file.id)} className="min-w-0 flex-1 truncate text-[15px] font-semibold text-slate-800 hover:text-blue-700 hover:underline" title="원본 내려받기">
           {file.fileName}
         </a>
-        <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${confidence.cls}`}>{confidence.text}</span>
+        <span className={`rounded-md px-2 py-0.5 text-[12px] font-medium ${confidence.cls}`}>{confidence.text}</span>
       </div>
 
       {result.duplicate && (
-        <p className="flex items-start gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12px] text-slate-600 md:px-5">
+        <p className="flex items-start gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[13px] text-slate-600 md:px-5">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           {file.status === 'linked'
             ? `이미 입력한 견적서입니다 (${file.linkedBy ?? file.uploadedBy}님${file.linkedAt ? `, ${relativeTimeKo(file.linkedAt)}` : ''}${file.dealId ? `, 딜 #${file.dealId}` : ''}). 아래 변경표는 지금 값과 다시 비교한 결과입니다.`
@@ -307,17 +307,17 @@ function ReviewCard({
       </div>
 
       <div className="border-t border-slate-100 px-4 py-4 md:px-5">
-        <p className="text-[13px] font-semibold text-slate-900">어디에 입력할까요?</p>
+        <p className="text-[14px] font-semibold text-slate-900">어디에 입력할까요?</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="block">
-            <span className="text-[12px] text-slate-500">고객사</span>
+            <span className="text-[13px] text-slate-500">고객사</span>
             <input
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               maxLength={100}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-[14px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
             />
-            <span className="mt-1 block text-[12px] text-slate-500">
+            <span className="mt-1 block text-[13px] text-slate-500">
               {customer ? (
                 <>
                   기존 고객 · {/^[SAB]$/.test(customer.grade) ? `${customer.grade}등급` : '등급 미설정'}
@@ -329,9 +329,9 @@ function ReviewCard({
             </span>
             {match.similarCompanies.length > 0 && !customer && (
               <span className="mt-1 flex flex-wrap gap-1">
-                <span className="text-[12px] text-slate-400">비슷한 이름:</span>
+                <span className="text-[13px] text-slate-400">비슷한 이름:</span>
                 {match.similarCompanies.map((n) => (
-                  <button key={n} onClick={() => setCompany(n)} className="rounded border border-slate-200 px-1.5 text-[12px] text-slate-600 hover:border-[#5b9cf2] hover:text-blue-700">
+                  <button key={n} onClick={() => setCompany(n)} className="rounded border border-slate-200 px-1.5 text-[13px] text-slate-600 hover:border-[#5b9cf2] hover:text-blue-700">
                     {n}
                   </button>
                 ))}
@@ -339,11 +339,11 @@ function ReviewCard({
             )}
           </label>
           <label className="block">
-            <span className="text-[12px] text-slate-500">작업건(딜)</span>
+            <span className="text-[13px] text-slate-500">작업건(딜)</span>
             <select
               value={String(choice)}
               onChange={(e) => setChoice(e.target.value === 'new' ? 'new' : Number(e.target.value))}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[14px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
             >
               {match.candidates.map((c) => (
                 <option key={c.deal.id} value={String(c.deal.id)}>
@@ -352,7 +352,7 @@ function ReviewCard({
               ))}
               <option value="new">＋ 새 딜로 등록 (견적서 발송 단계)</option>
             </select>
-            <span className="mt-1 block text-[12px] text-slate-500">
+            <span className="mt-1 block text-[13px] text-slate-500">
               {selected
                 ? selected.reasons.join(' · ') || '같은 회사의 딜'
                 : match.candidates.length
@@ -362,11 +362,11 @@ function ReviewCard({
           </label>
           {needsManager && (
             <label className="block">
-              <span className="text-[12px] text-slate-500">고객책임자</span>
+              <span className="text-[13px] text-slate-500">고객책임자</span>
               <select
                 value={manager}
                 onChange={(e) => setManager(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[14px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] text-slate-800 focus:border-[#5b9cf2] focus:outline-none"
               >
                 <option value="">지정 안 함</option>
                 {managerNames.map((n) => (
@@ -381,11 +381,11 @@ function ReviewCard({
       </div>
 
       <div className="border-t border-slate-100 px-4 py-4 md:px-5">
-        <p className="text-[13px] font-semibold text-slate-900">{plan.mode === 'create' ? '새로 등록할 값' : '바뀌는 값'}</p>
+        <p className="text-[14px] font-semibold text-slate-900">{plan.mode === 'create' ? '새로 등록할 값' : '바뀌는 값'}</p>
         <div className="mt-2">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[15px]">
             <thead>
-              <tr className="border-b border-slate-100 text-[12px] text-slate-500">
+              <tr className="border-b border-slate-100 text-[13px] text-slate-500">
                 <th className="py-1.5 pr-3 font-medium">항목</th>
                 {plan.mode === 'update' && <th className="py-1.5 pr-3 font-medium">현재</th>}
                 <th className="py-1.5 font-medium">견적서</th>
@@ -398,7 +398,7 @@ function ReviewCard({
                   {plan.mode === 'update' && <td className={`py-1.5 pr-3 ${c.changed ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-500'}`}>{c.current}</td>}
                   <td className={`py-1.5 break-keep ${c.changed ? 'font-medium text-slate-900' : 'text-slate-400'}`}>
                     {c.changed ? c.next : '그대로'}
-                    {c.note && c.changed && <span className="ml-1 text-[11px] font-normal text-slate-400">({c.note})</span>}
+                    {c.note && c.changed && <span className="ml-1 text-[12px] font-normal text-slate-400">({c.note})</span>}
                   </td>
                 </tr>
               ))}
@@ -408,14 +408,14 @@ function ReviewCard({
                   <td className="py-1.5 pr-3 text-slate-400 line-through decoration-slate-300">{wonText(projectCurrent) || '0원'}</td>
                   <td className="py-1.5 font-medium text-slate-900">
                     {wonText(ex.quotedTotal)}
-                    <span className="block text-[11px] font-normal text-slate-400 sm:ml-1 sm:inline">(순매출 {wonText(projectAmounts(ex.quotedTotal).netRevenue)})</span>
+                    <span className="block text-[12px] font-normal text-slate-400 sm:ml-1 sm:inline">(순매출 {wonText(projectAmounts(ex.quotedTotal).netRevenue)})</span>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        <ul className="mt-3 space-y-1 text-[12px] text-slate-500">
+        <ul className="mt-3 space-y-1 text-[13px] text-slate-500">
           {plan.mode === 'update' && changed.length === 0 ? (
             <li>딜 값은 이미 견적서와 같습니다. 입력하면 관리 메모에 “견적서 반영” 한 줄을 남기고 파일을 이 고객사에 보관합니다.</li>
           ) : (
@@ -426,7 +426,7 @@ function ReviewCard({
           {selected?.alreadyEntered && changed.length > 0 && <li>이 딜에는 같은 견적 금액이 이미 들어 있습니다.</li>}
         </ul>
         {ex.warnings.length > 0 && (
-          <ul className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          <ul className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
             {ex.warnings.map((w) => (
               <li key={w} className="flex items-start gap-1.5">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -439,17 +439,17 @@ function ReviewCard({
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-4 py-3 md:px-5">
         {result.model && (
-          <span className="mr-auto text-[11px] text-slate-400">
+          <span className="mr-auto text-[12px] text-slate-400">
             {prettyModelId(result.model)} 판독{result.costUsd ? ` · ${formatKrw(result.costUsd)}` : ''}
           </span>
         )}
-        <button onClick={onCancel} disabled={applying} className="rounded-lg px-3 py-2 text-[14px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+        <button onClick={onCancel} disabled={applying} className="rounded-lg px-3 py-2 text-[15px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50">
           취소
         </button>
         <button
           onClick={() => onApply({ company: company.trim(), dealId: choice === 'new' ? null : choice, manager: needsManager ? manager : '' })}
           disabled={!canApply}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#2f6fe0] disabled:cursor-not-allowed disabled:bg-[#b9d3f8]"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[15px] font-semibold text-white hover:bg-[#2f6fe0] disabled:cursor-not-allowed disabled:bg-[#b9d3f8]"
         >
           {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           {applying ? '입력하는 중…' : '시스템에 입력'}
@@ -469,14 +469,14 @@ function DoneCard({ stage, onRelink, relinking, onNext }: { stage: Extract<Stage
       <div className="flex items-start gap-3">
         <CheckCircle2 className="mt-0.5 h-6 w-6 flex-shrink-0 text-emerald-500" />
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold text-slate-900 break-keep">
+          <p className="text-[16px] font-semibold text-slate-900 break-keep">
             {a.created ? `${a.company} — 새 딜(#${a.dealId})로 등록했습니다` : `${a.company} 딜 #${a.dealId}에 견적서를 입력했습니다`}
           </p>
-          <p className="mt-0.5 text-[12px] text-slate-500">{stage.result.file.fileName}</p>
+          <p className="mt-0.5 text-[13px] text-slate-500">{stage.result.file.fileName}</p>
         </div>
       </div>
       {changed.length > 0 && (
-        <ul className="mt-4 space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-[13px]">
+        <ul className="mt-4 space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-[14px]">
           {changed.map((c) => (
             <li key={c.label} className="flex gap-3">
               <span className="w-[4.5rem] flex-shrink-0 text-slate-500">{c.label}</span>
@@ -485,7 +485,7 @@ function DoneCard({ stage, onRelink, relinking, onNext }: { stage: Extract<Stage
           ))}
         </ul>
       )}
-      <div className="mt-3 space-y-2 text-[12px]">
+      <div className="mt-3 space-y-2 text-[13px]">
         {a.syncFailed && (
           <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -516,7 +516,7 @@ function DoneCard({ stage, onRelink, relinking, onNext }: { stage: Extract<Stage
         )}
       </div>
       <div className="mt-5 flex justify-end">
-        <button onClick={onNext} className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#2f6fe0]">
+        <button onClick={onNext} className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[15px] font-semibold text-white hover:bg-[#2f6fe0]">
           <Upload className="h-4 w-4" />
           다른 견적서 입력
         </button>
@@ -545,28 +545,28 @@ function RecentFiles({
   return (
     <section className="mt-8" aria-label="최근 올린 견적서">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-[13px] font-semibold text-slate-900">최근 올린 견적서</h2>
+        <h2 className="text-[14px] font-semibold text-slate-900">최근 올린 견적서</h2>
         <button onClick={onRefresh} disabled={loading} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50" aria-label="목록 새로고침" title="새로고침">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
       {error ? (
-        <p className="rounded-xl border border-[#e6e9ee] bg-white px-4 py-3 text-[13px] text-slate-500">목록을 불러오지 못했습니다: {error}</p>
+        <p className="rounded-xl border border-[#e6e9ee] bg-white px-4 py-3 text-[14px] text-slate-500">목록을 불러오지 못했습니다: {error}</p>
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-[#e6e9ee] bg-white px-4 py-3 text-[13px] text-slate-400">{loading ? '불러오는 중…' : '아직 올린 견적서가 없습니다.'}</p>
+        <p className="rounded-xl border border-[#e6e9ee] bg-white px-4 py-3 text-[14px] text-slate-400">{loading ? '불러오는 중…' : '아직 올린 견적서가 없습니다.'}</p>
       ) : (
         <ul className="divide-y divide-slate-100 rounded-xl border border-[#e6e9ee] bg-white">
           {items.map((f) => (
             <li key={f.id} className="flex items-center gap-3 px-4 py-2.5">
               <FileText className="h-4 w-4 flex-shrink-0 text-slate-400" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-slate-800">{f.fileName}</p>
-                <p className="truncate text-[12px] text-slate-500">
+                <p className="truncate text-[14px] font-medium text-slate-800">{f.fileName}</p>
+                <p className="truncate text-[13px] text-slate-500">
                   {[f.company, f.quoteDate, f.quotedTotal ? manwonText(f.quotedTotal) : null, `${f.uploadedBy} · ${relativeTimeKo(f.createdAt)}`].filter(Boolean).join(' · ')}
                 </p>
               </div>
               <span
-                className={`hidden flex-shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium sm:inline ${f.status === 'linked' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                className={`hidden flex-shrink-0 rounded-md px-1.5 py-0.5 text-[12px] font-medium sm:inline ${f.status === 'linked' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
               >
                 {f.status === 'linked' ? `입력됨${f.dealId ? ` #${f.dealId}` : ''}` : '미입력'}
               </span>
@@ -735,17 +735,17 @@ export function QuoteIntakePanel({ isActive, userName, datasets, loadFreshDatase
         <div className="mx-auto max-w-[800px] py-6 md:py-10">
           {stage.kind === 'idle' && (
             <div className="mb-6 text-center">
-              <h2 className="bg-gradient-to-r from-[#8cc2f6] via-[#4a8ce8] to-[#2a5fc4] bg-clip-text text-[22px] font-bold leading-tight tracking-tight text-transparent break-keep text-balance md:text-[26px]">
+              <h2 className="bg-gradient-to-r from-[#8cc2f6] via-[#4a8ce8] to-[#2a5fc4] bg-clip-text text-[24px] font-bold leading-tight tracking-tight text-transparent break-keep text-balance md:text-[28px]">
                 견적서를 올리면 딜·고객에 알아서 입력해드려요
               </h2>
-              <p className="mx-auto mt-2 max-w-[560px] text-[13px] leading-relaxed text-slate-500 break-keep">
+              <p className="mx-auto mt-2 max-w-[560px] text-[14px] leading-relaxed text-slate-500 break-keep">
                 AI가 견적서에서 고객사·금액·장비 대수를 읽고 맞는 작업건을 찾아 바뀔 값을 보여드려요. 확인 후 입력하면 원본 파일은 그 고객사에 보관됩니다.
               </p>
             </div>
           )}
 
           {error && (
-            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800" role="alert">
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[14px] text-amber-800" role="alert">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <p className="flex-1">{error}</p>
               <button onClick={() => setError(null)} className="rounded p-0.5 hover:bg-amber-100" aria-label="알림 닫기">
@@ -772,7 +772,7 @@ export function QuoteIntakePanel({ isActive, userName, datasets, loadFreshDatase
           )}
           {stage.kind === 'done' && (
             <>
-              {dragging && <p className="mb-2 rounded-lg border-2 border-dashed border-[#5b9cf2] bg-[#f3f8ff] py-3 text-center text-[13px] font-medium text-[#1d4fb8]">놓으면 새 견적서를 읽습니다</p>}
+              {dragging && <p className="mb-2 rounded-lg border-2 border-dashed border-[#5b9cf2] bg-[#f3f8ff] py-3 text-center text-[14px] font-medium text-[#1d4fb8]">놓으면 새 견적서를 읽습니다</p>}
               <DoneCard
                 stage={stage}
                 relinking={relinking}

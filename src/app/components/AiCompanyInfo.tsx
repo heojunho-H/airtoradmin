@@ -109,7 +109,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
     <>
       <button
         onClick={handleSearch}
-        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 text-[12px] font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
         title="AI 기업 정보 조회"
       >
         <Sparkles className="w-3 h-3" />
@@ -128,8 +128,8 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
                   <Building2 className="w-4 h-4 text-purple-600" />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-slate-800">AI 기업 정보</h3>
-                  <p className="text-[12px] text-slate-400">{companyName}</p>
+                  <h3 className="text-[16px] font-semibold text-slate-800">AI 기업 정보</h3>
+                  <p className="text-[13px] text-slate-400">{companyName}</p>
                 </div>
               </div>
               <button onClick={handleClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" aria-label="닫기">
@@ -141,33 +141,33 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {isLoading ? (
                 <div>
-                  <div className="flex items-center gap-2 text-[13px] text-slate-500">
+                  <div className="flex items-center gap-2 text-[14px] text-slate-500">
                     {status?.phase === 'searching' ? <Search className="w-4 h-4 text-purple-400" /> : <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
                     <span>{statusText}…</span>
                   </div>
-                  {draft && <div className="mt-3 text-[13px] text-slate-400 leading-relaxed whitespace-pre-wrap">{draft}</div>}
+                  {draft && <div className="mt-3 text-[16px] text-slate-400 leading-relaxed whitespace-pre-wrap">{draft}</div>}
                 </div>
               ) : error ? (
-                <p className="text-[13px] text-red-600">{error}</p>
+                <p className="text-[14px] text-red-600">{error}</p>
               ) : result ? (
                 <>
-                  <Suspense fallback={<div className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{result.text}</div>}>
+                  <Suspense fallback={<div className="text-[16px] text-slate-700 leading-relaxed whitespace-pre-wrap">{result.text}</div>}>
                     <Markdown text={result.text} />
                   </Suspense>
                   {result.sources.length > 0 && (
                     <div className="mt-5 pt-4 border-t border-slate-100">
-                      <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                      <p className="text-[12px] font-semibold text-slate-500 mb-2">
                         {result.sourcesCited ? '참고 출처' : '관련 검색 결과'} ({result.sources.length})
                       </p>
                       <ul className="space-y-1.5">
                         {result.sources.map((s, i) => (
                           <li key={s.url} className="flex items-start gap-1.5">
-                            <span className="text-[11px] text-slate-400 mt-0.5">{i + 1}.</span>
+                            <span className="text-[12px] text-slate-400 mt-0.5">{i + 1}.</span>
                             <a
                               href={s.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[11px] text-purple-600 hover:text-purple-700 hover:underline break-all inline-flex items-center gap-1"
+                              className="text-[12px] text-purple-600 hover:text-purple-700 hover:underline break-all inline-flex items-center gap-1"
                             >
                               <span className="line-clamp-1">{s.title || s.url}</span>
                               <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -183,12 +183,12 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
 
             {/* 하단 */}
             <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[11px] text-slate-400">
                 Claude 웹 검색{result?.model ? ` · ${prettyModelId(result.model)}` : ''}
                 {result?.costUsd ? ` · ${formatKrw(result.costUsd)}` : ''} · 정보가 정확하지 않을 수 있습니다
               </p>
               {!isLoading && (result || error) && (
-                <button onClick={handleRetry} className="flex-shrink-0 text-[12px] text-purple-600 hover:text-purple-700 font-medium">
+                <button onClick={handleRetry} className="flex-shrink-0 text-[13px] text-purple-600 hover:text-purple-700 font-medium">
                   다시 조회
                 </button>
               )}

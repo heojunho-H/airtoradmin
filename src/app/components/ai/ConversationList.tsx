@@ -72,7 +72,7 @@ export function ConversationList(props: Props) {
       <div className="flex h-14 flex-shrink-0 items-center justify-between pl-4 pr-2">
         <span className="flex items-center gap-1.5">
           <AiSparkle className="h-6 w-6" />
-          <span className="bg-gradient-to-r from-[#5b9cf2] to-[#2357c7] bg-clip-text text-[19px] font-bold tracking-tight text-transparent">AIRTOR AI</span>
+          <span className="bg-gradient-to-r from-[#5b9cf2] to-[#2357c7] bg-clip-text text-[20px] font-bold tracking-tight text-transparent">AIRTOR AI</span>
         </span>
         {onCollapse && (
           <button
@@ -94,14 +94,14 @@ export function ConversationList(props: Props) {
       <div className="flex-shrink-0 px-3">
         <button
           onClick={onNewChat}
-          className="flex h-9 w-full items-center gap-2 rounded-lg bg-[#eceef2] px-3 text-[14px] font-medium text-slate-800 transition-colors hover:bg-[#e2e5ea]"
+          className="flex h-9 w-full items-center gap-2 rounded-lg bg-[#eceef2] px-3 text-[15px] font-medium text-slate-800 transition-colors hover:bg-[#e2e5ea]"
         >
           <Plus className="h-4 w-4" strokeWidth={2} /> 새 대화
         </button>
       </div>
 
       <div className="mt-6 flex flex-shrink-0 items-center justify-between pl-4 pr-2">
-        <span className="text-[13px] font-semibold text-slate-700">최근 대화</span>
+        <span className="text-[14px] font-semibold text-slate-700">최근 대화</span>
         <button
           onClick={toggleSearch}
           className={`rounded-md p-1.5 hover:bg-slate-200/60 ${searchOpen || filtered ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
@@ -120,9 +120,9 @@ export function ConversationList(props: Props) {
             onChange={(e) => onFilter({ ...filter, q: e.target.value })}
             placeholder="대화 제목 검색"
             aria-label="대화 제목 검색"
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] placeholder:text-slate-400 focus:border-[#5b9cf2] focus:outline-none"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[14px] placeholder:text-slate-400 focus:border-[#5b9cf2] focus:outline-none"
           />
-          <label className="flex items-center gap-1.5 px-1 text-[12px] text-slate-500">
+          <label className="flex items-center gap-1.5 px-1 text-[13px] text-slate-500">
             <input type="checkbox" checked={filter.mine} onChange={(e) => onFilter({ ...filter, mine: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             내 대화만 보기
           </label>
@@ -130,9 +130,9 @@ export function ConversationList(props: Props) {
       )}
 
       <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {error && <p className="px-3 py-2 text-[12px] text-red-600">{error}</p>}
+        {error && <p className="px-3 py-2 text-[13px] text-red-600">{error}</p>}
         {!error && !loading && items.length === 0 && (
-          <p className="px-3 py-6 text-center text-[12px] text-slate-400">{filtered ? '조건에 맞는 대화가 없습니다' : '아직 대화가 없습니다'}</p>
+          <p className="px-3 py-6 text-center text-[13px] text-slate-400">{filtered ? '조건에 맞는 대화가 없습니다' : '아직 대화가 없습니다'}</p>
         )}
         <ul>
           {items.map((c) => {
@@ -150,7 +150,7 @@ export function ConversationList(props: Props) {
                       if (e.key === 'Enter' && !isImeEnter(e)) commitRename(c.id);
                       if (e.key === 'Escape') setEditing(null);
                     }}
-                    className="min-w-0 flex-1 bg-transparent text-[14px] focus:outline-none"
+                    className="min-w-0 flex-1 bg-transparent text-[15px] focus:outline-none"
                     aria-label="대화 제목"
                   />
                   <button onClick={() => commitRename(c.id)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50" aria-label="저장">
@@ -168,7 +168,7 @@ export function ConversationList(props: Props) {
                   onClick={() => onSelect(c.id)}
                   title={`${c.title}\n${PERSONAS[c.persona]?.label ?? ''} · ${c.createdBy} · ${relativeTimeKo(c.lastMessageAt)}`}
                   aria-current={active ? 'true' : undefined}
-                  className={`block w-full truncate rounded-lg px-3 py-2 text-left text-[14px] transition-colors ${mine ? 'pr-9' : ''} ${
+                  className={`block w-full truncate rounded-lg px-3 py-2 text-left text-[15px] transition-colors ${mine ? 'pr-9' : ''} ${
                     active ? 'bg-[#e6e9ee] font-medium text-slate-900' : 'text-slate-700 hover:bg-[#eceef2]'
                   }`}
                 >
@@ -196,7 +196,7 @@ export function ConversationList(props: Props) {
                         setDraft(c.title);
                         setEditing(c.id);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[14px] text-slate-700 hover:bg-slate-50"
                     >
                       <Pencil className="h-3.5 w-3.5" /> 이름 바꾸기
                     </button>
@@ -206,7 +206,7 @@ export function ConversationList(props: Props) {
                         setMenuFor(null);
                         if (window.confirm(`'${c.title}' 대화를 삭제할까요? 팀 전체 목록에서 사라집니다.`)) onDelete(c.id);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[14px] text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> 삭제
                     </button>
@@ -216,9 +216,9 @@ export function ConversationList(props: Props) {
             );
           })}
         </ul>
-        {loading && <p className="px-3 py-2 text-[12px] text-slate-400">불러오는 중…</p>}
+        {loading && <p className="px-3 py-2 text-[13px] text-slate-400">불러오는 중…</p>}
         {hasMore && !loading && (
-          <button onClick={onLoadMore} className="mt-1 w-full rounded-lg py-1.5 text-[12px] text-slate-500 hover:bg-slate-200/50">
+          <button onClick={onLoadMore} className="mt-1 w-full rounded-lg py-1.5 text-[13px] text-slate-500 hover:bg-slate-200/50">
             더 보기
           </button>
         )}
@@ -226,7 +226,7 @@ export function ConversationList(props: Props) {
 
       {onOpenSettings && (
         <div className="flex-shrink-0 border-t border-slate-200/70 px-2 py-2">
-          <button onClick={onOpenSettings} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] text-slate-500 hover:bg-slate-200/50 hover:text-slate-700">
+          <button onClick={onOpenSettings} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-slate-500 hover:bg-slate-200/50 hover:text-slate-700">
             <Settings className="h-3.5 w-3.5" /> AI 설정
           </button>
         </div>

@@ -47,7 +47,7 @@ function readCollapsed() {
 
 function Disclaimer({ compact }: { compact?: boolean }) {
   return (
-    <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-400">
+    <p className="mt-2 text-center text-[12px] leading-relaxed text-slate-400">
       AI 답변은 참고용이며, 대화는 팀 전체에 공유됩니다.
       {!compact && (
         <>
@@ -194,11 +194,11 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
   );
 
   const banner = bannerText && (
-    <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
+    <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[14px] text-amber-800">
       <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
       <p className="flex-1">{bannerText}</p>
       {configError && (
-        <button onClick={() => reloadConfig()} className="rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[12px] font-medium hover:bg-amber-100">
+        <button onClick={() => reloadConfig()} className="rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[13px] font-medium hover:bg-amber-100">
           다시 시도
         </button>
       )}
@@ -290,7 +290,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
               disabled={chat.streaming || chat.loading}
             />
             {chat.loading ? (
-              <div className="flex flex-1 items-center justify-center text-[13px] text-slate-400">대화를 불러오는 중…</div>
+              <div className="flex flex-1 items-center justify-center text-[14px] text-slate-400">대화를 불러오는 중…</div>
             ) : (
               <ChatThread
                 messages={chat.messages}

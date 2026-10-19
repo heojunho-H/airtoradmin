@@ -45,7 +45,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
     return (
       <div className="flex flex-col items-end gap-1">
         {(showAuthor || m.hasSnapshot) && (
-          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+          <div className="flex items-center gap-2 text-[12px] text-slate-400">
             {m.hasSnapshot && (
               <span className="inline-flex items-center gap-1 text-blue-500">
                 <Database className="w-3 h-3" /> 최신 데이터 반영
@@ -54,7 +54,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
             {showAuthor && <span>{m.userName}</span>}
           </div>
         )}
-        <div className="max-w-[88%] md:max-w-[75%] rounded-2xl rounded-br-md bg-[#f1f3f6] px-4 py-2.5 text-[14px] leading-relaxed text-slate-800 whitespace-pre-wrap break-keep wrap-anywhere">
+        <div className="max-w-[88%] md:max-w-[75%] rounded-2xl rounded-br-md bg-[#f1f3f6] px-4 py-2.5 text-[16px] leading-relaxed text-slate-800 whitespace-pre-wrap break-keep wrap-anywhere">
           {m.text}
         </div>
       </div>
@@ -82,9 +82,9 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         <AiSparkle className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="mb-1 text-[12px] font-semibold text-slate-500">{expertLabel}</p>
+        <p className="mb-1 text-[13px] font-semibold text-slate-500">{expertLabel}</p>
         {m.status === 'streaming' && !m.text && (
-          <div className="flex items-center gap-2 py-2 text-[13px] text-slate-500" role="status">
+          <div className="flex items-center gap-2 py-2 text-[14px] text-slate-500" role="status">
             <span className="flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -96,7 +96,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         )}
 
         {m.text && !refusal && (
-          <div className="pt-0.5 text-[14px] text-slate-800 break-keep wrap-anywhere">
+          <div className="pt-0.5 text-[16px] text-slate-800 break-keep wrap-anywhere">
             <Suspense fallback={<div className="whitespace-pre-wrap break-words">{m.text}</div>}>
               <Markdown text={m.text} />
             </Suspense>
@@ -105,14 +105,14 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         )}
 
         {refusal && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-800">
             <div className="flex items-start gap-2">
               <ShieldAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p>{m.error?.message}</p>
             </div>
             {m.text && (
               <details className="mt-2 text-amber-700/80">
-                <summary className="cursor-pointer text-[12px]">중단된 부분 응답 보기</summary>
+                <summary className="cursor-pointer text-[13px]">중단된 부분 응답 보기</summary>
                 <div className="mt-2 opacity-70 whitespace-pre-wrap">{m.text}</div>
               </details>
             )}
@@ -120,7 +120,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         )}
 
         {m.status === 'error' && !refusal && (
-          <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p className="flex-1">{m.error?.message || '응답을 받지 못했습니다.'}</p>
@@ -128,7 +128,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
             {isLast && (
               <button
                 onClick={onRetry}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-red-700 border border-red-200 hover:bg-red-100"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-red-700 border border-red-200 hover:bg-red-100"
               >
                 <RotateCcw className="w-3.5 h-3.5" /> 다시 시도
               </button>
@@ -137,10 +137,10 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         )}
 
         {m.status === 'stopped' && (
-          <div className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-400">
+          <div className="mt-1.5 flex items-center gap-2 text-[13px] text-slate-400">
             <span>중지됨 · 저장되지 않음</span>
             {isLast && (
-              <button onClick={onRetry} className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+              <button onClick={onRetry} className="inline-flex items-center gap-1 text-[13px] text-blue-600 hover:text-blue-700 font-medium">
                 <RotateCcw className="w-3 h-3" /> 다시 묻기
               </button>
             )}
@@ -148,7 +148,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
         )}
 
         {m.status === 'done' && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-slate-400">
             {m.model && <span>{prettyModelId(m.model, models)}</span>}
             {m.usage && (
               <span title={footerTitle}>
@@ -158,13 +158,13 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
             )}
             {m.costUsd != null && <span title={footerTitle}>· {formatKrw(m.costUsd)}</span>}
             {m.text && (
-              <button onClick={copy} className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-slate-100 hover:text-slate-600" aria-label="답변 복사">
+              <button onClick={copy} className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] hover:bg-slate-100 hover:text-slate-600" aria-label="답변 복사">
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? '복사됨' : '복사'}
               </button>
             )}
             {m.stopReason === 'max_tokens' && isLast && (
-              <button onClick={onContinue} className="ml-1 text-[11px] font-medium text-blue-600 hover:text-blue-700">
+              <button onClick={onContinue} className="ml-1 text-[12px] font-medium text-blue-600 hover:text-blue-700">
                 응답이 길이 제한으로 잘렸습니다 · 이어서 작성
               </button>
             )}
