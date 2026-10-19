@@ -34,7 +34,7 @@ export const QUOTE_JSON_SCHEMA = {
   additionalProperties: false,
   required: [
     'documentType', 'otherKind', 'supplierName', 'issuedByAirtor', 'recipientCompany', 'contactName', 'contactPosition', 'quoteDate',
-    'validDays', 'revision', 'variantLabel', 'quoteCount', 'serviceName', 'serviceCategory', 'equipment', 'otherItems', 'totalQuantity',
+    'validDays', 'revision', 'variantLabel', 'quoteCount', 'pricingBasis', 'serviceName', 'serviceCategory', 'equipment', 'otherItems', 'totalQuantity',
     'lineItems', 'supplyTotal', 'taxTotal', 'quotedTotal', 'vatIncluded', 'notes', 'plannedCrew', 'confidence', 'warnings',
   ],
   properties: {
@@ -50,6 +50,11 @@ export const QUOTE_JSON_SCHEMA = {
     revision: int('문서에 적힌 견적 차수(예: "2차 견적서" → 2, "수정 견적" → 2). 표시가 없으면 1'),
     variantLabel: str('같은 고객의 다른 견적과 구분하는 현장·지점·건물 또는 안(옵션) 라벨(예: 김포, 방화, 스탠드, 반분해). 회사명은 넣지 않는다. 없으면 빈 문자열'),
     quoteCount: int('이 PDF 에 수신처나 총 견적 금액이 따로 있는 견적서가 몇 개인지. 보통 1'),
+    pricingBasis: {
+      type: 'string',
+      enum: ['one_off', 'per_visit', 'monthly', 'annual', 'multi_year'],
+      description: 'quotedTotal 의 기준: 1회 작업 one_off, 회당 per_visit, 월 monthly, 연 annual, 다년 multi_year',
+    },
     serviceName: str('문서에 적힌 서비스명'),
     serviceCategory: { type: 'string', enum: ['에어컨세척', '해충방제', '표면소독', '실내공기질', '기타'] },
     equipment: {
@@ -95,6 +100,9 @@ const QUOTE_SYSTEM = `당신은 에어터(Airtor)의 견적서 판독기입니�
 
 판독 규칙:
 - 공급자(상호·대표자·등록번호가 적힌 쪽)가 에어터가 아니면 issuedByAirtor=false, supplierName 에 그 회사명을 적습니다. 에어터면 true.
+  에어터의 사업자등록번호는 691-86-02152 입니다(예전 양식에는 961-86-02152 로 잘못 인쇄된 경우가 있음). 다른 상호·번호면 다른 업체 견적서입니다.
+- 금액·수량·수신처·견적일은 견적 페이지("총 견 적 금 액", "의뢰 대수", "용역명"이 있는 쪽)에서만 읽습니다.
+  작업상세내역서(노임단가·인력 구성)와 포트폴리오·실적 페이지에는 다른 고객사의 이름·대수·날짜가 있으니 절대 쓰지 않습니다.
 - 견적서가 아니면 documentType=other, otherKind 에 문서 종류를 적고 나머지는 빈 값으로 둡니다.
 - revision: 제목·본문에 "2차 견적서", "3차", "수정 견적" 같은 차수 표시가 있으면 그 숫자(수정 견적은 2), 없으면 1.
 - variantLabel: 현장·지점·건물이나 안(옵션)이 따로 적혀 있으면 짧게 적습니다(예: "김포", "방화동 지점", "스탠드", "반분해"). 수신 회사명 자체는 넣지 않습니다.
@@ -108,7 +116,11 @@ const QUOTE_SYSTEM = `당신은 에어터(Airtor)의 견적서 판독기입니�
   면적·횟수·기간이 기준이면 이름에 단위를 붙입니다(예: "방역 면적(㎡)" 1200, "방문 횟수(회)" 12).
   월·연 정기 계약이면 quotedTotal 은 문서의 총 견적 금액을 그대로 쓰고, 그 금액의 기준(월/연/회당)을 warnings 에 적습니다.
 - EVENT, 무료, "All" 같은 행은 수량·품목이 아닙니다. lineItems 와 otherItems 에서 뺍니다.
-- quotedTotal 은 문서의 "총 견적 금액"을 그대로 씁니다(천원 단위 절삭·할인 후 최종 금액). 품목 합계와 다르면 warnings 에 두 금액과 이유(예: 천원 단위 절삭)를 적습니다.
+- quotedTotal 은 문서의 "총 견적 금액"을 그대로 씁니다(천원 단위 절삭·할인 후 최종 금액). 품목 합계와 다르면 warnings 에 두 금액과 이유(예: 천원 단위 절삭, 추가 할인)를 적습니다.
+  총 견적 금액 칸이 비어 있거나 "영 원정"이면 표의 합계를 쓰고 warnings 에 적고 confidence 를 medium 으로 둡니다.
+- 금액이 여러 기준으로 적혀 있으면(1회 금액·월 금액·연간 금액 등) 문서가 강조한 최종 금액을 quotedTotal 로 쓰고 pricingBasis 에 그 기준을, 나머지 금액은 warnings 에 적습니다.
+- 면세·부가세 별도 금액이면 vatIncluded=false 입니다.
+- 의뢰 대수 표의 대수와 견적 사항(품목)의 수량이 다르면 equipment·totalQuantity 는 의뢰 대수 표를 따르고 warnings 에 차이를 적습니다.
 - 회사 소개·실적·포트폴리오 쪽은 무시합니다(notes 에 넣지 않음).
 - 숫자는 쉼표 없는 정수(원)입니다. 읽을 수 없는 값은 0 이나 빈 문자열로 두고 warnings 에 적습니다.
 - 확실하지 않은 값이 있으면 confidence 를 medium 이나 low 로 둡니다.`;
@@ -133,6 +145,8 @@ export interface QuoteExtraction {
   variantLabel: string;
   /** PDF 하나에 든 견적서 수 */
   quoteCount: number;
+  /** quotedTotal 의 기준 — one_off 가 아니면 확인 필요 */
+  pricingBasis: 'one_off' | 'per_visit' | 'monthly' | 'annual' | 'multi_year';
   serviceName: string;
   serviceCategory: string;
   /** 영업 화면 상세 수량 키(한글) → 대수 */
@@ -153,7 +167,7 @@ export interface QuoteExtraction {
 }
 
 /** 확인 필요 사유 — 이 중 하나라도 있으면 일괄 입력에서 미리 체크하지 않는다 */
-export const QUOTE_FLAGS = ['multi_quote', 'vat_excluded', 'no_date', 'no_amount', 'no_company', 'qty_mismatch', 'amount_mismatch'] as const;
+export const QUOTE_FLAGS = ['multi_quote', 'vat_excluded', 'recurring', 'no_date', 'no_amount', 'no_company', 'qty_mismatch', 'amount_mismatch'] as const;
 
 const toInt = (v: unknown) => {
   const n = Math.round(Number(v));
@@ -161,16 +175,29 @@ const toInt = (v: unknown) => {
 };
 const toStr = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-/** "2차견적서_…", "3차 견적서" → 2·3 (없으면 1) */
+/** macOS 파일명은 NFD(자모 분리)로 올 수 있다 — 비교 전에 NFC 로 */
+export function nfc(s: string): string {
+  return (s || '').normalize('NFC');
+}
+
+/** "2차견적서_…", "가.3차 견적서" → 2·3. 예전 라벨 (수정)·(추가할인)·(수량변경) → 2, (최종) → 9. 없으면 1.
+ *  "선릉롯데골드로즈2차" 처럼 회사명 속 '2차'는 뒤에 '견적'이 없어 걸리지 않는다. */
 export function fileRevision(fileName: string): number {
-  const m = /(\d{1,2})\s*차\s*견적/.exec(fileName || '');
-  const n = m ? Number(m[1]) : 1;
-  return n >= 1 && n <= 20 ? n : 1;
+  const name = nfc(fileName);
+  const m = /(?:^|[\s_.\-()])(\d{1,2})\s*차\s*(?:견적|유지관리)/.exec(name);
+  if (m) {
+    const n = Number(m[1]);
+    return n >= 1 && n <= 20 ? n : 1;
+  }
+  const label = fileVariant(name);
+  if (label === '최종') return 9;
+  if (/^(수정|추가할인|수량변경)$/.test(label)) return 2;
+  return 1;
 }
 
 /** "견적서(김포)_…", "2차견적서(스탠드)_…" → 김포·스탠드 */
 export function fileVariant(fileName: string): string {
-  const m = /견적서\s*\(([^)]{1,20})\)/.exec(fileName || '');
+  const m = /견적서\s*\(([^)]{1,20})\)/.exec(nfc(fileName));
   return m ? m[1].trim() : '';
 }
 
@@ -189,6 +216,7 @@ export function upgradeExtraction(ex: Partial<QuoteExtraction> & Record<string, 
     revision: 1,
     variantLabel: '',
     quoteCount: 1,
+    pricingBasis: 'one_off',
     equipment: {},
     otherItems: [],
     lineItems: [],
@@ -205,11 +233,14 @@ export function upgradeExtraction(ex: Partial<QuoteExtraction> & Record<string, 
   const flags: string[] = [];
   if (out.quoteCount > 1) flags.push('multi_quote');
   if (out.quotedTotal && out.vatIncluded === false) flags.push('vat_excluded');
+  if (out.pricingBasis && out.pricingBasis !== 'one_off') flags.push('recurring');
   if (!out.quoteDate) flags.push('no_date');
   if (!out.quotedTotal) flags.push('no_amount');
   if (!out.recipientCompany) flags.push('no_company');
   const eqSum = sumEquipment(out);
-  if (eqSum && out.totalQuantity && eqSum !== out.totalQuantity) flags.push('qty_mismatch');
+  // 의뢰 대수(종류별 합)·총 수량·견적 품목 수량이 서로 다르면 확인 (예: 의뢰 160대인데 견적 157대)
+  const linesQty = out.lineItems.reduce((a, l) => a + (Number(l.quantity) || 0), 0);
+  if ((eqSum && out.totalQuantity && eqSum !== out.totalQuantity) || (linesQty && out.totalQuantity && linesQty !== out.totalQuantity)) flags.push('qty_mismatch');
   const linesTotal = out.lineItems.reduce((a, l) => a + (Number(l.total) || 0), 0);
   // 천원·만원 단위 절삭(1만 원 이하)은 정상으로 본다. 그보다 크고 1% 이상이면 할인·오기 확인
   const gap = Math.abs(linesTotal - out.quotedTotal);
@@ -273,6 +304,7 @@ export function normalizeExtraction(raw: unknown, fileName = ''): QuoteExtractio
       revision: toInt(r.revision) || 1,
       variantLabel: toStr(r.variantLabel, 40),
       quoteCount,
+      pricingBasis: ['per_visit', 'monthly', 'annual', 'multi_year'].includes(r.pricingBasis) ? r.pricingBasis : 'one_off',
       serviceName: toStr(r.serviceName, 80),
       serviceCategory: toStr(r.serviceCategory, 20) || '기타',
       equipment,

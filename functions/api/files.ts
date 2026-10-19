@@ -136,7 +136,8 @@ async function handleUpload(context: Ctx): Promise<Response> {
   const userName = cleanUserName(form.get('userName'));
   const buf = await file.arrayBuffer();
   if (!looksLikePdf(buf)) throw new AiError(415, 'not_pdf', 'PDF 파일만 올릴 수 있습니다.');
-  const fileName = (file.name || 'quote.pdf').replace(/[\r\n]/g, ' ').slice(0, 200);
+  // macOS 에서 온 파일명은 NFD(자모 분리)일 수 있다 — 저장·차수 판정 모두 NFC 로
+  const fileName = (file.name || 'quote.pdf').normalize('NFC').replace(/[\r\n]/g, ' ').slice(0, 200);
   const sha = await sha256Hex(buf);
 
   const sse = openSse(request, env);

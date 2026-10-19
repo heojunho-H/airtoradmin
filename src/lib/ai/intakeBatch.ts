@@ -1,7 +1,8 @@
 // 견적서 일괄 입력 — 여러 견적서를 대상(딜)별로 묶고, 묶음마다 딜 값을 정할 견적을 고른 뒤 차례대로 반영한다.
 //
 // 실제 견적서 폴더에서 본 세 가지 경우를 구분한다 (docs/ai-claude.md "견적서 일괄 입력"):
-//   차수 견적  견적서 → 2차 → 3차      최신 견적이 딜 값, 나머지는 파일만 보관
+//   차수 견적  견적서 → 2차 → 3차      최신 견적(문서의 견적일 → 차수)이 딜 값, 나머지는 파일만 보관
+//                                      파일명 차수는 틀릴 때가 있어(용인 "2차"가 실제 세 번째) 견적일을 먼저 본다
 //   대안 견적  견적서(스탠드)/(반분해)   하나를 고른다 (사용자 결정)
 //   현장 견적  견적서(김포)/(방화)       합산한다 (사용자 결정)
 // 화면은 항목의 결정(회사명·대상 딜·고객책임자·포함 여부)과 묶음 선택만 들고, 나머지는 여기서 계산한다.
@@ -75,6 +76,8 @@ export interface GroupView {
   /** same 묶음에서 라벨이 현장처럼 보여 합산을 권함 */
   suggestMerge: boolean;
   label: string;
+  /** 기본 선택 이유 등 안내 */
+  note: string | null;
 }
 
 export interface ItemView {
@@ -119,16 +122,17 @@ export function defaultDecisions(result: UploadResult, company: string, data: Ma
 
 // ─── 묶기 ──────────────────────────────────────────────────────────────
 
-const OPTION_WORDS = /(스탠드|벽걸이|천정|반분해|완전분해|분해|기본|일반|표준|프리미엄|고급|옵션|[A-Za-z]\s*안|\d+\s*안|\d+\s*대|필터|정기|1회|단가)/;
+const OPTION_WORDS = /(스탠드|벽걸이|천정|반분해|완전분해|분해|기본|일반|표준|정밀|종합|프리미엄|고급|옵션|[A-Za-z]\s*안|\d+\s*안|\d+\s*대|필터|정기|1회|회차|단가|성수기|비수기|수정|구형|전체|최종|추가|변경)/;
 
 /** 라벨이 모두 있고 서로 다르며 옵션 단어가 없으면 현장·지점으로 본다 → 합산 권장 */
 export function looksLikeSites(labels: string[]): boolean {
   return labels.length >= 2 && labels.every((l) => !!l && !OPTION_WORDS.test(l)) && new Set(labels).size === labels.length;
 }
 
+/** 최신 먼저: 문서의 견적일 → 차수 (파일명 차수만으로는 틀릴 수 있다) */
 function newer(a: QuoteExtraction, b: QuoteExtraction): number {
+  if (a.quoteDate && b.quoteDate && a.quoteDate !== b.quoteDate) return b.quoteDate.localeCompare(a.quoteDate);
   if ((a.revision || 1) !== (b.revision || 1)) return (b.revision || 1) - (a.revision || 1);
-  if (a.quoteDate !== b.quoteDate) return (b.quoteDate || '').localeCompare(a.quoteDate || '');
   return 0;
 }
 
@@ -152,18 +156,41 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
   for (const [key, members] of byGroup) {
     const exOf = (i: BatchItem) => withCompany(i.result!.extraction, i.company);
     const sorted = [...members].sort((a, b) => newer(exOf(a), exOf(b)) || b.fileName.localeCompare(a.fileName));
+    const target0 = sorted[0].target;
+    const dealObj = target0 === 'new' ? null : (data.deals.find((d) => Number(d.id) === target0) ?? null);
+    // 딜에 이미 이 견적의 금액이 들어 있음 — 합의된 견적일 가능성이 높다
+    const holds = (i: BatchItem) => !!dealObj && exOf(i).quotedTotal > 0 && parseAmount(dealObj.quotationAmount) === exOf(i).quotedTotal;
     let kind: GroupView['kind'] = 'single';
     let defaultPick: GroupPick = sorted[0].key;
     let suggestMerge = false;
+    let note: string | null = null;
     if (sorted.length > 1) {
       const top = exOf(sorted[0]);
       const tier = sorted.filter((i) => newer(exOf(i), top) === 0);
       if (tier.length === 1) {
         kind = 'revisions';
+        // 진행 중 딜은 최신 견적이 기준. 수주·실패로 끝난 딜은 이미 들어 있는 견적을 기준으로 둔다 (예: 수주 후 낸 3차)
+        const settled = !!dealObj && dealObj.successStatus !== 'in-progress';
+        const keep = settled ? sorted.find(holds) : undefined;
+        if (keep && keep !== sorted[0]) {
+          defaultPick = keep.key;
+          note = `딜에 이미 ${keep.fileName}의 금액이 들어 있어 그 견적을 기준으로 둡니다 — 최신 견적으로 바꾸려면 직접 고르세요.`;
+        } else {
+          note = '가장 최근 견적(견적일 → 차수)으로 딜을 갱신하고, 나머지는 파일만 보관합니다.';
+        }
       } else {
         kind = 'same';
-        defaultPick = null;
         suggestMerge = looksLikeSites(tier.map((i) => exOf(i).variantLabel));
+        const matching = tier.filter(holds);
+        if (matching.length === 1) {
+          defaultPick = matching[0].key;
+          note = `딜에 이미 ${matching[0].fileName}의 금액이 들어 있어 그 견적을 기준으로 둡니다.`;
+        } else {
+          defaultPick = null;
+          note = suggestMerge
+            ? '같은 날짜의 현장별 견적으로 보입니다 — 합산하거나 하나를 고르세요.'
+            : '같은 날짜의 대안 견적으로 보입니다 — 딜에 넣을 견적을 고르세요.';
+        }
       }
     }
     const chosen = picks[key];
@@ -173,13 +200,15 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
     const m = matchQuote(exOf(first), data.deals, data.customers);
     const deal = target === 'new' ? null : m.candidates.find((c) => Number(c.deal.id) === target)?.deal;
     const label = target === 'new' ? `새 딜 · ${first.company || exOf(first).recipientCompany}` : `딜 #${target}${deal ? ` · ${deal.company}` : ''}`;
-    groups.push({ key, target, itemKeys: sorted.map((i) => i.key), kind, pick, defaultPick, suggestMerge, label });
+    groups.push({ key, target, itemKeys: sorted.map((i) => i.key), kind, pick, defaultPick, suggestMerge, label, note });
   }
   // 회사명 순, 같은 회사 안에서는 대상 순
   groups.sort((a, b) => a.label.localeCompare(b.label, 'ko'));
 
   for (const g of groups) {
     const members = g.itemKeys.map((k) => ready.find((i) => i.key === k)!);
+    // 합산이면 딜과 비교할 값은 합계다
+    const mergedEx = g.pick === 'merge' ? mergeExtractions(members.map((i) => withCompany(i.result!.extraction, i.company))) : null;
     // 1단계: 각 항목의 역할·확인 사유
     for (const item of members) {
       const ex = withCompany(item.result!.extraction, item.company);
@@ -193,6 +222,15 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
         for (const f of ex.flags ?? []) reasons.push(FLAG_LABELS[f] ?? f);
         if (g.target === 'new') {
           reasons.push('새 딜 등록');
+          // 같은 고객의 다른 견적이 기존 딜로 들어가면 같은 작업건일 수 있다 (예: 견적서(스탠드) 추가 견적)
+          const myKey = normalizeCompanyName(item.company);
+          const sibling = groups.find((o) => {
+            if (o.target === 'new' || o.key === g.key) return false;
+            const d = data.deals.find((x) => Number(x.id) === o.target);
+            const k = normalizeCompanyName(d?.company);
+            return !!k && !!myKey && (k.includes(myKey) || myKey.includes(k));
+          });
+          if (sibling) reasons.push(`같은 고객 견적서가 딜 #${sibling.target}에 들어감`);
         } else {
           const cand = match.candidates.find((c) => Number(c.deal.id) === g.target);
           if (!cand) reasons.push('직접 고른 딜');
@@ -201,15 +239,22 @@ export function resolveBatch(items: BatchItem[], picks: Record<string, GroupPick
             if (!cand.inWindow) reasons.push('문의일이 먼 딜');
             if (Number(cand.deal.id) !== match.defaultDealId || !match.clear) reasons.push('후보 딜 여러 개');
           }
-          // 수주 딜의 금액·수량은 합의된 값 — 견적서가 달라도 사람이 확인하고 바꾼다 (예: 수주 후 낸 3차 견적)
           const deal = cand?.deal ?? data.deals.find((d) => Number(d.id) === g.target);
-          if (deal && (deal.successStatus === 'success' || deal.status === 'confirmed')) {
-            const amountChanges = ex.quotedTotal > 0 && parseAmount(deal.quotationAmount) !== ex.quotedTotal;
-            const qtyChanges = ex.totalQuantity > 0 && (Number(deal.totalQuantity) || 0) !== ex.totalQuantity;
-            if (amountChanges || qtyChanges) reasons.push('수주 딜 금액·수량 변경');
+          const cmp = mergedEx ?? ex;
+          if (deal) {
+            const dAmt = parseAmount(deal.quotationAmount);
+            const dQty = Number(deal.totalQuantity) || 0;
+            // 수주 딜의 금액·수량은 합의된 값 — 견적서가 달라도 사람이 확인하고 바꾼다 (예: 수주 후 낸 3차 견적)
+            if (deal.successStatus === 'success' || deal.status === 'confirmed') {
+              if ((cmp.quotedTotal > 0 && dAmt !== cmp.quotedTotal) || (cmp.totalQuantity > 0 && dQty !== cmp.totalQuantity)) reasons.push('수주 딜 금액·수량 변경');
+            }
+            // 기존 값과 30% 넘게 다르면 부분·대안 견적일 수 있다 (예: 109대 딜에 8대 기본세척 견적)
+            const far = (a: number, b: number) => a > 0 && b > 0 && Math.abs(a - b) / Math.max(a, b) > 0.3;
+            if (far(dAmt, cmp.quotedTotal) || far(dQty, cmp.totalQuantity)) reasons.push('기존 딜과 금액·수량 차이 큼');
           }
         }
-        if (g.kind === 'same') reasons.push(g.pick === 'merge' ? '합산 입력' : '같은 딜에 견적서 여러 개');
+        // 합산은 새 값을 만든다 — 항상 사람이 확인. 하나를 고른 경우는 위 사유(수주 딜 변경·차이 큼)가 걸러 준다
+        if (g.pick === 'merge') reasons.push('합산 입력');
       }
       const blocked = g.pick === null ? '딜에 넣을 견적서를 고르세요 (하나만 선택 또는 합산)' : null;
       views[item.key] = { item, ex, match, groupKey: g.key, role, reviewReasons: [...new Set(reasons)], autoChecked: false, checked: false, blocked };

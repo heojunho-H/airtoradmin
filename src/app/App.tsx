@@ -183,20 +183,26 @@ export default function App() {
     setAiUnread(true);
   }, []);
 
-  // 견적서 입력 도우미가 딜을 바꾸면 영업 목록을 다시 불러온다.
-  // 수주 딜이면 서버가 고객 작업 이력·프로젝트를 갱신하므로 둘도 다시 불러온다 (handleDealSuccess 와 같음)
-  const handleAiDataChanged = useCallback(async (change: IntakeDataChange) => {
+  // 견적서 입력 도우미가 딜을 바꾸면(한 번 실행에 여러 딜일 수 있음) 영업 목록을 다시 불러온다.
+  // 수주 딜이 있으면 서버가 고객 작업 이력·프로젝트를 갱신하므로 둘도 다시 불러온다 (handleDealSuccess 와 같음)
+  const handleAiDataChanged = useCallback(async (changes: IntakeDataChange[]) => {
+    if (!changes.length) return;
+    const [first] = changes;
+    const files = changes.reduce((a, c) => a + c.files, 0);
+    const created = changes.filter(c => c.created).length;
     setNotifications(prev => [{
       id: Date.now() + Math.random(),
       type: 'admin_action',
-      message: `[${change.company}] 견적서가 ${change.created ? `새 딜(#${change.dealId})로 등록` : `딜 #${change.dealId}에 입력`}되었습니다`,
+      message: changes.length === 1
+        ? `[${first.company}] 견적서 ${files}건이 ${first.created ? `새 딜(#${first.dealId})로 등록` : `딜 #${first.dealId}에 입력`}되었습니다`
+        : `[견적서 일괄 입력] ${files}건 — 딜 ${changes.length}개${created ? ` (새 딜 ${created})` : ''}`,
       timestamp: new Date(),
       read: false,
     }, ...prev]);
     try {
       await Promise.all([
         fetchDeals().then(setDeals),
-        ...(change.dealSuccess
+        ...(changes.some(c => c.dealSuccess)
           ? [fetchCustomers().then(setCustomers), fetchProjects().then(setProjects)]
           : []),
       ]);

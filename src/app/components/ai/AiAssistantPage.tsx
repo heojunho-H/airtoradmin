@@ -28,7 +28,7 @@ export interface AiAssistantPageProps {
   onBackgroundReply?: (title: string) => void;
   onOpenSettings?: () => void;
   /** 견적서 입력 도우미가 딜·프로젝트를 바꿨다 — App 이 목록을 다시 불러온다 */
-  onDataChanged?: (change: IntakeDataChange) => void;
+  onDataChanged?: (changes: IntakeDataChange[]) => void;
 }
 
 const PANEL_KEY = 'ai_panel_collapsed';

@@ -39,6 +39,8 @@ export interface QuoteExtraction {
   /** 현장·지점·안 구분 라벨 (예: 김포, 스탠드) */
   variantLabel: string;
   quoteCount: number;
+  /** quotedTotal 의 기준 — one_off(1회 작업)가 아니면 확인 필요 */
+  pricingBasis: 'one_off' | 'per_visit' | 'monthly' | 'annual' | 'multi_year';
   serviceName: string;
   serviceCategory: string;
   /** 영업 화면 상세 수량 키(한글) → 대수 */
@@ -61,7 +63,8 @@ export interface QuoteExtraction {
 /** 확인 필요 사유 → 화면 문구 */
 export const FLAG_LABELS: Record<string, string> = {
   multi_quote: '한 파일에 견적서 여러 개',
-  vat_excluded: 'VAT 별도 금액',
+  vat_excluded: 'VAT 별도·면세 금액',
+  recurring: '정기·회당 금액(1회 작업 아님)',
   no_date: '견적일 없음',
   no_amount: '총 견적 금액 없음',
   no_company: '수신 회사명 없음',
