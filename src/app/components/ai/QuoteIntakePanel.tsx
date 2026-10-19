@@ -1,7 +1,7 @@
 // 견적서 입력 도우미 — PDF 를 여러 개(최대 10개) 올리면 Claude 가 3개씩 동시에 읽고(/api/files),
 // 대상 딜별로 묶어(src/lib/ai/intakeBatch.ts) 목록으로 보여 준다. 분명한 건은 미리 체크되고, 애매한 건은 펼쳐서 확인한다.
 // [선택한 N건 입력]은 묶음을 하나씩 차례로 반영한다 — 딜 PUT 이 행 전체를 덮어쓰므로 동시에 보내지 않는다.
-// 파일은 R2 에 남아 고객 관리 상세(CustomerFiles)와 아래 최근 목록에서 내려받는다.
+// 파일은 R2 에 남아 고객 관리 상세·영업 딜 상세(CompanyFiles)와 아래 최근 목록에서 내려받는다.
 // AI 페이지가 대화 화면으로 바뀌어도 숨김으로 유지되므로 판독 중에 다른 화면을 봐도 이어진다.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';

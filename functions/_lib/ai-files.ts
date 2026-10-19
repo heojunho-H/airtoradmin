@@ -480,8 +480,12 @@ export async function getFile(db: D1Database, id: string): Promise<FileRow | nul
   return db.prepare('SELECT * FROM ai_files WHERE id = ? AND deleted_at IS NULL').bind(id).first<FileRow>();
 }
 
+/** 견적서 판독의 같은 파일 찾기 — 고객사 파일(kind='file')은 보지 않는다 */
 export async function findBySha(db: D1Database, sha: string): Promise<FileRow | null> {
-  return db.prepare('SELECT * FROM ai_files WHERE sha256 = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1').bind(sha).first<FileRow>();
+  return db
+    .prepare("SELECT * FROM ai_files WHERE sha256 = ? AND kind = 'quote' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1")
+    .bind(sha)
+    .first<FileRow>();
 }
 
 export async function saveExtraction(db: D1Database, id: string, ex: QuoteExtraction): Promise<void> {
@@ -491,10 +495,11 @@ export async function saveExtraction(db: D1Database, id: string, ex: QuoteExtrac
     .run();
 }
 
+/** 회사명으로 찾으면 모든 파일, 없으면 견적서 도우미의 '최근 파일'(견적서만) */
 export async function listFiles(db: D1Database, opts: { companyKey?: string; limit: number }): Promise<FileRow[]> {
   const sql = opts.companyKey
     ? 'SELECT * FROM ai_files WHERE company_key = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ?'
-    : 'SELECT * FROM ai_files WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?';
+    : "SELECT * FROM ai_files WHERE kind = 'quote' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ?";
   const stmt = opts.companyKey ? db.prepare(sql).bind(opts.companyKey, opts.limit) : db.prepare(sql).bind(opts.limit);
   return (await stmt.all<FileRow>()).results;
 }
@@ -526,6 +531,7 @@ export function publicFile(f: FileRow) {
     id: f.id,
     kind: f.kind,
     fileName: f.file_name,
+    contentType: f.content_type,
     size: f.size,
     company: f.company,
     status: f.status,
@@ -540,4 +546,117 @@ export function publicFile(f: FileRow) {
     totalQuantity: ex?.totalQuantity ?? null,
     serviceName: ex?.serviceName ?? null,
   };
+}
+
+// ─── 고객사 파일 (고객 상세·영업 딜 상세에서 직접 올림 — 판독 없음) ─────────────────
+
+/** 고객사 파일 한 개 상한 (견적서 판독 PDF 는 MAX_FILE_BYTES) */
+export const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
+export const UPLOAD_WINDOW_MS = 10 * 60_000;
+export const UPLOADS_PER_WINDOW = 60;
+
+/** 실행·스크립트 파일은 받지 않는다 — 내려받은 사람이 실수로 실행하지 않게 (src/lib/ai/files.ts 와 같은 목록) */
+export const BLOCKED_EXTENSIONS = [
+  'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'pif', 'cpl', 'ps1', 'psm1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh',
+  'jar', 'apk', 'app', 'dmg', 'pkg', 'sh', 'bash', 'reg', 'lnk', 'dll', 'sys', 'hta', 'msc', 'gadget',
+];
+const BLOCKED = new Set(BLOCKED_EXTENSIONS);
+
+/** 확장자 → 저장·응답 형식. 브라우저가 보낸 형식은 믿지 않는다(위장된 HTML 이 이미지로 열리지 않게). */
+const EXT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+  heic: 'image/heic', heif: 'image/heif', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', svg: 'image/svg+xml',
+  hwp: 'application/x-hwp', hwpx: 'application/hwp+zip',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv', txt: 'text/plain', zip: 'application/zip',
+  mp4: 'video/mp4', mov: 'video/quicktime', dwg: 'application/acad',
+};
+
+/** 새 탭에서 바로 보여 줄 형식 — 스크립트가 없는 이미지·PDF 만. SVG·HTML 등은 늘 내려받기 */
+export const INLINE_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+export function fileExt(name: string): string {
+  const m = /\.([A-Za-z0-9]{1,10})$/.exec((name || '').trim());
+  return m ? m[1].toLowerCase() : '';
+}
+
+export function isBlockedFile(name: string): boolean {
+  return BLOCKED.has(fileExt(name));
+}
+
+export function contentTypeFor(name: string): string {
+  return EXT_TYPES[fileExt(name)] ?? 'application/octet-stream';
+}
+
+/** 파일명 — NFC(macOS 자모 분리 방지), 제어문자·경로 문자 제거, 200자 */
+export function cleanFileName(name: string): string {
+  const s = nfc(name || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\\/]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (s || 'file').slice(0, 200);
+}
+
+export function r2KeyForUpload(id: string, at: string, name: string): string {
+  const ext = fileExt(name);
+  return `files/${at.slice(0, 4)}/${at.slice(5, 7)}/${id}${ext ? `.${ext}` : ''}`;
+}
+
+/** 같은 고객사 — 회사명(정규화 키)·고객 ID·딜 ID 중 하나라도 맞으면 같은 목록 */
+export interface FileScope {
+  companyKey: string;
+  customerId: number | null;
+  dealIds: number[];
+}
+
+function scopeWhere(scope: FileScope): { sql: string; binds: unknown[] } | null {
+  const parts: string[] = [];
+  const binds: unknown[] = [];
+  if (scope.companyKey) {
+    parts.push('company_key = ?');
+    binds.push(scope.companyKey);
+  }
+  if (scope.customerId) {
+    parts.push('customer_id = ?');
+    binds.push(scope.customerId);
+  }
+  const ids = [...new Set(scope.dealIds.filter((n) => Number.isInteger(n) && n > 0))].slice(0, 50);
+  if (ids.length) {
+    parts.push(`deal_id IN (${ids.map(() => '?').join(', ')})`);
+    binds.push(...ids);
+  }
+  return parts.length ? { sql: `(${parts.join(' OR ')})`, binds } : null;
+}
+
+export async function listScopeFiles(db: D1Database, scope: FileScope, limit = 100): Promise<FileRow[]> {
+  const w = scopeWhere(scope);
+  if (!w) return [];
+  return (
+    await db
+      .prepare(`SELECT * FROM ai_files WHERE deleted_at IS NULL AND ${w.sql} ORDER BY created_at DESC LIMIT ?`)
+      .bind(...w.binds, limit)
+      .all<FileRow>()
+  ).results;
+}
+
+/** 같은 고객사에 이미 있는 같은 파일 (sha256) */
+export async function findScopeDuplicate(db: D1Database, sha: string, scope: FileScope): Promise<FileRow | null> {
+  const w = scopeWhere(scope);
+  if (!w) return null;
+  return db
+    .prepare(`SELECT * FROM ai_files WHERE deleted_at IS NULL AND sha256 = ? AND ${w.sql} ORDER BY created_at DESC LIMIT 1`)
+    .bind(sha, ...w.binds)
+    .first<FileRow>();
+}
+
+export async function countRecentUploads(db: D1Database, userName: string, sinceIso: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM ai_files WHERE kind = 'file' AND uploaded_by = ? AND created_at > ?")
+    .bind(userName, sinceIso)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }

@@ -546,7 +546,7 @@ export async function usageReport(db: D1Database, ym: string) {
 
 export async function audit(
   db: D1Database,
-  action: 'settings_update' | 'conversation_delete' | 'file_delete' | 'pin_fail' | 'pin_attempt',
+  action: 'settings_update' | 'conversation_delete' | 'file_upload' | 'file_delete' | 'pin_fail' | 'pin_attempt',
   actor: string | null,
   detail: unknown,
   ipHashValue: string | null,

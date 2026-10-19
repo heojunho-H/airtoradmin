@@ -43,6 +43,7 @@ export type AiErrorCode =
   | 'files_not_configured'
   | 'not_pdf'
   | 'not_quote'
+  | 'blocked_type'
   | 'internal';
 
 // message 는 사용자에게 그대로 보여줘도 되는 한국어 문장이어야 한다.
