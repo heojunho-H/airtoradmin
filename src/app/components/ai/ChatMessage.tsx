@@ -30,12 +30,14 @@ interface Props {
   message: UiMessage;
   isLast: boolean;
   me: string;
+  /** AI 답변 위에 보이는 전문가 이름 */
+  expertLabel: string;
   models?: AiModel[];
   onRetry: () => void;
   onContinue: () => void;
 }
 
-export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, models, onRetry, onContinue }: Props) {
+export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, expertLabel, models, onRetry, onContinue }: Props) {
   const [copied, setCopied] = useState(false);
 
   if (m.role === 'user') {
@@ -80,6 +82,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, m
         <AiSparkle className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
+        <p className="mb-1 text-[12px] font-semibold text-slate-500">{expertLabel}</p>
         {m.status === 'streaming' && !m.text && (
           <div className="flex items-center gap-2 py-2 text-[13px] text-slate-500" role="status">
             <span className="flex gap-1">

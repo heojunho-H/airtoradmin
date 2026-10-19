@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronFirst, Ellipsis, Pencil, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import { relativeTimeKo } from '../../../lib/ai/format';
+import { PERSONAS } from '../../../lib/ai/personas';
 import type { ConversationSummary } from '../../../lib/ai/types';
 import { AiSparkle } from './AiSparkle';
 import type { ListFilter } from './useConversationList';
@@ -165,7 +166,7 @@ export function ConversationList(props: Props) {
               <li key={c.id} ref={menuFor === c.id ? menuRef : undefined} className="group relative">
                 <button
                   onClick={() => onSelect(c.id)}
-                  title={`${c.title}\n${c.createdBy} · ${relativeTimeKo(c.lastMessageAt)}`}
+                  title={`${c.title}\n${PERSONAS[c.persona]?.label ?? ''} · ${c.createdBy} · ${relativeTimeKo(c.lastMessageAt)}`}
                   aria-current={active ? 'true' : undefined}
                   className={`block w-full truncate rounded-lg px-3 py-2 text-left text-[14px] transition-colors ${mine ? 'pr-9' : ''} ${
                     active ? 'bg-[#e6e9ee] font-medium text-slate-900' : 'text-slate-700 hover:bg-[#eceef2]'

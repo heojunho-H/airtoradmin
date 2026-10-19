@@ -5,7 +5,8 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLast, PanelLeft, X } from 'lucide-react';
 import { deleteConversation, renameConversation, toAiRequestError } from '../../../lib/ai/api';
-import type { AiDatasets } from '../../../lib/ai/types';
+import { PERSONAS } from '../../../lib/ai/personas';
+import type { AiDatasets, PersonaId } from '../../../lib/ai/types';
 import { ChatComposer } from './ChatComposer';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatHeader } from './ChatHeader';
@@ -113,6 +114,14 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
     chat.newChat();
   };
 
+  // 다른 전문가에게 이어서 묻기 — 새 대화를 열고 마지막 질문을 입력창에 옮긴다 (자동 전송하지 않음)
+  const switchExpert = (p: PersonaId) => {
+    if (!confirmLeave()) return;
+    const lastQuestion = [...chat.messages].reverse().find((m) => m.role === 'user')?.text ?? '';
+    chat.newChat(p);
+    setDraft(lastQuestion);
+  };
+
   const rename = async (id: string, title: string) => {
     try {
       const res = await renameConversation(id, title, userName);
@@ -203,7 +212,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
       disabled={!!chatDisabledReason || chat.loading}
       maxChars={config?.limits.messageChars ?? 8000}
       autoFocus={isActive}
-      placeholder={variant === 'dock' ? '이어서 질문하기' : NARROW ? '무엇이든 물어보세요' : '영업 분석부터 손익 점검까지'}
+      placeholder={variant === 'dock' ? '이어서 질문하기' : NARROW ? '질문을 입력하세요' : `${PERSONAS[chat.persona].label}에게 물어보세요`}
       onSend={chat.send}
       onStop={chat.stop}
       leading={
@@ -247,6 +256,8 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
               onExpandPanel={() => setCollapsed(false)}
               onOpenList={() => setDrawerOpen(true)}
               onNewChat={startNew}
+              onSwitchExpert={switchExpert}
+              disabled={chat.streaming || chat.loading}
             />
             {chat.loading ? (
               <div className="flex flex-1 items-center justify-center text-[13px] text-slate-400">대화를 불러오는 중…</div>
@@ -254,6 +265,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
               <ChatThread
                 messages={chat.messages}
                 me={userName}
+                expertLabel={PERSONAS[chat.persona].label}
                 models={config?.models}
                 isActive={isActive}
                 conversationKey={chat.conversationId ?? 'new'}

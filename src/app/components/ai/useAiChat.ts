@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AiRequestError, getConversation, streamChat, toAiRequestError } from '../../../lib/ai/api';
-import { buildSnapshot, snapshotSummary, type DataSnapshot } from '../../../lib/ai/context';
+import { buildSnapshot, snapshotSummary, type DataSnapshot } from '../../../lib/ai/snapshot';
 import type { AiConfig, AiDatasets, AiUsage, ConversationDetail, ConversationSummary, PersonaId } from '../../../lib/ai/types';
 
 export type Phase = 'preparing' | 'connecting' | 'thinking' | 'writing' | 'fallback';

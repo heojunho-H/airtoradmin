@@ -7,6 +7,7 @@ import type { UiMessage } from './useAiChat';
 interface Props {
   messages: UiMessage[];
   me: string;
+  expertLabel: string;
   models?: AiModel[];
   isActive: boolean;
   conversationKey: string;
@@ -15,7 +16,7 @@ interface Props {
 }
 
 /** 바닥 근처에 있을 때만 자동으로 따라 내려간다. 숨김 → 다시 보일 때 스크롤 위치를 복원한다. */
-export function ChatThread({ messages, me, models, isActive, conversationKey, onRetry, onContinue }: Props) {
+export function ChatThread({ messages, me, expertLabel, models, isActive, conversationKey, onRetry, onContinue }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const saved = useRef(0);
@@ -53,7 +54,7 @@ export function ChatThread({ messages, me, models, isActive, conversationKey, on
       <div ref={ref} onScroll={onScroll} className="h-full overflow-y-auto px-4 md:px-8 py-6" role="log" aria-live="off" aria-label="대화 내용">
         <div className="mx-auto max-w-[800px] space-y-6">
           {messages.map((m, i) => (
-            <ChatMessage key={m.key} message={m} isLast={i === messages.length - 1} me={me} models={models} onRetry={onRetry} onContinue={onContinue} />
+            <ChatMessage key={m.key} message={m} isLast={i === messages.length - 1} me={me} expertLabel={expertLabel} models={models} onRetry={onRetry} onContinue={onContinue} />
           ))}
         </div>
       </div>
