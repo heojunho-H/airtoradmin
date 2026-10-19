@@ -68,6 +68,11 @@ export default defineConfig({
         target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
         changeOrigin: true,
       },
+      // 견적서 입력 도우미·고객사 파일 (R2·D1) — 위와 같은 Function
+      '/api/files': {
+        target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,

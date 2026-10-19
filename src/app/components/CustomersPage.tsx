@@ -38,6 +38,7 @@ import {
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
+import { CustomerFiles } from './CustomerFiles';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
@@ -2332,6 +2333,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                           </ul>
                         </div>
                       )}
+
+                      {/* 견적서·파일 — AI 견적서 입력 도우미로 올린 원본 (R2) */}
+                      <CustomerFiles company={selectedCustomer.company} />
                     </div>
                   </div>
                 </div>

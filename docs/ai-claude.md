@@ -1,6 +1,6 @@
 # AI (Anthropic Claude) 운영 가이드
 
-AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치를 모두 Anthropic Claude 로 처리한다 (2026-10, Gemini 제거).
+AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 · 견적서 입력 도우미(PDF 판독)를 모두 Anthropic Claude 로 처리한다 (2026-10, Gemini 제거).
 관리자는 **설정 > AI 모델 설정**에서 기능별 기본 모델·추론 강도·사용 여부를 정하고(관리자 PIN), 직원은 AI 페이지에서 대화마다 허용된 모델 중 하나를 고를 수 있다.
 대화는 Cloudflare D1 에 저장되며 **팀 전체에 공유**된다.
 
@@ -16,10 +16,15 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치�
 | `functions/_lib/ai-staffing.ts` | 인력배치 프롬프트·스키마·입력 검증 (브라우저에서 서버로 이전) |
 | `functions/_lib/ai-prompts.ts` | 전문가 에이전트 5종 프롬프트(역할·규칙·판단 기준·분석 절차), 데이터 스냅샷 블록, 기업정보 프롬프트 |
 | `functions/_lib/ai-store.ts` / `ai-http.ts` / `ai-client.ts` | D1 SQL / Origin·SSE·PIN 헬퍼 / SDK 클라이언트·오류 매핑 |
+| `functions/api/files.ts` | 견적서 입력 도우미 — PDF 업로드+판독(SSE)·파일 목록·내려받기·연결·삭제. 본문은 R2(`FILES`), 기록은 D1 `ai_files` |
+| `functions/_lib/ai-files.ts` | 견적서 판독 프롬프트·JSON 스키마·결과 검증(금액·수량 교차 확인), `ai_files` SQL |
+| `functions/_lib/ai-auth.ts` | D1 확인·관리자 PIN 확인·"작성자 또는 PIN" 권한 (assistant·files 공용) |
 | `d1/migrations/0001_ai_init.sql` | D1 스키마 (재실행 안전) |
+| `d1/migrations/0002_ai_files.sql` | 견적서·고객사 파일 테이블 `ai_files` (재실행 안전) |
 | `src/app/components/ai/*` | AI 어시스턴트 페이지 (대화 목록·스트리밍·마크다운·모델 선택) |
 | `src/app/components/settings/*` | 설정 페이지 (AI 모델 설정·사용량·연결 상태) |
-| `src/lib/ai/*` | API 클라이언트·SSE 파서·전문가 정의(`personas.ts`)·포맷터 |
+| `src/lib/ai/*` | API 클라이언트·SSE 파서·전문가 정의(`personas.ts`)·포맷터. `intake.ts` = 견적서 매칭·변경표·딜/프로젝트 반영, `files.ts` = `/api/files` 클라이언트 |
+| `src/app/components/ai/QuoteIntakePanel.tsx` · `src/app/components/CustomerFiles.tsx` | 견적서 입력 도우미 화면 / 고객 상세의 "견적서·파일" 목록 |
 | `src/lib/ai/snapshot/*` | 전문가별 데이터 스냅샷 — `derive.ts` 가 원본 기록에서 지표를 다시 계산, `sales·crm·supply·profit·overview.ts` 가 전문가별 섹션 |
 
 ## 최초 설정 순서
@@ -39,6 +44,14 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치�
    - Production → `airtoradmin-ai`, Preview → `airtoradmin-ai-preview`
    - ⚠️ 저장소에 `wrangler.toml` 을 만들면 대시보드 바인딩이 그 파일로 대체된다. 만들지 않는다.
 
+### 2-1. Cloudflare R2 (견적서 입력 도우미 파일 보관)
+1. 대시보드 > Storage & Databases > R2 — 처음이면 R2 구독을 활성화한다(무료 한도: 저장 10GB/월, 쓰기 100만·읽기 1,000만 회/월, 내보내기 무료).
+2. 버킷 만들기: `airtoradmin-files`(운영), `airtoradmin-files-preview`(프리뷰). 위치 자동, 공개 접근·커스텀 도메인 **켜지 않는다** (파일은 `/api/files` 로만 내려받는다).
+3. Pages 프로젝트 > Settings > Bindings > Add > R2 bucket: 변수명 **`FILES`** — Production → `airtoradmin-files`, Preview → `airtoradmin-files-preview`.
+4. 두 D1 콘솔에 `d1/migrations/0002_ai_files.sql` 을 1번과 같은 방식(주석 제거·한 줄)으로 실행한다.
+5. 재배포 후 AI 페이지 > 견적서 입력 도우미 화면의 "최근 올린 견적서"가 오류 없이 보이면 된다.
+   - 바인딩이 없으면 "파일 저장소(R2)가 연결되지 않았습니다", 테이블이 없으면 "처리 중 오류가 발생했습니다"(로그에 `no such table: ai_files`).
+
 ### 3. Cloudflare Pages 환경변수 (Production · Preview 모두)
 | 변수 | 값 |
 |---|---|
@@ -51,7 +64,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치�
 ### 4. WAF (airtoradmin.co.kr 존)
 채팅에 코드·표를 붙여넣으면 무료 플랜 관리형 룰("React - RCE - CVE-2025-55182")이 403 으로 막을 수 있다 (`/api/claude` 전례).
 - Security > WAF > Custom rules > Create rule
-  - 조건: `URI Path` equals `/api/assistant` **or** `URI Path` equals `/api/staffing`
+  - 조건: `URI Path` equals `/api/assistant` **or** `URI Path` equals `/api/staffing` **or** `URI Path` equals `/api/files`(견적서 PDF 업로드)
   - 동작: **Skip** → "All managed rules" (관리형 룰 단계 건너뛰기)
 - (선택) Rate limiting rule: 같은 경로 POST, IP당 10초 20회.
 - 2026-10-19 배포 전 점검: 코드·마크다운 표·`<script>`/SQL 이 섞인 본문 3종을 `/api/assistant` 로 보내 모두 통과(405, 함수 배포 전이라 정상). Skip 룰은 실데이터 본문 대비 방어용.
@@ -116,6 +129,15 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
   저장된 집계 필드 중 갱신되지 않는 것(고객책임자 매출·성과평가, 작업팀장 진행 건수·저장 등급, 고객의 저장된 다음 관리일, 프로젝트 AI 채택)은 쓰지 않고
   원본 기록에서 다시 계산한다. 공식은 화면과 같게 유지한다 — 화면 공식을 바꾸면 `src/lib/ai/snapshot/derive.ts` 와 `ai-prompts.ts` 도 함께 고친다.
   기록 입력률이 20% 미만인 항목(예: 작업팀장 배정, 리포트 전송 체크)은 목록 대신 "데이터 부족"으로 안내한다. '최신 데이터로 갱신'은 다음 질문에 새 스냅샷을 덧붙인다.
+- **견적서 입력 도우미**: AI 페이지 6번째 카드(또는 헤더 "전문가 바꾸기" 메뉴). 대화·스냅샷을 쓰지 않는 별도 화면이다.
+  1. PDF(20MB 이하)를 올리면 서버가 R2 에 저장하고 Claude 가 문서를 읽어 JSON 스키마로 돌려준다(모델 = 설정의 AI 어시스턴트 모델, 추론 강도 low, 사용량 항목 "견적서 입력"). 같은 파일(sha256)은 다시 판독하지 않는다. 견적서가 아니면 파일을 지운다.
+  2. 브라우저가 최신 딜·고객으로 매칭한다 — 회사명 정규화(`src/lib/company.ts`) → 같은 회사 딜을 문의일-견적일 간격·수량 일치·진행 상태·서비스로 점수화, 정확히 같은 이름이 없으면 비슷한 이름(포함 관계) 후보.
+  3. 확인 카드에서 고객사·작업건·고객책임자를 고르고 변경표(현재 → 견적서)를 확인한 뒤 [시스템에 입력].
+     - 기존 딜: 반영 직전에 딜을 다시 받아 합친 뒤 PUT(행 전체 덮어쓰기). 견적 금액(`₩N만`)·장비 구성(10개 키)·총 수량은 다르면 덮어쓰고, 서비스·담당자·고객책임자는 비어 있을 때만 채운다. 신규·유선상담이면 '견적서 발송'으로 올린다. 관리 메모 끝에 `[견적서 반영 날짜 금액 · 파일명]` 한 줄.
+     - 맞는 딜이 없으면 새 딜(견적서 발송·진행중, 문의일 = 견적일).
+     - 수주 딜이면 서버가 고객 작업 이력을 갱신하고, 프로젝트는 생성 후 갱신되지 않으므로 견적·부가세(q×10/110)·순매출을 직접 PUT 한다.
+     - 서버 동기화가 실패해도 딜이 저장됐으면(`deal_persisted`) 저장된 것으로 안내한다.
+  4. 파일을 고객사(정규화 키)·딜에 연결 → 고객 관리 상세의 "견적서·파일"에서 내려받는다(수주 전 견적서도 같은 회사명이면 보인다). 삭제는 올린 사람 또는 관리자 PIN, 기록만 지우고 R2 본문은 남긴다.
 - **비용 추정**: 정가 × 토큰(캐시 읽기·쓰기 포함) + 웹 검색 $10/1,000회, 환율 1,400원/$ 가정 (`src/lib/ai/format.ts` `USD_TO_KRW`). 실제 청구는 Anthropic Console 기준.
 - **권한**: 대화 열람·이어쓰기는 누구나, 이름 변경·삭제는 작성자(또는 PIN). 설정 저장은 PIN(IP당 15분 10회 시도 제한, 시도 기록용 D1 이 없으면 PIN 확인 자체를 거부). 설정 변경·삭제·PIN 실패는 `ai_audit` 에 남는다.
   작성자 이름은 로그인 시 저장된 localStorage 값이라 신원 증명은 아니다 (실제 인증은 후속 과제).
@@ -142,6 +164,9 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
 | "이번 달 AI 사용 한도에 도달했습니다" | Anthropic Console 지출 한도 상향 또는 다음 달 대기 |
 | 긴 답변이 중간에 끊김 + 저장 안 됨 | Workers 무료 플랜 CPU 초과(1102) 가능성 — 6번 |
 | "안전 정책에 따라 AI가 답변하지 않았습니다" | 분류기 거부. 표현을 바꿔 재시도. 반복되면 다른 모델 선택 |
+| "파일 저장소(R2)가 연결되지 않았습니다" | 2-1번 `FILES` 바인딩(해당 환경) 누락 — 추가 후 재배포 |
+| 견적서 업로드가 "보안 필터…"로 실패 | `.co.kr` WAF 가 multipart 본문을 차단 — 4번 Skip 룰에 `/api/files` 추가 |
+| "견적서로 보이지 않습니다" | 판독 결과가 견적서가 아님(documentType other). 스캔 품질이 낮으면 원본 PDF 로 다시 |
 | 인력배치 "AI 호출 타임아웃 (90초)" | 인력배치에 추론 강도가 높은 모델을 지정한 경우 — 설정에서 effort 를 낮추거나 Sonnet 4.6/5.5 로 |
 
 ## 남은 정리 (2026-10 배포 약 1주 후)

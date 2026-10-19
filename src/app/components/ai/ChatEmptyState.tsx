@@ -1,20 +1,26 @@
 import type { ReactNode } from 'react';
-import { PERSONA_ORDER, PERSONAS } from '../../../lib/ai/personas';
+import { INTAKE_AGENT, PERSONA_ORDER, PERSONAS } from '../../../lib/ai/personas';
 import type { PersonaId } from '../../../lib/ai/types';
 import { AiSparkle } from './AiSparkle';
 
 interface Props {
   persona: PersonaId;
   onPersona: (p: PersonaId) => void;
+  /** 6번째 카드 — 견적서 입력 도우미 화면으로 */
+  onIntake: () => void;
   onAsk: (text: string) => void;
   disabled?: boolean;
   /** 가운데 큰 입력창 (ChatComposer variant="hero") */
   composer: ReactNode;
 }
 
-/** 새 대화 첫 화면 — ✦ 제목, 전문가 카드, 큰 입력창, 고른 전문가의 추천 질문 */
-export function ChatEmptyState({ persona, onPersona, onAsk, disabled, composer }: Props) {
+const CARD = 'flex w-[9.5rem] flex-shrink-0 snap-start flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors md:w-auto';
+const CARD_IDLE = 'border-[#e6e9ee] bg-white hover:border-slate-300';
+
+/** 새 대화 첫 화면 — ✦ 제목, 전문가 카드(5 + 견적서 입력 도우미), 큰 입력창, 고른 전문가의 추천 질문 */
+export function ChatEmptyState({ persona, onPersona, onIntake, onAsk, disabled, composer }: Props) {
   const config = PERSONAS[persona];
+  const IntakeIcon = INTAKE_AGENT.icon;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 md:px-8">
       <div className="mx-auto flex min-h-full max-w-[800px] flex-col justify-center py-8 md:py-12">
@@ -26,9 +32,9 @@ export function ChatEmptyState({ persona, onPersona, onAsk, disabled, composer }
         </div>
 
         <div
-          role="radiogroup"
+          role="group"
           aria-label="전문가 선택"
-          className="-mx-4 mt-7 flex snap-x gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:mt-8 md:grid md:grid-cols-5 md:overflow-visible md:px-0"
+          className="-mx-4 mt-7 flex snap-x gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:mt-8 md:grid md:grid-cols-3 md:overflow-visible md:px-0"
         >
           {PERSONA_ORDER.map((id) => {
             const p = PERSONAS[id];
@@ -37,12 +43,9 @@ export function ChatEmptyState({ persona, onPersona, onAsk, disabled, composer }
             return (
               <button
                 key={id}
-                role="radio"
-                aria-checked={active}
+                aria-pressed={active}
                 onClick={() => onPersona(id)}
-                className={`flex w-[9.5rem] flex-shrink-0 snap-start flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors md:w-auto ${
-                  active ? 'border-[#5b9cf2] bg-[#f3f8ff] shadow-[0_2px_10px_rgba(59,130,246,0.10)]' : 'border-[#e6e9ee] bg-white hover:border-slate-300'
-                }`}
+                className={`${CARD} ${active ? 'border-[#5b9cf2] bg-[#f3f8ff] shadow-[0_2px_10px_rgba(59,130,246,0.10)]' : CARD_IDLE}`}
               >
                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${active ? 'bg-[#3b82f6] text-white' : 'bg-slate-100 text-slate-500'}`}>
                   <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
@@ -52,6 +55,17 @@ export function ChatEmptyState({ persona, onPersona, onAsk, disabled, composer }
               </button>
             );
           })}
+          {/* 대화가 아니라 업로드 화면으로 바뀐다 */}
+          <button onClick={onIntake} className={`${CARD} ${CARD_IDLE}`}>
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+              <IntakeIcon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+            </span>
+            <span className="flex flex-wrap items-center gap-x-1 text-[14px] font-semibold text-slate-800">
+              {INTAKE_AGENT.label}
+              <span className="rounded bg-[#eef5ff] px-1 py-px text-[10px] font-semibold text-[#3b82f6]">NEW</span>
+            </span>
+            <span className="text-[12px] leading-snug text-slate-500 break-keep">{INTAKE_AGENT.description}</span>
+          </button>
         </div>
 
         <div className="mt-5">{composer}</div>

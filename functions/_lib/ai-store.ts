@@ -427,9 +427,12 @@ export function turnStatements(db: D1Database, t: TurnRecord): D1PreparedStateme
 
 export type UsageStatus = 'ok' | 'max_tokens' | 'refusal' | 'error' | 'aborted' | 'invalid_output';
 
+/** 사용량 집계 단위 — 설정 기능(Feature) + 설정 없이 다른 기능의 모델을 빌려 쓰는 기능 */
+export type UsageFeature = Feature | 'intake';
+
 export interface UsageRecord {
   ym: string;
-  feature: Feature;
+  feature: UsageFeature;
   model: string;
   requestedModel?: string | null;
   effort?: Effort | null;
@@ -543,7 +546,7 @@ export async function usageReport(db: D1Database, ym: string) {
 
 export async function audit(
   db: D1Database,
-  action: 'settings_update' | 'conversation_delete' | 'pin_fail' | 'pin_attempt',
+  action: 'settings_update' | 'conversation_delete' | 'file_delete' | 'pin_fail' | 'pin_attempt',
   actor: string | null,
   detail: unknown,
   ipHashValue: string | null,

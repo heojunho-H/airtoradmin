@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronLast, PanelLeft, SquarePen } from 'lucide-react';
 import { formatKrw } from '../../../lib/ai/format';
-import { PERSONA_ORDER, PERSONAS } from '../../../lib/ai/personas';
+import { INTAKE_AGENT, PERSONA_ORDER, PERSONAS } from '../../../lib/ai/personas';
 import type { PersonaId } from '../../../lib/ai/types';
 
 interface HeaderProps {
@@ -17,10 +17,12 @@ interface HeaderProps {
   onNewChat: () => void;
   /** 다른 전문가로 새 대화 (마지막 질문을 입력창에 옮긴다) */
   onSwitchExpert: (p: PersonaId) => void;
+  /** 견적서 입력 도우미 화면으로 (대화는 그대로) */
+  onOpenIntake?: () => void;
   disabled: boolean;
 }
 
-function ExpertSwitcher({ current, onPick, disabled }: { current: PersonaId; onPick: (p: PersonaId) => void; disabled: boolean }) {
+function ExpertSwitcher({ current, onPick, onIntake, disabled }: { current: PersonaId; onPick: (p: PersonaId) => void; onIntake?: () => void; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -75,6 +77,25 @@ function ExpertSwitcher({ current, onPick, disabled }: { current: PersonaId; onP
               </button>
             );
           })}
+          {onIntake && (
+            <>
+              <div className="mx-2 my-1 border-t border-slate-100" />
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onIntake();
+                }}
+                className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50"
+              >
+                <INTAKE_AGENT.icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" strokeWidth={1.9} />
+                <span>
+                  <span className="block text-[13px] font-medium text-slate-800">{INTAKE_AGENT.label}</span>
+                  <span className="block text-[11px] text-slate-500">{INTAKE_AGENT.description}</span>
+                </span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -83,7 +104,7 @@ function ExpertSwitcher({ current, onPick, disabled }: { current: PersonaId; onP
 
 /** 대화 화면 상단의 얇은 헤더 (빈 화면에는 없다) */
 export function ChatHeader(props: HeaderProps) {
-  const { persona, title, createdBy, me, costUsd, panelCollapsed, onExpandPanel, onOpenList, onNewChat, onSwitchExpert, disabled } = props;
+  const { persona, title, createdBy, me, costUsd, panelCollapsed, onExpandPanel, onOpenList, onNewChat, onSwitchExpert, onOpenIntake, disabled } = props;
   const expert = PERSONAS[persona];
   const Icon = expert.icon;
   const other = createdBy && createdBy !== me;
@@ -108,7 +129,7 @@ export function ChatHeader(props: HeaderProps) {
           {formatKrw(costUsd)}
         </span>
       )}
-      <ExpertSwitcher current={persona} onPick={onSwitchExpert} disabled={disabled} />
+      <ExpertSwitcher current={persona} onPick={onSwitchExpert} onIntake={onOpenIntake} disabled={disabled} />
       <button
         onClick={onNewChat}
         className={`${panelCollapsed ? 'inline-flex' : 'inline-flex lg:hidden'} rounded-lg p-2 text-slate-500 hover:bg-slate-100`}

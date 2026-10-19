@@ -6,6 +6,7 @@ import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPa
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
 import type { AiDatasets } from '../lib/ai/types';
+import type { IntakeDataChange } from './components/ai/QuoteIntakePanel';
 
 // AI 어시스턴트·설정은 첫 방문 때 내려받는다 (마크다운 렌더러 포함 별도 청크)
 const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
@@ -180,6 +181,28 @@ export default function App() {
       read: false,
     }, ...prev]);
     setAiUnread(true);
+  }, []);
+
+  // 견적서 입력 도우미가 딜을 바꾸면 영업 목록을 다시 불러온다.
+  // 수주 딜이면 서버가 고객 작업 이력·프로젝트를 갱신하므로 둘도 다시 불러온다 (handleDealSuccess 와 같음)
+  const handleAiDataChanged = useCallback(async (change: IntakeDataChange) => {
+    setNotifications(prev => [{
+      id: Date.now() + Math.random(),
+      type: 'admin_action',
+      message: `[${change.company}] 견적서가 ${change.created ? `새 딜(#${change.dealId})로 등록` : `딜 #${change.dealId}에 입력`}되었습니다`,
+      timestamp: new Date(),
+      read: false,
+    }, ...prev]);
+    try {
+      await Promise.all([
+        fetchDeals().then(setDeals),
+        ...(change.dealSuccess
+          ? [fetchCustomers().then(setCustomers), fetchProjects().then(setProjects)]
+          : []),
+      ]);
+    } catch (err) {
+      console.error('견적서 입력 후 데이터 새로고침 실패:', err);
+    }
   }, []);
 
   const goTo = (page: PageId) => {
@@ -556,6 +579,7 @@ export default function App() {
                   onStreamingChange={setAiStreaming}
                   onBackgroundReply={handleAiBackgroundReply}
                   onOpenSettings={openSettings}
+                  onDataChanged={handleAiDataChanged}
                 />
               </Suspense>
             </div>

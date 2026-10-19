@@ -2,7 +2,7 @@
 // ID(assistant·sales·crm·supply·profit)는 D1 대화에 저장되므로 바꾸지 않는다.
 // 추천 질문은 전문가 스냅샷(src/lib/ai/snapshot/)에 들어 있는 데이터로 답할 수 있는 것만 둔다.
 
-import { ChartColumn, ClipboardCheck, Gauge, TrendingUp, Users, type LucideIcon } from 'lucide-react';
+import { ChartColumn, ClipboardCheck, FileUp, Gauge, TrendingUp, Users, type LucideIcon } from 'lucide-react';
 import type { PersonaId } from './types';
 
 export const PERSONA_ORDER: PersonaId[] = ['assistant', 'sales', 'crm', 'supply', 'profit'];
@@ -93,3 +93,11 @@ export const PERSONAS: Record<PersonaId, PersonaConfig> = {
 export function isPersonaId(v: unknown): v is PersonaId {
   return typeof v === 'string' && (PERSONA_ORDER as string[]).includes(v);
 }
+
+/** 견적서 입력 도우미 — 채팅 전문가가 아니다(대화·스냅샷 없음). PDF 를 읽어 딜·고객에 입력한다 (QuoteIntakePanel). */
+export const INTAKE_AGENT = {
+  label: '견적서 입력 도우미',
+  short: '견적서',
+  description: '견적서 PDF로 딜·고객 자동 입력',
+  icon: FileUp,
+} satisfies Omit<PersonaConfig, 'prompts'>;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getUsage, toAiRequestError } from '../../../lib/ai/api';
-import { FEATURE_LABELS, formatKrw, formatTokens, formatUsd, kstMonth, USD_TO_KRW } from '../../../lib/ai/format';
+import { formatKrw, formatTokens, formatUsd, kstMonth, USAGE_FEATURE_LABELS, USD_TO_KRW } from '../../../lib/ai/format';
 import type { UsageReport } from '../../../lib/ai/types';
 
 export function AiUsageCard() {
@@ -72,7 +72,7 @@ export function AiUsageCard() {
                   <tbody>
                     {report.byFeatureModel.map((r) => (
                       <tr key={`${r.feature}-${r.model}`} className="border-t border-slate-100">
-                        <td className="px-3 py-2 whitespace-nowrap">{FEATURE_LABELS[r.feature] ?? r.feature}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{USAGE_FEATURE_LABELS[r.feature] ?? r.feature}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{r.label}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {r.calls}

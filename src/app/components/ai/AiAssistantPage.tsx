@@ -1,6 +1,7 @@
 // AI 어시스턴트 전용 페이지 (사이드바 "AI 어시스턴트") — Claude 기반, 대화는 팀 전체 공유.
 // App 은 첫 방문 시 마운트한 뒤 숨김(hidden)으로 유지한다 → 다른 탭에 다녀와도 스트림·대화·입력이 유지된다.
 // 화면 구성은 Datarize AI 레퍼런스를 따른다: 왼쪽 연회색 대화 패널, 빈 화면은 ✦ 제목 + 큰 입력창 + 추천 카드.
+// 6번째 카드 "견적서 입력 도우미"는 대화가 아니라 업로드 화면(QuoteIntakePanel)으로 바꾼다 — 한 번 열면 숨김으로 유지.
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLast, PanelLeft, X } from 'lucide-react';
@@ -16,6 +17,7 @@ import { ConversationList } from './ConversationList';
 import { useAiChat } from './useAiChat';
 import { useAiConfig } from './useAiConfig';
 import { useConversationList } from './useConversationList';
+import { QuoteIntakePanel, type IntakeDataChange } from './QuoteIntakePanel';
 
 export interface AiAssistantPageProps {
   isActive: boolean;
@@ -25,6 +27,8 @@ export interface AiAssistantPageProps {
   onStreamingChange?: (streaming: boolean) => void;
   onBackgroundReply?: (title: string) => void;
   onOpenSettings?: () => void;
+  /** 견적서 입력 도우미가 딜·프로젝트를 바꿨다 — App 이 목록을 다시 불러온다 */
+  onDataChanged?: (change: IntakeDataChange) => void;
 }
 
 const PANEL_KEY = 'ai_panel_collapsed';
@@ -55,7 +59,7 @@ function Disclaimer({ compact }: { compact?: boolean }) {
   );
 }
 
-function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onStreamingChange, onBackgroundReply, onOpenSettings }: AiAssistantPageProps) {
+function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onStreamingChange, onBackgroundReply, onOpenSettings, onDataChanged }: AiAssistantPageProps) {
   const { config, error: configError, reload: reloadConfig } = useAiConfig();
   const list = useConversationList({ userName, isActive });
   const chat = useAiChat({
@@ -73,6 +77,14 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
   const [actionError, setActionError] = useState<string | null>(null);
   // 입력 초안 — 빈 화면(가운데 입력창) ↔ 대화 화면(하단 입력창)으로 바뀌어도 유지
   const [draft, setDraft] = useState('');
+  // 'intake' = 견적서 입력 도우미 화면. 처음 열 때 마운트하고 이후 숨김으로 유지 (판독 중에 대화로 가도 이어진다)
+  const [mode, setMode] = useState<'chat' | 'intake'>('chat');
+  const [intakeMounted, setIntakeMounted] = useState(false);
+  const openIntake = useCallback(() => {
+    setDrawerOpen(false);
+    setIntakeMounted(true);
+    setMode('intake');
+  }, []);
 
   const setCollapsed = (collapsed: boolean) => {
     setPanelCollapsed(collapsed);
@@ -105,12 +117,14 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
   const selectConversation = (id: string) => {
     setDrawerOpen(false);
     if (!confirmLeave()) return;
+    setMode('chat');
     chat.openConversation(id);
   };
 
   const startNew = () => {
     setDrawerOpen(false);
     if (!confirmLeave()) return;
+    setMode('chat');
     chat.newChat();
   };
 
@@ -158,7 +172,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
   const showThread = chat.loading || chat.messages.length > 0;
   const bannerText = chatDisabledReason || chat.loadError || actionError || chat.notice;
 
-  const renderList = (mode: 'panel' | 'drawer') => (
+  const renderList = (variant: 'panel' | 'drawer') => (
     <ConversationList
       items={list.items}
       activeId={chat.conversationId}
@@ -173,8 +187,8 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
       onNewChat={startNew}
       onRename={rename}
       onDelete={remove}
-      onCollapse={mode === 'panel' ? () => setCollapsed(true) : undefined}
-      onClose={mode === 'drawer' ? () => setDrawerOpen(false) : undefined}
+      onCollapse={variant === 'panel' ? () => setCollapsed(true) : undefined}
+      onClose={variant === 'drawer' ? () => setDrawerOpen(false) : undefined}
       onOpenSettings={onOpenSettings}
     />
   );
@@ -244,7 +258,22 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
       )}
 
       <section className="relative flex min-w-0 flex-1 flex-col" style={PAGE_BACKGROUND}>
-        {showThread ? (
+        {intakeMounted && (
+          <div className={mode === 'intake' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
+            <QuoteIntakePanel
+              isActive={isActive && mode === 'intake'}
+              userName={userName}
+              datasets={datasets}
+              loadFreshDatasets={loadFreshDatasets}
+              onDataChanged={onDataChanged}
+              panelCollapsed={panelCollapsed}
+              onExpandPanel={() => setCollapsed(false)}
+              onOpenList={() => setDrawerOpen(true)}
+              onBack={() => setMode('chat')}
+            />
+          </div>
+        )}
+        {mode === 'intake' ? null : showThread ? (
           <>
             <ChatHeader
               persona={chat.persona}
@@ -257,6 +286,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
               onOpenList={() => setDrawerOpen(true)}
               onNewChat={startNew}
               onSwitchExpert={switchExpert}
+              onOpenIntake={openIntake}
               disabled={chat.streaming || chat.loading}
             />
             {chat.loading ? (
@@ -302,6 +332,7 @@ function AiAssistantPage({ isActive, userName, datasets, loadFreshDatasets, onSt
             <ChatEmptyState
               persona={chat.persona}
               onPersona={chat.setPersona}
+              onIntake={openIntake}
               onAsk={chat.send}
               disabled={!!chatDisabledReason || chat.streaming}
               composer={

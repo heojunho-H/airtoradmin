@@ -8,6 +8,8 @@ export interface AiEnv {
   AI_ADMIN_PIN?: string;
   /** 쉼표 구분 추가 허용 Origin */
   AI_ALLOWED_ORIGINS?: string;
+  /** 견적서 등 업로드 파일 (R2). Production → airtoradmin-files, Preview → airtoradmin-files-preview */
+  FILES?: R2Bucket;
 }
 
 export type AiErrorCode =
@@ -38,6 +40,9 @@ export type AiErrorCode =
   | 'web_search_disabled'
   | 'persist_failed'
   | 'aborted'
+  | 'files_not_configured'
+  | 'not_pdf'
+  | 'not_quote'
   | 'internal';
 
 // message 는 사용자에게 그대로 보여줘도 되는 한국어 문장이어야 한다.

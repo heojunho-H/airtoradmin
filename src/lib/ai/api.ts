@@ -66,12 +66,12 @@ export function toAiRequestError(err: unknown): AiRequestError {
   return new AiRequestError('unknown', '알 수 없는 오류가 발생했습니다.', { retryable: true });
 }
 
-async function getJson<T>(params: Record<string, string | number | null | undefined>): Promise<T> {
+export async function getJson<T>(params: Record<string, string | number | null | undefined>, endpoint: string = AI_ENDPOINT): Promise<T> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== '') qs.set(k, String(v));
   let res: Response;
   try {
-    res = await fetch(`${AI_ENDPOINT}?${qs}`, { headers: { Accept: 'application/json' } });
+    res = await fetch(`${endpoint}?${qs}`, { headers: { Accept: 'application/json' } });
   } catch (err) {
     throw toAiRequestError(err);
   }
@@ -154,8 +154,25 @@ export type StreamHandler = (event: string, data: any) => void;
  * 서버는 15초마다 ping 을 보내므로 idleMs 동안 아무 바이트도 없으면 끊긴 것으로 본다.
  * done/error 중 하나가 정확히 한 번 와야 하며, 없이 끝나면 stream_incomplete 로 던진다.
  */
-export async function streamSse(
+export function streamSse(
   body: Record<string, unknown>,
+  onEvent: StreamHandler,
+  signal: AbortSignal,
+  opts: { idleMs?: number } = {},
+): Promise<void> {
+  return streamSseFetch(
+    AI_ENDPOINT,
+    { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body) },
+    onEvent,
+    signal,
+    opts,
+  );
+}
+
+/** SSE 응답을 받는 요청 (JSON 이 아닌 본문 — 예: 파일 업로드 multipart — 도 보낼 수 있다) */
+export async function streamSseFetch(
+  url: string,
+  init: { method: 'POST'; headers?: Record<string, string>; body: BodyInit },
   onEvent: StreamHandler,
   signal: AbortSignal,
   opts: { idleMs?: number } = {},
@@ -179,12 +196,7 @@ export async function streamSse(
     resetIdle();
     let res: Response;
     try {
-      res = await fetch(AI_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify(body),
-        signal: inner.signal,
-      });
+      res = await fetch(url, { ...init, headers: { Accept: 'text/event-stream', ...(init.headers ?? {}) }, signal: inner.signal });
     } catch (err) {
       throw toAiRequestError(err);
     }

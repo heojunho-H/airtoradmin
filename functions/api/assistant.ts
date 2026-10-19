@@ -22,6 +22,7 @@
 // POST { action:'rename-conversation', id, title, userName, pin? }
 // POST { action:'delete-conversation', id, userName, pin? }
 
+import { ownerOrPin, requireDb, verifyPin } from '../_lib/ai-auth';
 import { prepareChat, streamChat, CHAT_LIMITS } from '../_lib/ai-chat';
 import { handleCompanyInfo } from '../_lib/ai-company';
 import {
@@ -36,7 +37,6 @@ import {
   nowIso,
   optionsResponse,
   readJsonCapped,
-  safeEqual,
   type AiEnv,
 } from '../_lib/ai-http';
 import {
@@ -58,7 +58,6 @@ import {
   listConversations,
   loadDisplayMessages,
   loadSettings,
-  recordPinAttempt,
   renameConversation,
   saveSettings,
   softDeleteConversation,
@@ -66,9 +65,6 @@ import {
 } from '../_lib/ai-store';
 
 const SDK_VERSION = '0.135.0';
-// IP 당 15분에 10번까지 PIN 을 확인한다 (성공 포함 — 동시 요청으로 대량 추측하는 것을 막기 위해 시도 자체를 센다)
-const PIN_MAX_ATTEMPTS = 10;
-const PIN_WINDOW_MS = 15 * 60 * 1000;
 
 type Ctx = EventContext<AiEnv, string, Record<string, unknown>>;
 
@@ -170,7 +166,7 @@ export const onRequestPost: PagesFunction<AiEnv> = async (context) => {
       case 'company-info':
         return await handleCompanyInfo(env, request, (p) => context.waitUntil(p), body);
       case 'verify-pin':
-        await verifyPin(context, body.pin, cleanUserName(body.userName));
+        await verifyPin(context.request, context.env, body.pin, cleanUserName(body.userName));
         return jsonFor(request, env, { ok: true });
       case 'save-settings':
         return await handleSaveSettings(context, body);
@@ -196,41 +192,14 @@ function toAiError(err: unknown): AiError {
   return new AiError(500, 'internal', '처리 중 오류가 발생했습니다.', { retryable: true });
 }
 
-async function requireDb(env: AiEnv): Promise<D1Database> {
-  const state = await dbState(env.AI_DB);
-  if (state === 'unbound' || !env.AI_DB) throw new AiError(503, 'not_configured', 'AI 저장소(D1)가 연결되지 않았습니다(관리자 확인 필요).');
-  if (state === 'no_tables') throw new AiError(503, 'db_not_initialized', 'AI 저장소 테이블이 아직 만들어지지 않았습니다(관리자 확인 필요).');
-  return env.AI_DB;
-}
 
-/**
- * PIN 확인 — 미설정이면 503. 시도 횟수 제한(D1)을 쓸 수 없으면 확인 자체를 거부한다(무제한 추측 방지).
- * IP 당 15분 10회를 넘으면 429. 실패는 감사 로그에 남긴다.
- */
-async function verifyPin(context: Ctx, pin: unknown, actor: string): Promise<void> {
-  const { request, env } = context;
-  if (!env.AI_ADMIN_PIN) {
-    throw new AiError(503, 'pin_not_configured', '관리자 PIN이 설정되지 않아 변경할 수 없습니다(Cloudflare 환경변수 AI_ADMIN_PIN).');
-  }
-  const db = await requireDb(env);
-  const hash = await ipHash(request);
-  const now = nowIso();
-  const attempts = await recordPinAttempt(db, hash, actor, now, new Date(Date.now() - PIN_WINDOW_MS).toISOString());
-  if (attempts > PIN_MAX_ATTEMPTS) {
-    throw new AiError(429, 'pin_locked', 'PIN 확인 시도가 너무 많아 잠시 잠겼습니다. 15분 후 다시 시도하세요.');
-  }
-  if (typeof pin !== 'string' || !pin || !(await safeEqual(pin, env.AI_ADMIN_PIN))) {
-    await audit(db, 'pin_fail', actor, null, hash, now).catch(() => {});
-    throw new AiError(401, 'bad_pin', 'PIN이 올바르지 않습니다.');
-  }
-}
 
 // ─── 설정 저장 ──────────────────────────────────────────────────────────
 
 async function handleSaveSettings(context: Ctx, body: Record<string, unknown>): Promise<Response> {
   const { request, env } = context;
   const actor = cleanUserName(body.userName);
-  await verifyPin(context, body.pin, actor);
+  await verifyPin(request, env, body.pin, actor);
   const db = await requireDb(env);
 
   const patch = body.settings && typeof body.settings === 'object' ? (body.settings as Record<string, unknown>) : null;
@@ -280,14 +249,6 @@ async function handleSaveSettings(context: Ctx, body: Record<string, unknown>): 
 
 // ─── 대화 이름 변경 / 삭제 (작성자 또는 PIN) ─────────────────────────────
 
-async function ownerOrPin(context: Ctx, body: Record<string, unknown>, createdBy: string, actor: string): Promise<void> {
-  if (createdBy === actor && actor !== '익명') return;
-  if (typeof body.pin === 'string' && body.pin) {
-    await verifyPin(context, body.pin, actor);
-    return;
-  }
-  throw new AiError(403, 'not_owner', '본인이 만든 대화만 바꿀 수 있습니다.');
-}
 
 async function handleRename(context: Ctx, body: Record<string, unknown>): Promise<Response> {
   const { request, env } = context;
@@ -297,7 +258,7 @@ async function handleRename(context: Ctx, body: Record<string, unknown>): Promis
   if (!id || !title) throw new AiError(400, 'bad_request', '대화 제목을 입력하세요.');
   const conv = await getConversation(db, id);
   if (!conv) throw new AiError(404, 'not_found', '대화를 찾을 수 없습니다.');
-  await ownerOrPin(context, body, conv.created_by, cleanUserName(body.userName));
+  await ownerOrPin(request, env, body, conv.created_by, cleanUserName(body.userName));
   await renameConversation(db, id, title, nowIso());
   return jsonFor(request, env, { ok: true, title });
 }
@@ -310,7 +271,7 @@ async function handleDelete(context: Ctx, body: Record<string, unknown>): Promis
   const conv = await getConversation(db, id);
   if (!conv) throw new AiError(404, 'not_found', '대화를 찾을 수 없습니다.');
   const actor = cleanUserName(body.userName);
-  await ownerOrPin(context, body, conv.created_by, actor);
+  await ownerOrPin(request, env, body, conv.created_by, actor);
   const at = nowIso();
   await softDeleteConversation(db, id, actor, at);
   await audit(db, 'conversation_delete', actor, { id, title: conv.title }, await ipHash(request), at).catch(() => {});

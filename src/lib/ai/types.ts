@@ -3,6 +3,8 @@
 export type PersonaId = 'assistant' | 'sales' | 'crm' | 'supply' | 'profit';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AiFeature = 'chat' | 'company_info' | 'staffing';
+/** 사용량 집계 항목 — 설정 모델 카드가 없는 기능(견적서 입력)도 포함 */
+export type UsageFeature = AiFeature | 'intake';
 
 export interface AiModel {
   id: string;
@@ -108,7 +110,7 @@ export interface UsageReport {
   month: string;
   estimate: boolean;
   totals: UsageAgg;
-  byFeatureModel: Array<UsageAgg & { feature: AiFeature; model: string; label: string }>;
+  byFeatureModel: Array<UsageAgg & { feature: UsageFeature; model: string; label: string }>;
   byUser: Array<{ userName: string; calls: number; costUsd: number }>;
   daily: Array<{ date: string; calls: number; costUsd: number }>;
 }

@@ -1,6 +1,6 @@
 // AI 화면 공용 포맷터 — KST 날짜, 상대 시간, 토큰 수, 추정 원화 비용, 라벨.
 
-import type { AiFeature, AiModel, Effort } from './types';
+import type { AiFeature, AiModel, Effort, UsageFeature } from './types';
 
 const KST_OFFSET_MS = 9 * 3600 * 1000;
 
@@ -88,6 +88,11 @@ export const FEATURE_LABELS: Record<AiFeature, string> = {
   chat: 'AI 어시스턴트',
   company_info: 'AI 기업정보',
   staffing: 'AI 인력배치',
+};
+
+export const USAGE_FEATURE_LABELS: Record<UsageFeature, string> = {
+  ...FEATURE_LABELS,
+  intake: '견적서 입력',
 };
 
 /** 'claude-haiku-4-5-20251001' → 'Claude Haiku 4.5' (목록에 없으면 ID에서 추정) */
