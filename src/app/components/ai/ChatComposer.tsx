@@ -35,7 +35,7 @@ export function ChatComposer({ variant, value, onChange, streaming, disabled, ma
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, [value]);
 
   const over = value.length > maxChars;
@@ -79,14 +79,14 @@ export function ChatComposer({ variant, value, onChange, streaming, disabled, ma
           rows={1}
           disabled={disabled}
           placeholder={placeholder ?? '질문을 입력하세요'}
-          className="min-w-0 flex-1 resize-none bg-transparent px-2 py-[6px] text-[16px] leading-[24px] text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 resize-none bg-transparent px-2 py-[6px] text-[19px] leading-[28px] text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
         />
-        {trailing && <div className="flex h-9 flex-shrink-0 items-center">{trailing}</div>}
+        {trailing && <div className="flex h-10 flex-shrink-0 items-center">{trailing}</div>}
         {streaming ? (
           <button
             type="button"
             onClick={onStop}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-slate-800 text-white hover:bg-slate-900"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] bg-slate-800 text-white hover:bg-slate-900"
             aria-label="응답 중지"
             title="응답 중지"
           >
@@ -97,15 +97,15 @@ export function ChatComposer({ variant, value, onChange, streaming, disabled, ma
             type="button"
             onClick={submit}
             disabled={!canSend}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#3b82f6] text-white transition-colors hover:bg-[#2f6fe0] disabled:cursor-not-allowed disabled:bg-[#dfe3e8]"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#3b82f6] text-white transition-colors hover:bg-[#2f6fe0] disabled:cursor-not-allowed disabled:bg-[#dfe3e8]"
             aria-label="보내기"
           >
-            <AiSparkle variant="white" className="h-[18px] w-[18px]" />
+            <AiSparkle variant="white" className="h-5 w-5" />
           </button>
         )}
       </div>
       {value.length > maxChars * 0.4 && (
-        <p className={`mt-1 pr-1 text-right text-[12px] ${over ? 'font-medium text-red-500' : 'text-slate-400'}`}>
+        <p className={`mt-1 pr-1 text-right text-[14px] ${over ? 'font-medium text-red-500' : 'text-slate-400'}`}>
           {value.length.toLocaleString()} / {maxChars.toLocaleString()}
         </p>
       )}

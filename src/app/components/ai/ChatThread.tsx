@@ -52,7 +52,7 @@ export function ChatThread({ messages, me, expertLabel, models, isActive, conver
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={ref} onScroll={onScroll} className="h-full overflow-y-auto px-4 md:px-8 py-6" role="log" aria-live="off" aria-label="대화 내용">
-        <div className="mx-auto max-w-[800px] space-y-6">
+        <div className="mx-auto max-w-[960px] space-y-6">
           {messages.map((m, i) => (
             <ChatMessage key={m.key} message={m} isLast={i === messages.length - 1} me={me} expertLabel={expertLabel} models={models} onRetry={onRetry} onContinue={onContinue} />
           ))}
@@ -64,7 +64,7 @@ export function ChatThread({ messages, me, expertLabel, models, isActive, conver
             const el = ref.current;
             if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
           }}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-[13px] font-medium text-slate-600 shadow-md border border-slate-200 hover:bg-slate-50"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-[15px] font-medium text-slate-600 shadow-md border border-slate-200 hover:bg-slate-50"
         >
           <ArrowDown className="w-3.5 h-3.5" /> 최신
         </button>
