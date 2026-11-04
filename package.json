@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "functions:typecheck": "tsc -p functions/tsconfig.json",
     "functions:build": "npx --yes wrangler@4 pages functions build --outdir .wrangler/functions-check --compatibility-date 2026-10-01",
-    "functions:dev": "npx --yes wrangler@4 pages dev dist --d1 AI_DB --compatibility-date 2026-10-01"
+    "functions:dev": "npx --yes wrangler@4 pages dev dist --d1 AI_DB --compatibility-date 2026-10-01",
+    "relay:typecheck": "tsc -p workers/anthropic-relay/tsconfig.json",
+    "relay:deploy": "npx --yes wrangler@4 deploy -c workers/anthropic-relay/wrangler.toml"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",

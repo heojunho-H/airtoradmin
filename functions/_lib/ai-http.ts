@@ -10,6 +10,8 @@ export interface AiEnv {
   AI_ALLOWED_ORIGINS?: string;
   /** 견적서 등 업로드 파일 (R2). Production → airtoradmin-files, Preview → airtoradmin-files-preview */
   FILES?: R2Bucket;
+  /** Anthropic 호출 중계 Worker (Service binding → airtoradmin-anthropic-relay). 없으면 직접 호출 */
+  ANTHROPIC_RELAY?: Fetcher;
 }
 
 export type AiErrorCode =
@@ -29,6 +31,7 @@ export type AiErrorCode =
   | 'not_owner'
   | 'auth'
   | 'model_unavailable'
+  | 'region_blocked'
   | 'rate_limited'
   | 'spend_limit'
   | 'overloaded'

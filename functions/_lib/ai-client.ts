@@ -15,7 +15,34 @@ export function createClient(env: AiEnv, opts: { timeoutMs?: number; maxRetries?
     apiKey: env.ANTHROPIC_API_KEY,
     timeout: opts.timeoutMs ?? 10 * 60 * 1000,
     maxRetries: opts.maxRetries ?? 1,
+    ...(env.ANTHROPIC_RELAY ? { fetch: relayFetch(env.ANTHROPIC_RELAY) } : {}),
   });
+}
+
+/**
+ * 홍콩(HKG) 등 Anthropic 미지원 지역에서 실행돼도 요청은 중계 Worker(미국 동부)에서 나가게 한다.
+ * 중계 Worker 자체에 닿지 못하면(삭제·배포 실패 등) 직접 호출로 넘어간다 — 그 경우 HKG 에서만 실패한다.
+ */
+function relayFetch(relay: Fetcher): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      return await relay.fetch(input as RequestInfo, init);
+    } catch (err) {
+      if (init?.signal?.aborted) throw err;
+      console.error('[ai] relay unreachable, calling directly', String(err).slice(0, 200));
+      return fetch(input as RequestInfo, init);
+    }
+  }) as typeof fetch;
+}
+
+/** 실제 경로(중계 포함)로 Anthropic 에 닿는지 — 토큰을 쓰지 않는 모델 목록 1건 조회. 정상이면 'ok', 아니면 오류 코드 */
+export async function probeAnthropic(env: AiEnv): Promise<string> {
+  try {
+    await createClient(env, { timeoutMs: 15_000, maxRetries: 0 }).models.list({ limit: 1 });
+    return 'ok';
+  } catch (err) {
+    return mapError(err).code;
+  }
 }
 
 function retryAfter(headers: Headers | undefined): number | undefined {
@@ -42,8 +69,20 @@ export function mapError(err: unknown): AiError {
   if (err instanceof Anthropic.AuthenticationError) {
     return new AiError(502, 'auth', 'AI API 키 오류입니다(관리자 확인 필요).');
   }
+  // 실행 위치가 Anthropic 미지원 지역(HKG 등)이면 403 {"type":"forbidden","message":"Request not allowed"} — 키·모델 문제 아님
+  if (err instanceof Anthropic.PermissionDeniedError && /Request not allowed/i.test(err.message || '')) {
+    const detail = `${err.status} ${err.message || ''}`.slice(0, 300);
+    console.error('[ai] region_blocked', detail);
+    return new AiError(502, 'region_blocked', 'AI 서버 접속 위치 문제로 요청이 거부되었습니다. 잠시 후 다시 시도하세요.', {
+      retryable: true,
+      detail,
+    });
+  }
   if (err instanceof Anthropic.PermissionDeniedError || err instanceof Anthropic.NotFoundError) {
-    return new AiError(502, 'model_unavailable', '선택한 모델을 사용할 수 없습니다. 설정에서 다른 모델을 선택하세요.');
+    // 403·404 는 모델 외의 이유(조직 권한·베타 기능 등)로도 온다 — 원문을 남겨야 원인을 알 수 있다
+    const detail = `${err.status} ${err.message || ''}`.slice(0, 300);
+    console.error('[ai] model_unavailable', detail);
+    return new AiError(502, 'model_unavailable', '선택한 모델을 사용할 수 없습니다. 설정에서 다른 모델을 선택하세요.', { detail });
   }
   if (err instanceof Anthropic.RateLimitError) {
     const body = err.error as { error?: { details?: { error_code?: string } } } | undefined;

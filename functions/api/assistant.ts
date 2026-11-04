@@ -23,6 +23,7 @@
 // POST { action:'delete-conversation', id, userName, pin? }
 
 import { ownerOrPin, requireDb, verifyPin } from '../_lib/ai-auth';
+import { probeAnthropic } from '../_lib/ai-client';
 import { prepareChat, streamChat, CHAT_LIMITS } from '../_lib/ai-chat';
 import { handleCompanyInfo } from '../_lib/ai-company';
 import {
@@ -68,6 +69,21 @@ const SDK_VERSION = '0.135.0';
 
 type Ctx = EventContext<AiEnv, string, Record<string, unknown>>;
 
+async function coloTrace(env: AiEnv): Promise<{ function: string | null; relay: string | null }> {
+  const colo = async (r: Promise<Response>) => {
+    try {
+      return /^colo=(\w+)$/m.exec(await (await r).text())?.[1] ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const [fn, relay] = await Promise.all([
+    colo(fetch('https://www.cloudflare.com/cdn-cgi/trace')),
+    env.ANTHROPIC_RELAY ? colo(env.ANTHROPIC_RELAY.fetch('https://relay/__relay/trace')) : Promise.resolve(null),
+  ]);
+  return { function: fn, relay };
+}
+
 export const onRequestGet: PagesFunction<AiEnv> = async (context) => {
   const { request, env } = context;
   try {
@@ -83,6 +99,12 @@ export const onRequestGet: PagesFunction<AiEnv> = async (context) => {
           apiKey: !!env.ANTHROPIC_API_KEY,
           pinConfigured: !!env.AI_ADMIN_PIN,
           sdk: SDK_VERSION,
+          relay: !!env.ANTHROPIC_RELAY,
+          // ?trace=1 — 이 함수와 중계 Worker 가 실제로 어디서 실행되는지(HKG 면 Anthropic 이 거부) + 실제 Anthropic 접속 여부.
+          // .github/workflows/ai-health.yml 이 주기적으로 확인한다.
+          ...(url.searchParams.get('trace') === '1'
+            ? { colo: await coloTrace(env), anthropic: await probeAnthropic(env) }
+            : {}),
         });
       case 'config':
         return jsonFor(request, env, {

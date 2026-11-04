@@ -99,7 +99,7 @@ export async function handleCompanyInfo(
         await logUsage(env, spec, conf.effort, userName, company, result, result.stopReason === 'max_tokens' ? 'max_tokens' : 'ok', Date.now() - started);
       } catch (err) {
         const e = mapError(err);
-        if (!sse.closed) sse.send('error', { code: e.code, message: e.message, retryable: e.retryable });
+        if (!sse.closed) sse.send('error', { code: e.code, message: e.message, retryable: e.retryable, ...(e.detail ? { detail: e.detail } : {}) });
       } finally {
         await sse.close();
       }

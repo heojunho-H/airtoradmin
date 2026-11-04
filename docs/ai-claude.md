@@ -17,6 +17,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 | `functions/_lib/ai-prompts.ts` | 전문가 에이전트 5종 프롬프트(역할·규칙·판단 기준·분석 절차), 데이터 스냅샷 블록, 기업정보 프롬프트 |
 | `functions/_lib/ai-store.ts` / `ai-http.ts` / `ai-client.ts` | D1 SQL / Origin·SSE·PIN 헬퍼 / SDK 클라이언트·오류 매핑 |
 | `functions/api/files.ts` | 견적서 입력 도우미 — PDF 업로드+판독(SSE) / 고객사 파일 — 직접 올리기(판독 없음)·목록·내려받기·보기·연결·삭제. 본문은 R2(`FILES`), 기록은 D1 `ai_files` |
+| `workers/anthropic-relay/` | Anthropic 호출 중계 Worker — 미국 동부(placement)에서 api.anthropic.com 으로 전달. Pages 의 Service binding `ANTHROPIC_RELAY` 로만 호출(공개 주소 없음) |
 | `functions/_lib/ai-files.ts` | 견적서 판독 프롬프트·JSON 스키마·결과 검증(금액·수량 교차 확인), `ai_files` SQL |
 | `functions/_lib/ai-auth.ts` | D1 확인·관리자 PIN 확인·"작성자 또는 PIN" 권한 (assistant·files 공용) |
 | `d1/migrations/0001_ai_init.sql` | D1 스키마 (재실행 안전) |
@@ -51,6 +52,17 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 4. 두 D1 콘솔에 `d1/migrations/0002_ai_files.sql` 을 1번과 같은 방식(주석 제거·한 줄)으로 실행한다.
 5. 재배포 후 AI 페이지 > 견적서 입력 도우미 화면의 "최근 올린 견적서"가 오류 없이 보이면 된다.
    - 바인딩이 없으면 "파일 저장소(R2)가 연결되지 않았습니다", 테이블이 없으면 "처리 중 오류가 발생했습니다"(로그에 `no such table: ai_files`).
+
+### 2-2. Anthropic 중계 Worker (홍콩 경유 403 방지)
+Pages Functions 는 요청을 받은 Cloudflare 데이터센터에서 실행된다. 한국 트래픽 일부가 **홍콩(HKG)** 으로 가는데, 홍콩은 Anthropic 지원 지역이 아니라
+`403 {"type":"forbidden","message":"Request not allowed"}` 로 거부된다(모델·키와 무관). 2026-11-04 운영 측정: HKG 2/2 실패, NRT 7/7 성공(Opus·Sonnet 모두).
+그래서 Anthropic 호출은 실행 위치를 미국 동부로 고정한 별도 Worker 를 거친다.
+1. `npx wrangler login` 후 `npm run relay:deploy` — Worker `airtoradmin-anthropic-relay` 배포 (`workers/anthropic-relay/wrangler.toml` 의 `[placement] region = "aws:us-east-1"`).
+2. Pages 프로젝트 > Settings > Bindings > Add > **Service binding**: 변수명 **`ANTHROPIC_RELAY`** → `airtoradmin-anthropic-relay` (Production · Preview 모두). 저장 후 재배포.
+3. 확인: `curl -s "https://airtoradmin.co.kr/api/assistant?action=status&trace=1"` → `relay:true`, `colo.relay` 가 미국(IAD 등), `anthropic:"ok"` 여야 한다. `colo.function` 은 HKG 여도 된다.
+4. 재발 감시: `.github/workflows/ai-health.yml` 이 3시간마다 3번을 확인하고, 실패하면 GitHub 가 메일로 알린다(토큰 비용 없음). Actions 탭에서 수동 실행도 된다.
+- 바인딩이 없거나 중계 Worker 에 닿지 못하면 직접 호출로 넘어간다(HKG 로 갈 때마다 "AI 서버 접속 위치 문제로 요청이 거부되었습니다").
+- 중계 Worker 는 api.anthropic.com 외 주소를 거절하고, API 키는 Pages 에만 둔다(Worker 는 헤더를 그대로 넘길 뿐).
 
 ### 3. Cloudflare Pages 환경변수 (Production · Preview 모두)
 | 변수 | 값 |
@@ -174,6 +186,8 @@ curl -N -X POST "$BASE/api/assistant" "${H[@]}" -d '{"action":"company-info","co
 |---|---|
 | "보안 필터(Cloudflare)가 요청을 차단했습니다" | WAF 403 — 4번 Skip 룰 확인. 그래도 막히면 `src/lib/ai/api.ts` 의 `AI_ENDPOINT` 와 함수 파일명을 다른 중립 단어로 변경 |
 | "AI 저장소(D1)가 연결되지 않았습니다" / "테이블이 아직 만들어지지 않았습니다" | 2번 바인딩(해당 환경) 또는 스키마 적용 누락. 설정 > 연결 상태에서 확인 |
+| "AI 서버 접속 위치 문제로 요청이 거부되었습니다" | 함수가 홍콩(HKG) 등 Anthropic 미지원 지역에서 실행됨 — 2-2번 중계 Worker·`ANTHROPIC_RELAY` 바인딩 확인 (`status&trace=1`) |
+| "선택한 모델을 사용할 수 없습니다" | Anthropic 403/404 — 응답의 `detail`(Anthropic 원문) 확인. 조직·워크스페이스의 모델 접근 권한 문제 |
 | "AI API 키 오류입니다" | `ANTHROPIC_API_KEY` 누락·오타·폐기 |
 | "PIN 확인 시도가 너무 많아 잠시 잠겼습니다" | 15분 후 재시도 (IP 단위, 성공 포함 15분 10회) |
 | "이번 달 AI 사용 한도에 도달했습니다" | Anthropic Console 지출 한도 상향 또는 다음 달 대기 |

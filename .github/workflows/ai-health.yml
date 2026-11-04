@@ -1,0 +1,37 @@
+# AI(Anthropic) 접속 상태 점검
+# 3시간마다 운영 /api/assistant?action=status&trace=1 을 호출해, AI 호출이 중계 Worker(미국 동부)를 거쳐 Anthropic 에 닿는지 확인한다.
+# 실패하면 이 워크플로가 빨간색이 되고 GitHub 가 메일로 알린다 — 직원이 "AI 서버 접속 위치 문제" 오류를 보기 전에 알아채기 위함.
+#
+# 실패 원인별 조치 (docs/ai-claude.md 2-2번):
+#   relay=false            → Pages 의 Service binding ANTHROPIC_RELAY 가 빠짐 (바인딩 추가 후 재배포)
+#   colo.relay 가 null     → 중계 Worker airtoradmin-anthropic-relay 가 없거나 응답하지 않음 (npm run relay:deploy)
+#   anthropic=region_blocked → 중계 Worker 가 Anthropic 미지원 지역에서 실행됨 (wrangler.toml placement 확인)
+#   anthropic=auth 등      → 지역 문제가 아님 — API 키·조직 설정 확인
+#
+# 비용 없음: 모델 목록 조회만 하고 토큰을 쓰지 않는다.
+# 주의: GitHub 는 60일간 저장소 활동이 없으면 schedule 워크플로를 비활성화한다 (Actions 탭에서 재활성화).
+name: ai-health
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Anthropic reachability via relay
+        run: |
+          curl -sS --fail-with-body --max-time 60 "https://airtoradmin.co.kr/api/assistant?action=status&trace=1" | tee status.json
+          echo
+          node -e "
+            const s = require('./status.json');
+            const problems = [];
+            if (!s.relay) problems.push('relay=false: Pages Service binding ANTHROPIC_RELAY 없음');
+            if (!s.colo || !s.colo.relay) problems.push('colo.relay 없음: 중계 Worker 응답 없음');
+            if (s.colo && s.colo.relay === 'HKG') problems.push('중계 Worker 가 HKG 에서 실행됨');
+            if (s.anthropic !== 'ok') problems.push('anthropic=' + s.anthropic);
+            console.log('function colo:', s.colo && s.colo.function, '| relay colo:', s.colo && s.colo.relay, '| anthropic:', s.anthropic);
+            if (problems.length) { console.error('AI 접속 점검 실패:\n- ' + problems.join('\n- ')); process.exit(1); }
+          "

@@ -1,0 +1,15 @@
+{
+  // 중계 Worker 타입체크 전용 (번들은 wrangler 가 담당). 실행: npm run relay:typecheck
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true
+  },
+  "include": ["./src/**/*.ts"]
+}

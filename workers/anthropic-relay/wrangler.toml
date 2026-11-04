@@ -1,0 +1,14 @@
+# Anthropic API 중계 Worker — 배포: npm run relay:deploy (먼저 npx wrangler login)
+# Pages 프로젝트 루트에는 wrangler.toml 을 두지 않는다(대시보드 바인딩이 대체됨). 이 파일은 이 Worker 전용이다.
+name = "airtoradmin-anthropic-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# 공개 주소 없음 — Pages 의 Service binding 으로만 호출
+workers_dev = false
+preview_urls = false
+
+# 실행 위치 고정: 홍콩(HKG) 등 Anthropic 미지원 지역에서 실행되지 않게 한다.
+# Placement 는 fetch 핸들러에만 적용된다 — Pages 쪽은 RPC 가 아니라 env.ANTHROPIC_RELAY.fetch() 로 부른다.
+[placement]
+region = "aws:us-east-1"

@@ -375,6 +375,7 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
         message: e.message,
         retryable: e.retryable,
         ...(e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {}),
+        ...(e.detail ? { detail: e.detail } : {}),
         partial: false,
         persisted: false,
       });
