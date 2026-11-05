@@ -372,9 +372,9 @@ export default function App() {
 
   const navigation: { id: PageId; name: string; short: string; icon: typeof TrendingUp; accent: keyof typeof NAV_ACCENT }[] = [
     { id: 'home', name: '홈', short: '홈', icon: House, accent: 'blue' },
+    { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'blue' },
     { id: 'todos', name: '오늘의 할 일', short: '할 일', icon: ListChecks, accent: 'blue' },
     { id: 'sales', name: '영업 관리', short: '영업', icon: TrendingUp, accent: 'blue' },
-    { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'blue' },
     { id: 'profit', name: '프로젝트 관리', short: '프로젝트', icon: Calculator, accent: 'blue' },
     { id: 'customers', name: '고객 관리', short: '고객', icon: Users, accent: 'blue' },
     { id: 'supplychain', name: '공급망 관리', short: '공급망', icon: Package, accent: 'blue' },
