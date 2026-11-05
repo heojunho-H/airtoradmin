@@ -1682,6 +1682,21 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const loyalCustomers = sortedCustomers.filter((customer) => customer.deals >= 3).length;
   const loyalCustomerRate = totalCustomers > 0 ? ((loyalCustomers / totalCustomers) * 100).toFixed(1) : '0.0';
 
+  // S·A·B 를 고르면 '총 고객 수' 옆에 그 등급의 매출 비중 — 전체 고객(검색어 무관) 총 금액 합계(VAT 포함) 중 그 등급 몫
+  const gradeRevenueShare = (() => {
+    if (gradeFilter !== 'S' && gradeFilter !== 'A' && gradeFilter !== 'B') return null;
+    let gradeAmount = 0;
+    let allAmount = 0;
+    for (const c of customers) {
+      const amount = Number(c.totalAmount) || 0;
+      allAmount += amount;
+      if (c.grade === gradeFilter) gradeAmount += amount;
+    }
+    if (allAmount <= 0) return null;
+    return { grade: gradeFilter, gradeAmount, allAmount, share: (gradeAmount / allAmount) * 100 };
+  })();
+  const GRADE_SHARE_COLOR: Record<string, string> = { S: 'text-purple-700', A: 'text-blue-700', B: 'text-emerald-700' };
+
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       {/* Grade Filter Buttons */}
@@ -1744,7 +1759,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
           <div className="flex items-start justify-between">
             <div>
               <p className={KPI.label}>총 고객 수</p>
-              <p className={KPI.value}>{totalCustomers}</p>
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <p className={KPI.value}>{totalCustomers}</p>
+                {gradeRevenueShare && (
+                  <span
+                    className="text-[15px] font-semibold text-slate-500 whitespace-nowrap"
+                    title={`${gradeRevenueShare.grade}등급 고객 매출 ${Math.round(gradeRevenueShare.gradeAmount).toLocaleString('ko-KR')}원 / 전체 고객 매출 ${Math.round(gradeRevenueShare.allAmount).toLocaleString('ko-KR')}원 (VAT 포함, 표의 '총 금액 합계' 기준)`}
+                  >
+                    (총 고객매출{' '}
+                    <span className={`tabular-nums ${GRADE_SHARE_COLOR[gradeRevenueShare.grade]}`}>{gradeRevenueShare.share.toFixed(1)}%</span>{' '}
+                    비중)
+                  </span>
+                )}
+              </div>
             </div>
             <div className={KPI.iconTile}>
               <Users className={KPI.icon} />
