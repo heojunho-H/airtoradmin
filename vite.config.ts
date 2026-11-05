@@ -73,6 +73,11 @@ export default defineConfig({
         target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
         changeOrigin: true,
       },
+      // 홈 '오늘의 할 일' 완료 기록 (D1 home_todos) — 위와 같은 Function
+      '/api/todos': {
+        target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,

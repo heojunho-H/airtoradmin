@@ -822,6 +822,9 @@ interface CustomersPageProps {
   onSynced?: (result: SyncResult | null) => void;
   /** 딜 ID → 수주 여부 (연결 작업의 '수주 취소'·'딜 삭제됨' 표시). 딜 목록을 아직 못 불러왔으면 null */
   dealStates?: DealStateMap | null;
+  /** 홈 '고객 정보 보기'로 들어올 때 바로 열 고객 — 열고 나면 onCustomerOpened 로 알린다 */
+  openCustomerId?: number | null;
+  onCustomerOpened?: () => void;
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -897,7 +900,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null, openCustomerId = null, onCustomerOpened }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -998,6 +1001,16 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     if (fresh && fresh !== selectedCustomer) setSelectedCustomer(fresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers]);
+
+  // 홈에서 '고객 정보 보기'로 들어오면 그 고객 상세를 바로 연다 (한 번만)
+  useEffect(() => {
+    if (openCustomerId == null) return;
+    const target = customers.find((c) => Number(c.id) === openCustomerId);
+    if (!target && customers.length === 0) return; // 목록을 아직 못 불러옴 — 불러오면 다시 본다
+    if (target) setSelectedCustomer(target);
+    onCustomerOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCustomerId, customers]);
 
   // 서버가 돌려준 최신 고객으로 목록·상세를 맞춘다
   const applyServerCustomer = (fresh: Customer | null) => {

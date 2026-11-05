@@ -231,6 +231,9 @@ interface ProfitPageProps {
   onNotification?: (msg: string) => void;
   /** 딜 ID → 수주 여부 — 영업관리에서 수주가 아니게 됐거나 삭제된 딜의 프로젝트에 '수주 취소'·'딜 삭제됨' 표시 */
   dealStates?: DealStateMap | null;
+  /** 홈 일정표 '프로젝트 보기'로 들어올 때 펼칠 프로젝트 — 펼치고 나면 onProjectOpened 로 알린다 */
+  openProjectId?: number | null;
+  onProjectOpened?: () => void;
 }
 
 export function ProfitPage({
@@ -240,6 +243,8 @@ export function ProfitPage({
   subcontractors = [],
   onNotification,
   dealStates = null,
+  openProjectId = null,
+  onProjectOpened,
 }: ProfitPageProps = {}) {
   // ============================================================
   // 상태 — hoisting 패턴 (CustomersPage와 동일)
@@ -282,6 +287,26 @@ export function ProfitPage({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 홈 일정표에서 '프로젝트 보기'로 들어오면 그 프로젝트 탭으로 옮겨 필터를 비우고 펼친 뒤 그 행으로 스크롤 (한 번만)
+  useEffect(() => {
+    if (openProjectId == null || isLoading) return;
+    const target = projects.find((p) => p.id === openProjectId);
+    if (!target && projects.length === 0) return;
+    if (target) {
+      setActiveTab(target.status === 'completed' ? 'completed' : 'in-progress');
+      setSearchTerm('');
+      setServiceFilter('all');
+      setDateFilter({ start: '', end: '' });
+      setProfitFilter({ min: '', max: '' });
+      setExpandedRowId(target.id);
+      window.setTimeout(() => {
+        document.querySelector(`[data-project-id="${target.id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 80);
+    }
+    onProjectOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openProjectId, isLoading, projects]);
 
   // 모바일 감지
   useEffect(() => {
@@ -1159,6 +1184,7 @@ function ProjectTableRow({
   return (
     <>
       <tr
+        data-project-id={p.id}
         className={`hover:bg-slate-50 transition-colors cursor-pointer ${
           isExpanded ? 'bg-blue-50/40' : ''
         }`}
@@ -1304,6 +1330,7 @@ function ProjectMobileCard({
 }: Omit<RowProps, 'colCount'>) {
   return (
     <div
+      data-project-id={p.id}
       className={`bg-white rounded-xl border ${
         isExpanded ? 'border-blue-300 shadow-md' : 'border-slate-200 shadow-sm'
       } overflow-hidden transition-all`}

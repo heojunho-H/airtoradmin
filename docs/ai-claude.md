@@ -22,6 +22,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 | `functions/_lib/ai-auth.ts` | D1 확인·관리자 PIN 확인·"작성자 또는 PIN" 권한 (assistant·files 공용) |
 | `d1/migrations/0001_ai_init.sql` | D1 스키마 (재실행 안전) |
 | `d1/migrations/0002_ai_files.sql` | 견적서·고객사 파일 테이블 `ai_files` (재실행 안전) |
+| `functions/api/todos.ts` · `d1/migrations/0003_home_todos.sql` | 홈 '오늘의 할 일' 완료 기록 (`home_todos`). 진행중 목록은 화면이 `src/lib/home/metrics.ts` 로 계산하고, 완료·되돌리기만 여기에 남는다 |
 | `src/app/components/ai/*` | AI 어시스턴트 페이지 (대화 목록·스트리밍·마크다운·모델 선택) |
 | `src/app/components/settings/*` | 설정 페이지 (AI 모델 설정·사용량·연결 상태) |
 | `src/lib/ai/*` | API 클라이언트·SSE 파서·전문가 정의(`personas.ts`)·포맷터. `intake.ts` = 견적서 매칭·변경표·딜/프로젝트 반영, `files.ts` = `/api/files` 클라이언트 |
@@ -52,6 +53,13 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 4. 두 D1 콘솔에 `d1/migrations/0002_ai_files.sql` 을 1번과 같은 방식(주석 제거·한 줄)으로 실행한다.
 5. 재배포 후 AI 페이지 > 견적서 입력 도우미 화면의 "최근 올린 견적서"가 오류 없이 보이면 된다.
    - 바인딩이 없으면 "파일 저장소(R2)가 연결되지 않았습니다", 테이블이 없으면 "처리 중 오류가 발생했습니다"(로그에 `no such table: ai_files`).
+
+### 2-1a. 홈 '오늘의 할 일' 완료 기록 (D1)
+1. 두 D1 콘솔(`airtoradmin-ai`, `airtoradmin-ai-preview`)에 `d1/migrations/0003_home_todos.sql` 을 2번과 같은 방식(주석 제거·한 줄)으로 실행한다.
+   또는 CLI: `npx wrangler d1 execute airtoradmin-ai --remote --file=d1/migrations/0003_home_todos.sql`
+   (2026-11-05 두 DB 모두 CLI 로 적용, `home_todos` 표·인덱스 확인)
+2. 확인: `curl -s https://airtoradmin.co.kr/api/todos` → `{"ok":true,"items":[...]}`.
+   표가 없으면 503 "할 일 저장소 표가 아직 없습니다" — 화면은 진행중 목록을 그대로 보여 주고 완료하기만 잠근다.
 
 ### 2-2. Anthropic 중계 Worker (홍콩 경유 403 방지)
 Pages Functions 는 요청을 받은 Cloudflare 데이터센터에서 실행된다. 한국 트래픽 일부가 **홍콩(HKG)** 으로 가는데, 홍콩은 Anthropic 지원 지역이 아니라

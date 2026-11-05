@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles, House, ListChecks } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
+import { HomePage } from './components/home/HomePage';
+import { TodoPage } from './components/home/TodoPage';
 import type { AiDatasets } from '../lib/ai/types';
+import { kstYmd } from '../lib/ai/format';
+import { computeHome } from '../lib/home/metrics';
+import { useTodoRecords } from '../lib/home/useTodoRecords';
 import type { IntakeDataChange } from './components/ai/QuoteIntakePanel';
 import { buildDealStateMap, currentWriteEpoch, hasSynced, linkedDealId, type SyncResult } from '../lib/dealSync';
 import { managerActivities, sameActivities, subcontractorActivities } from '../lib/activitySync';
@@ -14,7 +19,7 @@ import { managerActivities, sameActivities, subcontractorActivities } from '../l
 const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
 const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
 
-type PageId = 'sales' | 'ai' | 'profit' | 'customers' | 'supplychain' | 'settings';
+type PageId = 'home' | 'todos' | 'sales' | 'ai' | 'profit' | 'customers' | 'supplychain' | 'settings';
 
 // Tailwind 4 는 리터럴 클래스만 인식하므로 강조색을 통째로 적어 둔다
 const NAV_ACCENT = {
@@ -28,7 +33,7 @@ function PageSpinner() {
 export default function App() {
   const navigate = useNavigate();
   const userName = localStorage.getItem('user_name') || '';
-  const [currentPage, setCurrentPage] = useState<PageId>('sales');
+  const [currentPage, setCurrentPage] = useState<PageId>('home');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
@@ -46,6 +51,11 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [laborRates, setLaborRates] = useState<LaborRate[]>([]);
   const [datasetsLoadedAt, setDatasetsLoadedAt] = useState(0);
+  // 홈 주석의 'HH:mm 불러옴' — 처음 불러올 때와 새로고침(refreshAll)마다 바뀐다
+  const [lastLoadedAt, setLastLoadedAt] = useState(0);
+  // 홈·일정표에서 '고객 정보 보기'·'프로젝트 보기'로 넘어갈 때 바로 열 대상
+  const [customerFocusId, setCustomerFocusId] = useState<number | null>(null);
+  const [projectFocusId, setProjectFocusId] = useState<number | null>(null);
 
   // DB에서 데이터 로드
   useEffect(() => {
@@ -71,6 +81,7 @@ export default function App() {
     ]).then(() => {
       const now = Date.now();
       setDatasetsLoadedAt(now);
+      setLastLoadedAt(now);
       lastLoadedRef.current = now;
     });
   }, []);
@@ -96,6 +107,7 @@ export default function App() {
       if (c.status === 'fulfilled') setCustomers(c.value);
       if (p.status === 'fulfilled') setProjects(p.value);
       lastLoadedRef.current = Date.now();
+      setLastLoadedAt(lastLoadedRef.current);
     }, 300);
   }, []);
   refreshAllRef.current = refreshAll;
@@ -182,6 +194,11 @@ export default function App() {
   const [aiStreaming, setAiStreaming] = useState(false);
   const [aiUnread, setAiUnread] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  // 페이지를 옮기면 본문은 맨 위에서 시작한다 (예전에는 앞 페이지의 스크롤 위치가 남았다)
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [currentPage]);
 
   const addNotification = (type: Notification['type'], message: string) => {
     setNotifications(prev => [{
@@ -203,6 +220,21 @@ export default function App() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  // ── 홈: 지표·재계약 연락 할 일·일정표 (src/lib/home/metrics.ts) ───────────────
+  // 오늘은 KST 로 잡고, 자정을 넘기면 다시 계산한다
+  const [today, setToday] = useState(() => kstYmd());
+  useEffect(() => {
+    const tick = window.setInterval(() => setToday((cur) => (cur === kstYmd() ? cur : kstYmd())), 60_000);
+    return () => window.clearInterval(tick);
+  }, []);
+  const homeData = useMemo(() => (datasetsLoadedAt ? computeHome(aiDatasets, today) : null), [aiDatasets, datasetsLoadedAt, today]);
+  // 완료 기록(D1) — 홈·할 일 페이지·사이드바 배지가 함께 쓴다
+  const todoState = useTodoRecords(userName, (message) => addNotification('admin_action', message));
+  const openTodos = useMemo(
+    () => (homeData ? homeData.todos.filter((t) => !todoState.records.has(t.key)) : []),
+    [homeData, todoState.records],
+  );
+
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -212,25 +244,6 @@ export default function App() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // 관리 주기 도래 알림 (앱 로드 시 1회)
-  useEffect(() => {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const oneMonthLater = new Date(today);
-    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
-    const oneMonthLaterStr = oneMonthLater.toISOString().split('T')[0];
-
-    customers.forEach((customer: any) => {
-      if (!customer.nextManagementDate) return;
-      if (customer.nextManagementDate === todayStr) {
-        addNotification('management_due', `[${customer.company}] 오늘 관리 주기 도래일입니다`);
-      } else if (customer.nextManagementDate > todayStr && customer.nextManagementDate <= oneMonthLaterStr) {
-        addNotification('management_due', `[${customer.company}] 관리 주기가 1개월 이내 도래 예정입니다 (${customer.nextManagementDate})`);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAdminNotification = (message: string) => {
@@ -274,13 +287,21 @@ export default function App() {
       setAiUnread(false);
     }
     // 영업·프로젝트·고객 페이지로 옮길 때 20초 넘게 지난 목록이면 새로 받는다 (다른 사람·탭이 고친 값)
-    if ((page === 'sales' || page === 'profit' || page === 'customers') && lastLoadedRef.current && Date.now() - lastLoadedRef.current > 20_000) {
+    if ((page === 'home' || page === 'todos' || page === 'sales' || page === 'profit' || page === 'customers') && lastLoadedRef.current && Date.now() - lastLoadedRef.current > 20_000) {
       refreshAll();
     }
     setCurrentPage(page);
     if (isMobile) setSidebarOpen(false);
   };
   const openSettings = useCallback(() => setCurrentPage('settings'), []);
+  const openCustomer = (customerId: number) => {
+    setCustomerFocusId(customerId);
+    goTo('customers');
+  };
+  const openProject = (projectId: number) => {
+    setProjectFocusId(projectId);
+    goTo('profit');
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('user_name');
@@ -354,13 +375,18 @@ export default function App() {
   }, []);
 
   const navigation: { id: PageId; name: string; short: string; icon: typeof TrendingUp; accent: keyof typeof NAV_ACCENT }[] = [
+    { id: 'home', name: '홈', short: '홈', icon: House, accent: 'blue' },
+    { id: 'todos', name: '오늘의 할 일', short: '할 일', icon: ListChecks, accent: 'blue' },
     { id: 'sales', name: '영업 관리', short: '영업', icon: TrendingUp, accent: 'blue' },
     { id: 'ai', name: 'AI 어시스턴트', short: 'AI', icon: Sparkles, accent: 'blue' },
     { id: 'profit', name: '프로젝트 관리', short: '프로젝트', icon: Calculator, accent: 'blue' },
     { id: 'customers', name: '고객 관리', short: '고객', icon: Users, accent: 'blue' },
     { id: 'supplychain', name: '공급망 관리', short: '공급망', icon: Package, accent: 'blue' },
   ];
+  // 모바일 하단 바는 칸이 좁아 '할 일'은 빼고 홈의 전체보기로 들어간다
+  const bottomNavigation = navigation.filter((item) => item.id !== 'todos');
   const aiBadge = currentPage !== 'ai' && (aiStreaming || aiUnread);
+  const todoCount = homeData ? openTodos.length : 0;
 
   return (
     <div className="h-dvh flex flex-col md:flex-row bg-slate-50">
@@ -401,26 +427,39 @@ export default function App() {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             const accent = NAV_ACCENT[item.accent];
+            const expanded = sidebarOpen || isMobile;
             return (
-              <button
-                key={item.id}
-                onClick={() => goTo(item.id)}
-                aria-current={isActive ? 'page' : undefined}
-                title={item.name}
-                className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? accent.side
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-5 h-5 ${isActive ? accent.icon : 'text-slate-500'}`} />
-                {(sidebarOpen || isMobile) && (
-                  <span className={`text-[15px] font-medium ${isActive ? accent.text : 'text-slate-700'}`}>
-                    {item.name}
-                  </span>
-                )}
-                {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />}
-              </button>
+              <div key={item.id}>
+                <button
+                  onClick={() => goTo(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  title={item.id === 'todos' && todoCount ? `${item.name} ${todoCount}건` : item.name}
+                  className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    isActive
+                      ? accent.side
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 ${isActive ? accent.icon : 'text-slate-500'}`} />
+                  {expanded && (
+                    <span className={`text-[15px] font-medium ${isActive ? accent.text : 'text-slate-700'}`}>
+                      {item.name}
+                    </span>
+                  )}
+                  {item.id === 'todos' && todoCount > 0 && (
+                    expanded ? (
+                      <span className="ml-auto min-w-[24px] h-[22px] px-1.5 inline-flex items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-bold tabular-nums">
+                        {todoCount > 99 ? '99+' : todoCount}
+                      </span>
+                    ) : (
+                      <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />
+                    )
+                  )}
+                  {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />}
+                </button>
+                {/* 홈·할 일과 업무 페이지 사이 구분선 */}
+                {item.id === 'todos' && <div className="h-px bg-slate-200 mx-4 my-2.5" />}
+              </div>
             );
           })}
         </nav>
@@ -557,11 +596,25 @@ export default function App() {
         </header>
 
         {/* Page Content */}
-        <main className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
-          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} />}
+        <main ref={mainRef} className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
+          {currentPage === 'home' && (
+            <HomePage
+              userName={userName}
+              today={today}
+              data={homeData}
+              openTodos={openTodos}
+              todoState={todoState}
+              loadedAt={lastLoadedAt}
+              onOpenTodos={() => goTo('todos')}
+              onOpenCustomer={openCustomer}
+              onOpenProject={openProject}
+            />
+          )}
+          {currentPage === 'todos' && <TodoPage todos={homeData?.todos ?? []} todoState={todoState} loading={!homeData} onOpenCustomer={openCustomer} />}
+          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} openCustomerId={customerFocusId} onCustomerOpened={() => setCustomerFocusId(null)} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
-          {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} />}
+          {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} openProjectId={projectFocusId} onProjectOpened={() => setProjectFocusId(null)} />}
           {currentPage === 'settings' && (
             <Suspense fallback={<PageSpinner />}>
               <SettingsPage userName={userName} onNotification={handleAdminNotification} />
@@ -589,8 +642,8 @@ export default function App() {
       {/* 모바일 하단 네비게이션 */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 z-40 safe-area-bottom">
-          <div className="grid grid-cols-6 max-w-md mx-auto">
-            {navigation.map((item) => {
+          <div className="grid grid-cols-7 max-w-md mx-auto">
+            {bottomNavigation.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
               const accent = NAV_ACCENT[item.accent];
