@@ -1,7 +1,7 @@
 // 홈 — 앱 첫 화면. 인사말 · 지표 3장(이번 달 매출·영업 현황·재계약 현황) · 오늘의 할 일(급한 순 3개) · 일정표.
 // 레이아웃·타이포는 레퍼런스(Alfred 홈)를 따른다. 팀은 Chrome 75% 줌을 쓰므로 레퍼런스 스크린샷(2000px 폭) 좌표를 그대로 CSS px 로 쓴다.
 import { manwon } from '../../../lib/ai/snapshot/common';
-import type { HomeData, RenewalTodo } from '../../../lib/home/metrics';
+import type { HomeData, PeakSeason, RenewalTodo } from '../../../lib/home/metrics';
 import type { TodoRecordsState } from '../../../lib/home/useTodoRecords';
 import { WEEKDAYS, weekdayOf, won } from './format';
 import { KpiCard, KpiCardSkeleton } from './KpiCard';
@@ -20,6 +20,25 @@ interface HomePageProps {
   onOpenTodos: () => void;
   onOpenCustomer: (customerId: number) => void;
   onOpenProject: (projectId: number) => void;
+}
+
+/** 데이터로 추정한 성수기까지(또는 성수기 종료까지) 남은 날. 추정할 수 없으면 기존 안내 문장 */
+function PeakCountdown({ peak }: { peak: PeakSeason | null }) {
+  if (!peak) return <>해야 할 일들을 확인해 보세요.</>;
+  const d = peak.days === 0 ? 'D-day' : `D-${peak.days}`;
+  const basis = `예상 성수기 ${peak.start} ~ ${peak.end} · 최근 3년 작업 ${peak.jobs.toLocaleString('ko-KR')}건의 월별 분포로 추정`;
+  return peak.phase === 'during' ? (
+    <b className="cursor-help font-bold text-[#2563EB]" title={basis}>
+      성수기 종료 {d}
+    </b>
+  ) : (
+    <>
+      <b className="cursor-help font-bold text-[#2563EB]" title={basis}>
+        성수기 {d}
+      </b>
+      , 성수기를 준비하세요.
+    </>
+  );
 }
 
 function pctText(change: number): string {
@@ -48,7 +67,7 @@ export function HomePage({ userName, today, data, openTodos, todoState, onOpenTo
             <b className="font-bold text-[#1A1C20]">
               {month}월 {Number(today.slice(8))}일 {WEEKDAYS[weekdayOf(today)]}요일
             </b>
-            입니다. 해야 할 일들을 확인해 보세요.
+            입니다. <PeakCountdown peak={data?.peak ?? null} />
           </p>
         </header>
 

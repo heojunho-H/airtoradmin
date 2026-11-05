@@ -5,6 +5,7 @@
 
 import { normalizeCompanyName } from '../company';
 import { ROLE_LABELS, ROLE_ORDER } from '../roles';
+import { daysBetween } from '../ai/format';
 import type { AiDatasets } from '../ai/types';
 import { equipmentMix, num, parseAmount, ymd } from '../ai/snapshot/common';
 import {
@@ -112,6 +113,20 @@ export interface ScheduleEvent {
 
 export type EventStatus = 'done' | 'today' | 'plan' | 'tent';
 
+export interface PeakSeason {
+  /** before = 다가오는 성수기까지, during = 성수기 진행 중 */
+  phase: 'before' | 'during';
+  /** before: 시작일까지 남은 날, during: 종료일까지 남은 날 (0 = 당일) */
+  days: number;
+  start: string;
+  end: string;
+  /** 1~12 */
+  startMonth: number;
+  endMonth: number;
+  /** 추정에 쓴 작업 건수 (최근 3년) */
+  jobs: number;
+}
+
 export interface HomeData {
   today: string;
   revenue: RevenueKpi;
@@ -119,6 +134,8 @@ export interface HomeData {
   renewal: RenewalKpi;
   todos: RenewalTodo[];
   events: ScheduleEvent[];
+  /** 데이터가 적어 추정할 수 없으면 null */
+  peak: PeakSeason | null;
 }
 
 // ─── 공통 ──────────────────────────────────────────────────────────────
@@ -443,6 +460,71 @@ export function occurrencesByDate(events: ScheduleEvent[]): Map<string, Array<{ 
   return map;
 }
 
+// ─── 성수기 ────────────────────────────────────────────────────────────
+// 최근 3년 작업 건수를 달별로 모아, 가장 바쁜 달에서 월평균의 PEAK_RATIO 배 이상인 이웃 달로 넓힌 구간을 성수기로 본다.
+// 3년 창이라 각 달이 세 번씩 들어가 달끼리 공정하게 비교된다. 이어지지 않는 단발성 달(예: 대형 고객 한 번)은 빠진다.
+
+export const PEAK_RATIO = 1.3;
+const PEAK_MIN_JOBS = 36;
+const PEAK_MAX_MONTHS = 6;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function lastDayOf(year: number, month1: number): string {
+  return `${year}-${pad2(month1)}-${pad2(new Date(Date.UTC(year, month1, 0)).getUTCDate())}`;
+}
+
+export function peakSeason(customers: any[], states: DealStateMap | null, today: string): PeakSeason | null {
+  const from = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
+  const byMonth = new Array<number>(12).fill(0);
+  let jobs = 0;
+  for (const c of customers) {
+    for (const w of workHistoryOf(c)) {
+      const date = ymd(w?.workDate);
+      if (!date || date <= from || date > today || !isLiveLink(w?.dealId, states)) continue;
+      byMonth[Number(date.slice(5, 7)) - 1] += 1;
+      jobs += 1;
+    }
+  }
+  if (jobs < PEAK_MIN_JOBS) return null;
+  const cut = (jobs / 12) * PEAK_RATIO;
+  let top = 0;
+  for (let m = 1; m < 12; m++) if (byMonth[m] > byMonth[top]) top = m;
+  if (byMonth[top] < cut) return null;
+
+  // 더 바쁜 쪽 이웃부터 한 달씩 넓힌다 (연말·연초를 넘어 이어질 수 있다)
+  let first = top;
+  let last = top;
+  for (let len = 1; len < PEAK_MAX_MONTHS; len++) {
+    const left = (first + 11) % 12;
+    const right = (last + 1) % 12;
+    const okLeft = byMonth[left] >= cut;
+    const okRight = byMonth[right] >= cut;
+    if (!okLeft && !okRight) break;
+    if (okRight && (!okLeft || byMonth[right] >= byMonth[left])) last = right;
+    else first = left;
+  }
+
+  // 오늘이 걸치거나 오늘 뒤에 오는 첫 회차 (작년에 시작해 올해 끝나는 성수기도 본다)
+  const year = Number(today.slice(0, 4));
+  for (const y of [year - 1, year, year + 1]) {
+    const start = `${y}-${pad2(first + 1)}-01`;
+    const end = lastDayOf(last >= first ? y : y + 1, last + 1);
+    if (end < today) continue;
+    const during = start <= today;
+    return {
+      phase: during ? 'during' : 'before',
+      days: daysBetween(today, during ? end : start),
+      start,
+      end,
+      startMonth: first + 1,
+      endMonth: last + 1,
+      jobs,
+    };
+  }
+  return null;
+}
+
 // ─── 한 번에 ───────────────────────────────────────────────────────────
 
 export function computeHome(ds: AiDatasets, today: string): HomeData {
@@ -457,5 +539,6 @@ export function computeHome(ds: AiDatasets, today: string): HomeData {
     renewal: renewalKpi(customers, today),
     todos: renewalTodos(customers, deals),
     events: scheduleEvents(ds, deals, states),
+    peak: peakSeason(ds.customers, states, today),
   };
 }
