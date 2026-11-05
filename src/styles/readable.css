@@ -1,0 +1,53 @@
+/*
+ * 업무 4페이지(영업·프로젝트·고객·공급망) 가독성 — App.tsx 가 그 페이지일 때 <main> 에 .ux-readable 을 붙인다.
+ *
+ * 팀(40대)은 Chrome 75% 줌을 쓴다 → 보이는 크기 = CSS × 0.75. 예전 표 본문 14px 는 10.5px, 배지 12px 는 9px 로 보였다.
+ * AI 화면(2026-10-20)과 같은 약 1.2배 비율로, 작은 글자부터 키운다. 28px 이상(KPI 숫자 등)은 그대로.
+ *   10→12  11→13  12(xs)→14  13→15  14(sm)→17  15→18  16(base)→19  17→20  18(lg)→21  20(xl)→22  22→24  24(2xl)→26  26→28
+ * 연한 회색 글자(slate-400, 대비 2.6:1)는 slate-500(4.8:1)으로. 아이콘(svg)·placeholder·disabled 는 그대로.
+ *
+ * 휴대폰(768px 미만)은 100% 줌이라 적용하지 않는다.
+ * 우선순위: Tailwind 와 같은 utilities 레이어 + :where() 로 특이성을 유틸리티와 같게 — hover:·focus: 같은 상태 변형은 여전히 이긴다.
+ * 한 단계 더 키우거나 줄이려면 이 파일의 숫자만 바꾸면 된다.
+ */
+@layer utilities {
+  @media (min-width: 768px) {
+    /* 이름 있는 크기(text-xs·sm·base·lg·xl·2xl)는 CSS 변수로 읽으므로 범위 안에서 변수만 바꾼다 — 줄 높이 비율도 따라간다 */
+    .ux-readable {
+      --text-xs: 0.875rem;
+      --text-sm: 1.0625rem;
+      --text-base: 1.1875rem;
+      --text-lg: 1.3125rem;
+      --text-xl: 1.375rem;
+      --text-2xl: 1.625rem;
+    }
+
+    /* 숫자로 박힌 크기 */
+    :where(.ux-readable) .text-\[10px\] { font-size: 12px; }
+    :where(.ux-readable) .text-\[11px\] { font-size: 13px; }
+    :where(.ux-readable) .text-\[12px\] { font-size: 14px; }
+    :where(.ux-readable) .text-\[13px\] { font-size: 15px; }
+    :where(.ux-readable) .text-\[14px\] { font-size: 17px; }
+    :where(.ux-readable) .text-\[15px\] { font-size: 18px; }
+    :where(.ux-readable) .text-\[16px\] { font-size: 19px; }
+    :where(.ux-readable) .text-\[17px\] { font-size: 20px; }
+    :where(.ux-readable) .text-\[18px\] { font-size: 21px; }
+    :where(.ux-readable) .text-\[20px\] { font-size: 22px; }
+    :where(.ux-readable) .text-\[22px\] { font-size: 24px; }
+    :where(.ux-readable) .text-\[24px\] { font-size: 26px; }
+    :where(.ux-readable) .text-\[26px\] { font-size: 28px; }
+
+    /* md: 반응형 변형 — 위 규칙보다 뒤에 둬서 같은 요소의 기본 크기 덮어쓰기를 이긴다 */
+    :where(.ux-readable) .md\:text-\[13px\] { font-size: 15px; }
+    :where(.ux-readable) .md\:text-\[14px\] { font-size: 17px; }
+    :where(.ux-readable) .md\:text-\[15px\] { font-size: 18px; }
+    :where(.ux-readable) .md\:text-\[16px\] { font-size: 19px; }
+
+    /* 칸이 좁은 표(고객 관리 13열): 날짜·배지·이름이 두 줄로 꺾이지 않게. 긴 글 칸(data-wrap)만 줄바꿈, 머리글은 띄어쓰기에서만 */
+    :where(.ux-readable) table[data-nowrap-cells] td:not([data-wrap]) { white-space: nowrap; }
+    :where(.ux-readable) table[data-nowrap-cells] th { word-break: keep-all; }
+
+    /* 대비 — 글자에 쓰인 연한 회색만 */
+    :where(.ux-readable) .text-slate-400:not(svg) { color: var(--color-slate-500, #64748b); }
+  }
+}

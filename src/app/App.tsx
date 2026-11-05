@@ -383,6 +383,8 @@ export default function App() {
   const bottomNavigation = navigation.filter((item) => item.id !== 'todos');
   const aiBadge = currentPage !== 'ai' && (aiStreaming || aiUnread);
   const todoCount = homeData ? openTodos.length : 0;
+  // 업무 4페이지는 글자를 키워 보여 준다 (팀 40대·75% 줌 — src/styles/readable.css)
+  const readable = currentPage === 'sales' || currentPage === 'profit' || currentPage === 'customers' || currentPage === 'supplychain';
 
   return (
     <div className="h-dvh flex flex-col md:flex-row bg-slate-50">
@@ -592,7 +594,7 @@ export default function App() {
         </header>
 
         {/* Page Content */}
-        <main ref={mainRef} className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''}`}>
+        <main ref={mainRef} className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''} ${readable ? 'ux-readable' : ''}`}>
           {currentPage === 'home' && (
             <HomePage
               userName={userName}

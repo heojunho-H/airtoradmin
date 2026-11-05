@@ -1968,7 +1968,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
         /* 데스크톱 테이블 뷰 */
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            {/* data-nowrap-cells: 글자를 키운 화면(readable.css)에서 날짜·배지·이름이 두 줄로 꺾이지 않게 — 긴 글 칸만 data-wrap */}
+            <table className="w-full" data-nowrap-cells>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -2051,7 +2052,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   className="hover:bg-slate-50 transition-colors cursor-pointer"
                   onClick={() => setSelectedCustomer(customer)}
                 >
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4" data-wrap>
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-slate-400" />
                       <span className="text-sm font-semibold text-slate-900">{customer.company}</span>
@@ -2113,7 +2114,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4" data-wrap>
                     <div>
                       <p className="text-sm font-medium text-slate-900">{customer.contactName}</p>
                       <p className="text-xs text-slate-500">{customer.contactPosition}</p>
