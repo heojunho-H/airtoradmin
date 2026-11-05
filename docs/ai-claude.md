@@ -11,7 +11,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 | `functions/api/assistant.ts` | 단일 AI 엔드포인트 — 채팅(SSE)·기업정보(SSE)·설정·대화 목록·사용량. 경로에 "claude" 를 쓰지 않는다 (WAF 전례) |
 | `functions/api/staffing.ts` | AI 인력배치 (ProfitPage 자동 큐). 모델은 설정에서만 결정. 레거시 본문도 임시 수용 |
 | `functions/_lib/ai-models.ts` | **모델 레지스트리(단일 진실원)** — 모델별 가격·thinking·effort·구조화 출력·웹검색 버전, 기능별 기본값 |
-| `functions/_lib/ai-chat.ts` | 채팅 한 턴: 검증 → 스트리밍 → D1 원자 저장 → `done` |
+| `functions/_lib/ai-chat.ts` | 채팅 한 턴: 검증 → 스트리밍(웹 검색 도구 항상 붙음, 최대 8회 · `pause_turn` 이어가기 · 출처는 모델이 근거로 쓴 페이지만 답 끝에) → D1 원자 저장 → `done`. 검색이 Console 에서 꺼져 있으면 검색 없이 다시 묻는다 |
 | `functions/_lib/ai-company.ts` | 기업정보: 웹 검색 + `pause_turn` 이어가기 + 출처 추출 |
 | `functions/_lib/ai-staffing.ts` | 인력배치 프롬프트·스키마·입력 검증 (브라우저에서 서버로 이전) |
 | `functions/_lib/ai-prompts.ts` | 전문가 에이전트 5종 프롬프트(역할·규칙·판단 기준·분석 절차), 데이터 스냅샷 블록, 기업정보 프롬프트 |
@@ -34,7 +34,7 @@ AI 어시스턴트 페이지 · AI 기업정보(웹 검색) · AI 인력배치 �
 ### 1. Anthropic Console
 1. 전용 워크스페이스(예: `airtoradmin`)를 만들고 **Production 키와 Preview 키를 따로** 발급한다.
 2. 조직·워크스페이스 **월 지출 한도**를 건다 (2026-10 설정: 조직 $100·알림 $80, 워크스페이스 `airtoradmin` $70·알림 $56 — 설정 > AI 사용량 화면을 보며 조정). 한도에 닿으면 앱은 "이번 달 AI 사용 한도에 도달했습니다" 를 띄운다.
-3. Capabilities 에서 **웹 검색이 켜져 있는지** 확인한다 (AI 기업정보에 필요, 1,000회당 $10 + 토큰).
+3. Capabilities 에서 **웹 검색이 켜져 있는지** 확인한다 (AI 어시스턴트 대화·AI 기업정보에 필요, 1,000회당 $10 + 토큰). 꺼져 있으면 대화는 스냅샷만으로 답하고 답 끝에 안내가 붙는다.
 4. 조직이 ZDR(무보존)이면 Claude Fable 5.1 은 쓸 수 없다 — 설정 화면에서 고르지 않는다.
 
 ### 2. Cloudflare D1

@@ -4,11 +4,13 @@
 // 원시 HTML 은 렌더링하지 않고(skipHtml), 이미지는 막는다(웹 검색 결과 URL 로 정보가 새는 것 방지).
 // typography 플러그인 없이 요소별 Tailwind 클래스를 직접 지정한다 — 리터럴 문자열로 둬야 Tailwind 가 인식한다.
 
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { type Components, type Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
 
-const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly];
+// singleTilde: false — 한국어는 "10만~17만 원"처럼 물결표 하나를 범위로 쓴다. 기본값(true)이면 두 범위 사이가 취소선이 된다.
+// 취소선은 "~~글~~"(두 개)일 때만.
+const REMARK_PLUGINS: Options['remarkPlugins'] = [[remarkGfm, { singleTilde: false }], remarkCjkFriendly];
 const DISALLOWED = ['img'];
 
 const COMPONENTS: Components = {

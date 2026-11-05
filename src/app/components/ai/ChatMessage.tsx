@@ -12,6 +12,7 @@ const PHASE_LABELS: Record<string, string> = {
   connecting: '연결 중',
   thinking: '생각 중',
   writing: '작성 중',
+  searching: '웹 검색 중',
   fallback: '다른 모델로 이어서 답하는 중',
 };
 
@@ -24,6 +25,24 @@ function Elapsed({ since }: { since?: number }) {
   if (!since) return null;
   const sec = Math.floor((Date.now() - since) / 1000);
   return sec >= 2 ? <span className="tabular-nums">{sec}초</span> : null;
+}
+
+function PhaseIndicator({ m }: { m: UiMessage }) {
+  const query = m.phase === 'searching' && m.searchQuery ? m.searchQuery : '';
+  return (
+    <div className="flex items-center gap-2 py-2 text-[17px] text-slate-500" role="status">
+      <span className="flex gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '150ms' }} />
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '300ms' }} />
+      </span>
+      <span className="min-w-0 break-keep wrap-anywhere">
+        {PHASE_LABELS[m.phase ?? 'connecting']}
+        {query ? <> · <span className="text-slate-700">“{query}”</span></> : '…'}
+      </span>
+      <Elapsed since={m.phaseSince} />
+    </div>
+  );
 }
 
 interface Props {
@@ -83,26 +102,18 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
       </div>
       <div className="flex-1 min-w-0">
         <p className="mb-1 text-[15px] font-semibold text-slate-500">{expertLabel}</p>
-        {m.status === 'streaming' && !m.text && (
-          <div className="flex items-center gap-2 py-2 text-[17px] text-slate-500" role="status">
-            <span className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 motion-safe:animate-bounce" style={{ animationDelay: '300ms' }} />
-            </span>
-            <span>{PHASE_LABELS[m.phase ?? 'connecting']}…</span>
-            <Elapsed since={m.phaseSince} />
-          </div>
-        )}
+        {m.status === 'streaming' && !m.text && <PhaseIndicator m={m} />}
 
         {m.text && !refusal && (
           <div className="pt-0.5 text-[19px] text-slate-800 break-keep wrap-anywhere">
             <Suspense fallback={<div className="whitespace-pre-wrap break-words">{m.text}</div>}>
               <Markdown text={m.text} />
             </Suspense>
-            {m.status === 'streaming' && <span className="inline-block w-2 h-4 align-text-bottom bg-blue-400 motion-safe:animate-pulse" />}
+            {m.status === 'streaming' && m.phase !== 'searching' && <span className="inline-block w-2 h-4 align-text-bottom bg-blue-400 motion-safe:animate-pulse" />}
           </div>
         )}
+        {/* 글을 쓰다가 검색하러 가면 글 아래에 검색 중 표시 */}
+        {m.status === 'streaming' && !!m.text && m.phase === 'searching' && <PhaseIndicator m={m} />}
 
         {refusal && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[17px] text-amber-800">
@@ -156,6 +167,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m, isLast, me, e
                 {m.usage.cacheReadTokens > 0 && ` (캐시 ${formatTokens(m.usage.cacheReadTokens)})`} · 출력 {formatTokens(m.usage.outputTokens)}
               </span>
             )}
+            {!!m.usage?.webSearches && <span>· 웹 검색 {m.usage.webSearches}회</span>}
             {m.costUsd != null && <span title={footerTitle}>· {formatKrw(m.costUsd)}</span>}
             {m.text && (
               <button onClick={copy} className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[14px] hover:bg-slate-100 hover:text-slate-600" aria-label="답변 복사">

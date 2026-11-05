@@ -8,7 +8,7 @@ import { AiRequestError, getConversation, streamChat, toAiRequestError } from '.
 import { buildSnapshot, snapshotSummary, type DataSnapshot } from '../../../lib/ai/snapshot';
 import type { AiConfig, AiDatasets, AiUsage, ConversationDetail, ConversationSummary, PersonaId } from '../../../lib/ai/types';
 
-export type Phase = 'preparing' | 'connecting' | 'thinking' | 'writing' | 'fallback';
+export type Phase = 'preparing' | 'connecting' | 'thinking' | 'writing' | 'searching' | 'fallback';
 
 export interface UiMessage {
   key: string;
@@ -18,6 +18,8 @@ export interface UiMessage {
   status: 'done' | 'streaming' | 'error' | 'stopped';
   phase?: Phase;
   phaseSince?: number;
+  /** 웹 검색 중인 검색어 (phase 'searching') */
+  searchQuery?: string;
   userName?: string | null;
   model?: string | null;
   usage?: AiUsage;
@@ -282,7 +284,14 @@ export function useAiChat(opts: Options) {
               if (data.phase === 'fallback') {
                 patchLastAssistant({ phase: 'fallback', phaseSince: Date.now(), model: data.to ?? undefined });
               } else if (data.phase === 'thinking' || data.phase === 'writing') {
-                patchLastAssistant((m) => (m.phase === data.phase ? {} : { phase: data.phase, phaseSince: Date.now() }));
+                patchLastAssistant((m) => (m.phase === data.phase ? {} : { phase: data.phase, phaseSince: Date.now(), searchQuery: undefined }));
+              } else if (data.phase === 'searching') {
+                // 검색 시작(검색어 없음) → 검색어 확정 순으로 온다. 검색어가 바뀌어도 경과 시간은 이어서 센다
+                patchLastAssistant((m) => ({
+                  phase: 'searching',
+                  phaseSince: m.phase === 'searching' ? m.phaseSince : Date.now(),
+                  searchQuery: typeof data.query === 'string' ? data.query : m.phase === 'searching' ? m.searchQuery : undefined,
+                }));
               }
             } else if (event === 'text') {
               bufferRef.current += data.delta || '';

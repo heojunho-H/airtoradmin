@@ -138,6 +138,31 @@ export function visibleText(content: BetaContentBlock[]): string {
     .join('');
 }
 
+/** 생각·폴백 블록은 글 사이에 있어도 문단을 나누지 않는다 — 그 밖의 블록(검색 호출·결과 등)은 도구 블록 */
+export function isToolBlockType(type: string): boolean {
+  return type !== 'text' && type !== 'thinking' && type !== 'redacted_thinking' && type !== 'fallback';
+}
+
+/**
+ * 채팅 화면용 텍스트 — text 블록을 이어 붙이되, 검색 같은 도구 블록을 지나 새 글이 시작되면 빈 줄을 넣는다
+ * ("검색해 보겠습니다.이번 달…"처럼 붙지 않게). 인용 때문에 잘게 나뉜 text 블록끼리는 그대로 잇는다.
+ * 스트리밍(ai-chat.ts runTurn)도 같은 규칙으로 빈 줄을 보낸다.
+ */
+export function chatVisibleText(content: BetaContentBlock[]): string {
+  let out = '';
+  let afterTool = false;
+  for (const b of content) {
+    if (b.type === 'text') {
+      if (afterTool && out) out += '\n\n';
+      out += b.text;
+      afterTool = false;
+    } else if (isToolBlockType(b.type)) {
+      afterTool = true;
+    }
+  }
+  return out;
+}
+
 /** 웹 검색 응답에서 마지막 도구 블록 뒤의 text 만 — "검색해 보겠습니다" 같은 서두 제외 */
 export function finalAnswerText(content: BetaContentBlock[]): string {
   let lastTool = -1;

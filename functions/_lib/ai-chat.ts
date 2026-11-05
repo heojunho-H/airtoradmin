@@ -9,10 +9,11 @@
 
 import type { BetaMessageStream } from '@anthropic-ai/sdk/lib/BetaMessageStream';
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages';
-import { createClient, hasFallbackBlock, mapError, normalizeUsage, visibleText } from './ai-client';
+import type Anthropic from '@anthropic-ai/sdk';
+import { chatVisibleText, createClient, hasFallbackBlock, isToolBlockType, mapError, normalizeUsage } from './ai-client';
 import { AiError, cleanUserName, kstMonth, nowIso, openSse, type AiEnv } from './ai-http';
-import { buildModelParams, costMicros, getModel, isSelectableFor, normalizeModelId, type Effort, type ModelSpec } from './ai-models';
-import { isPersona, renderChatSystem, snapshotRefreshBlock, titleFrom, type Persona, type TextBlock } from './ai-prompts';
+import { addUsage, buildModelParams, costMicros, emptyUsage, getModel, isSelectableFor, normalizeModelId, type Effort, type ModelSpec } from './ai-models';
+import { CHAT_MAX_SEARCHES, isPersona, renderChatSystem, snapshotRefreshBlock, titleFrom, withWebSearchNote, type Persona, type TextBlock } from './ai-prompts';
 import { dbState, getConversation, insertUsage, loadReplay, loadSettings, turnStatements, type ReplayMessage, type TurnRecord } from './ai-store';
 
 export const CHAT_LIMITS = {
@@ -41,6 +42,32 @@ export interface PreparedChat {
   overrideIgnored: boolean;
   effort: Effort | null;
   snapshot?: { chars: number; at: string };
+}
+
+type BetaContentBlock = Anthropic.Beta.BetaContentBlock;
+type BetaMessage = Anthropic.Beta.BetaMessage;
+
+/** pause_turn 이어 받기 최대 횟수 (ai-company.ts 와 같음) */
+const MAX_CONTINUATIONS = 3;
+
+/** 모든 전문가 대화에 웹 검색을 붙인다 — 쓸지는 모델이 정한다(규칙: ai-prompts.ts WEB_SEARCH_RULES) */
+function chatTools(spec: ModelSpec): unknown[] {
+  return [
+    {
+      type: spec.webSearchTool,
+      name: 'web_search',
+      max_uses: CHAT_MAX_SEARCHES,
+      user_location: { type: 'approximate', country: 'KR', timezone: 'Asia/Seoul' },
+    },
+  ];
+}
+
+/**
+ * 답 끝에 붙는 안내 — 검색을 못 쓴 경우만. 출처 목록은 모델이 근거로 쓴 페이지만 직접 적는다(WEB_SEARCH_RULES).
+ * (서버가 검색 결과를 순서대로 붙이면 관계없는 페이지가 섞인다 — 2026-11-05 프리뷰 확인. 이 검색 버전은 인용 표시를 거의 남기지 않는다)
+ */
+function chatFooter(searchOff: boolean): string {
+  return searchOff ? '\n\n---\n_웹 검색을 쓸 수 없는 상태라 데이터 스냅샷만으로 답했습니다 (관리자: Anthropic Console 웹 검색 설정 확인)._' : '';
 }
 
 /** 한국어 위주 텍스트 기준의 보수적 토큰 추정 (컨텍스트 초과 사전 차단용) */
@@ -192,6 +219,9 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
   const started = Date.now();
   const ym = kstMonth();
   let stream: BetaMessageStream | null = null;
+  // 끝난 회차 사용량 합계 + 진행 중인 회차 (오류 시 사용량 기록용)
+  let usage = emptyUsage();
+  let inFlight: BetaMessageStream | null = null;
   // thinking 중에는 이벤트가 없어 이탈을 늦게 알아챈다 — 1초마다 확인해 업스트림을 끊는다
   const watch = setInterval(() => {
     if (sse.closed) stream?.abort();
@@ -216,41 +246,98 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
       effort: p.effort,
       historyHasFallback: hasFallbackBlock(p.history.map((h) => h.content)),
     });
-    // 저장된 블록을 그대로 보내므로 SDK 파라미터 타입으로 단언한다.
-    const body = {
-      model: p.spec.id,
-      max_tokens: Math.min(64_000, p.spec.maxOutput),
-      system: p.system,
-      messages: [...p.history, { role: 'user', content: p.userContent }],
-      cache_control: { type: 'ephemeral' },
-      ...params,
-      ...(betas.length ? { betas } : {}),
-    } as unknown as BetaMessageStreamParams;
-
-    stream = client.beta.messages.stream(body);
+    // 웹 검색 규칙 전에 만든 대화는 동결된 system 끝에 안내를 덧붙인다
+    const system = withWebSearchNote(p.system);
+    let tools: unknown[] | undefined = chatTools(p.spec);
+    let searchOff = false;
+    const base: unknown[] = [...p.history, { role: 'user', content: p.userContent }];
+    let messages = base;
+    const contents: BetaContentBlock[][] = [];
+    let last: BetaMessage | null = null;
     let phase = '';
-    stream.on('streamEvent', (event) => {
-      if (event.type !== 'content_block_start') return;
-      const block = event.content_block;
-      let next = phase;
-      if (block.type === 'thinking' || block.type === 'redacted_thinking') next = 'thinking';
-      else if (block.type === 'text') next = 'writing';
-      else if (block.type === 'fallback') {
-        sse.send('status', { phase: 'fallback', from: block.from?.model ?? null, to: block.to?.model ?? null });
-        return;
-      }
+    let sentText = false;
+    let afterTool = false;
+    const setPhase = (next: string) => {
       if (next !== phase) {
         phase = next;
         sse.send('status', { phase });
       }
-    });
-    stream.on('text', (delta) => sse.text(delta));
+    };
 
-    const msg = await stream.finalMessage();
-    const usage = normalizeUsage(msg.usage);
+    // 검색이 길어지면 서버가 pause_turn 으로 멈춘다 — 받은 블록을 그대로 붙여 다시 보내면 이어서 진행한다(ai-company.ts 와 같음)
+    for (;;) {
+      // 저장된 블록을 그대로 보내므로 SDK 파라미터 타입으로 단언한다.
+      const body = {
+        model: p.spec.id,
+        max_tokens: Math.min(64_000, p.spec.maxOutput),
+        system,
+        messages,
+        ...(tools ? { tools } : {}),
+        cache_control: { type: 'ephemeral' },
+        ...params,
+        ...(betas.length ? { betas } : {}),
+      } as unknown as BetaMessageStreamParams;
+
+      const current = client.beta.messages.stream(body);
+      stream = current;
+      inFlight = current;
+      current.on('streamEvent', (event) => {
+        if (event.type !== 'content_block_start') return;
+        const block = event.content_block;
+        if (block.type === 'thinking' || block.type === 'redacted_thinking') setPhase('thinking');
+        else if (block.type === 'text') {
+          // 검색을 지나 새 글이 시작되면 빈 줄 (저장 텍스트 chatVisibleText 와 같은 규칙)
+          if (afterTool && sentText) sse.text('\n\n');
+          afterTool = false;
+          setPhase('writing');
+        } else if (block.type === 'fallback') {
+          sse.send('status', { phase: 'fallback', from: block.from?.model ?? null, to: block.to?.model ?? null });
+        } else if (isToolBlockType(block.type)) {
+          afterTool = true;
+          if (block.type === 'server_tool_use') setPhase('searching');
+        }
+      });
+      current.on('contentBlock', (block) => {
+        if (block.type !== 'server_tool_use' || block.name !== 'web_search') return;
+        const query = (block.input as { query?: unknown } | null)?.query;
+        if (typeof query === 'string') sse.send('status', { phase: 'searching', query: query.slice(0, 100) });
+      });
+      current.on('text', (delta) => {
+        if (delta) sentText = true;
+        sse.text(delta);
+      });
+
+      try {
+        last = await current.finalMessage();
+        inFlight = null;
+      } catch (err) {
+        // Anthropic Console 에서 웹 검색이 꺼져 있으면 검색 없이 한 번 더 — 대화 전체가 멈추지 않게
+        if (tools && contents.length === 0 && !sentText && mapError(err).code === 'web_search_disabled') {
+          console.warn('[ai-chat] web search disabled — retrying without tools');
+          inFlight = null;
+          tools = undefined;
+          searchOff = true;
+          continue;
+        }
+        throw err;
+      }
+      usage = addUsage(usage, normalizeUsage(last.usage));
+      contents.push(last.content);
+      if (last.stop_reason !== 'pause_turn' || contents.length > MAX_CONTINUATIONS) break;
+      // 지금까지 받은 블록을 하나의 assistant 메시지로 (회차마다 따로 붙이지 않는다)
+      messages = [...base, { role: 'assistant', content: contents.flat() }];
+    }
+
+    if (!last) throw new AiError(500, 'internal', 'AI 응답을 받지 못했습니다.', { retryable: true });
+    const msg = last;
+    // 이어 받은 회차까지 합친 하나의 assistant 턴 — 다음 턴에 그대로 재전송한다
+    const content = contents.flat();
     const servedModel = normalizeModelId(msg.model);
     const cost = costMicros(servedModel, usage);
-    const text = visibleText(msg.content);
+    const footer = chatFooter(searchOff);
+    if (footer) sse.text(footer);
+    const answer = chatVisibleText(content);
+    const text = answer + footer;
     const durationMs = Date.now() - started;
     const usageBase = {
       ym,
@@ -278,7 +365,7 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
       await insertUsage(p.db, { ...usageBase, status: 'refusal', errorCode: 'refusal' }).catch(() => {});
       return;
     }
-    if (msg.stop_reason === 'max_tokens' && !text.trim()) {
+    if (msg.stop_reason === 'max_tokens' && !answer.trim()) {
       sse.send('error', {
         code: 'max_tokens',
         message: '응답이 길이 제한에 걸려 내용을 만들지 못했습니다. 질문을 나눠서 다시 시도하세요.',
@@ -304,7 +391,9 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
       return;
     }
 
-    const contextTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens + usage.outputTokens;
+    // 컨텍스트 크기는 마지막 회차 기준 (이어 받기 전 회차는 그 안에 다시 들어 있다)
+    const lastUsage = normalizeUsage(msg.usage);
+    const contextTokens = lastUsage.inputTokens + lastUsage.cacheReadTokens + lastUsage.cacheWriteTokens + lastUsage.outputTokens;
     const record: TurnRecord = {
       conversationId: p.conversationId,
       create: p.isNew
@@ -330,7 +419,7 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
         hasSnapshot: !p.isNew && !!p.snapshot,
       },
       // parsed_output 등 SDK 보조 속성은 열거 불가라 JSON 에 들어가지 않는다 — API 응답 원본 그대로
-      assistant: { contentJson: JSON.stringify(msg.content), displayText: text, stopReason: msg.stop_reason, anthropicId: msg.id },
+      assistant: { contentJson: JSON.stringify(content), displayText: text, stopReason: msg.stop_reason, anthropicId: msg.id },
       usage,
       costMicros: cost,
       contextTokens,
@@ -380,7 +469,7 @@ async function runTurn(env: AiEnv, sse: ReturnType<typeof openSse>, p: PreparedC
         persisted: false,
       });
     }
-    const partial = normalizeUsage(stream?.currentMessage?.usage);
+    const partial = addUsage(usage, normalizeUsage(inFlight?.currentMessage?.usage));
     if (partial.inputTokens || partial.outputTokens) {
       await insertUsage(p.db, {
         ym,
