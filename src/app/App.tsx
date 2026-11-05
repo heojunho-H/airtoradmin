@@ -51,8 +51,6 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [laborRates, setLaborRates] = useState<LaborRate[]>([]);
   const [datasetsLoadedAt, setDatasetsLoadedAt] = useState(0);
-  // 홈 주석의 'HH:mm 불러옴' — 처음 불러올 때와 새로고침(refreshAll)마다 바뀐다
-  const [lastLoadedAt, setLastLoadedAt] = useState(0);
   // 홈·일정표에서 '고객 정보 보기'·'프로젝트 보기'로 넘어갈 때 바로 열 대상
   const [customerFocusId, setCustomerFocusId] = useState<number | null>(null);
   const [projectFocusId, setProjectFocusId] = useState<number | null>(null);
@@ -81,7 +79,6 @@ export default function App() {
     ]).then(() => {
       const now = Date.now();
       setDatasetsLoadedAt(now);
-      setLastLoadedAt(now);
       lastLoadedRef.current = now;
     });
   }, []);
@@ -107,7 +104,6 @@ export default function App() {
       if (c.status === 'fulfilled') setCustomers(c.value);
       if (p.status === 'fulfilled') setProjects(p.value);
       lastLoadedRef.current = Date.now();
-      setLastLoadedAt(lastLoadedRef.current);
     }, 300);
   }, []);
   refreshAllRef.current = refreshAll;
@@ -604,7 +600,6 @@ export default function App() {
               data={homeData}
               openTodos={openTodos}
               todoState={todoState}
-              loadedAt={lastLoadedAt}
               onOpenTodos={() => goTo('todos')}
               onOpenCustomer={openCustomer}
               onOpenProject={openProject}

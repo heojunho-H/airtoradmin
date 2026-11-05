@@ -1,6 +1,5 @@
 // 홈 — 앱 첫 화면. 인사말 · 지표 3장(이번 달 매출·영업 현황·재계약 현황) · 오늘의 할 일(급한 순 3개) · 일정표.
 // 레이아웃·타이포는 레퍼런스(Alfred 홈)를 따른다. 팀은 Chrome 75% 줌을 쓰므로 레퍼런스 스크린샷(2000px 폭) 좌표를 그대로 CSS px 로 쓴다.
-import { Info } from 'lucide-react';
 import { manwon } from '../../../lib/ai/snapshot/common';
 import type { HomeData, RenewalTodo } from '../../../lib/home/metrics';
 import type { TodoRecordsState } from '../../../lib/home/useTodoRecords';
@@ -18,8 +17,6 @@ interface HomePageProps {
   /** 진행중 할 일 (완료 기록 제외, 급한 순) */
   openTodos: RenewalTodo[];
   todoState: TodoRecordsState;
-  /** 마지막으로 데이터를 불러온 시각 (ms) */
-  loadedAt: number;
   onOpenTodos: () => void;
   onOpenCustomer: (customerId: number) => void;
   onOpenProject: (projectId: number) => void;
@@ -29,10 +26,9 @@ function pctText(change: number): string {
   return `${change >= 0 ? '▲' : '▼'}${Math.abs(change * 100).toFixed(1)}%`;
 }
 
-export function HomePage({ userName, today, data, openTodos, todoState, loadedAt, onOpenTodos, onOpenCustomer, onOpenProject }: HomePageProps) {
+export function HomePage({ userName, today, data, openTodos, todoState, onOpenTodos, onOpenCustomer, onOpenProject }: HomePageProps) {
   const { toast, show, clear } = useUndoToast();
   const month = Number(today.slice(5, 7));
-  const loadedTime = loadedAt ? new Date(loadedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }) : '';
   const blocked =
     todoState.status === 'unavailable' ? `완료 기록 저장소에 연결하지 못했습니다 — ${todoState.error}` : todoState.status === 'loading' ? '완료 기록을 불러오는 중입니다' : undefined;
 
@@ -59,12 +55,8 @@ export function HomePage({ userName, today, data, openTodos, todoState, loadedAt
         <div className="mt-12 grid grid-cols-1 gap-[18px] md:mt-[80px] lg:grid-cols-3">
           {data ? <Kpis data={data} month={month} /> : [0, 1, 2].map((i) => <KpiCardSkeleton key={i} />)}
         </div>
-        <p className="mt-[18px] flex items-center justify-end gap-1.5 text-right text-[14px] leading-[24px] text-[#8B9099] md:text-[16px]">
-          <Info className="h-[18px] w-[18px] shrink-0" />
-          실시간 · 매출은 작업일 기준 견적 금액(VAT 포함){loadedTime ? ` · ${loadedTime} 불러옴` : ''}
-        </p>
 
-        <section className="mt-[64px]" aria-label="오늘의 할 일">
+        <section className="mt-[72px]" aria-label="오늘의 할 일">
           <div className="flex items-center justify-between">
             <h2 className="text-[24px] font-bold leading-[32px] tracking-[-0.01em] text-[#1A1C20]">
               오늘의 할 일<span className="ml-1.5 text-[#2563EB]">{data ? openTodos.length : ''}</span>
