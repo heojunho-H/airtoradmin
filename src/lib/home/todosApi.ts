@@ -8,7 +8,7 @@ export const TODOS_ENDPOINT = '/api/todos';
 
 export interface TodoRecord {
   key: string;
-  /** 'renewal' 재계약 연락 · 'winback' 재문의 연락 */
+  /** 'renewal' 재계약 연락 · 'winback' 작년실패 연락 */
   kind: string;
   customerId: number | null;
   company: string;

@@ -72,20 +72,20 @@ export type TodoKind = 'renewal' | 'winback';
 /**
  * 오늘의 할 일 한 건 — 두 종류를 같은 모양으로 다룬다.
  *  - renewal(재계약 연락): S·A·B 고객의 관리일 30일 전부터 완료할 때까지
- *  - winback(재문의 연락): 작년에 문의했다가 계약 실패한 300만원 이상 딜, 작년 문의일 1년 되는 날 ±14일
+ *  - winback(작년실패 연락): 작년에 문의했다가 계약 실패한 300만원 이상 딜, 작년 문의일 1년 되는 날 ±14일
  */
 export interface HomeTodo {
   kind: TodoKind;
   /** renewal:{고객ID}:{관리일} / winback:{딜ID}:{작년 문의일+1년} — 다음 회차는 새 키가 된다 */
   key: string;
-  /** 재계약: 고객 ID, 재문의: null */
+  /** 재계약: 고객 ID, 작년실패: null */
   customerId: number | null;
-  /** 재문의: 딜 ID, 재계약: null */
+  /** 작년실패: 딜 ID, 재계약: null */
   dealId: number | null;
   company: string;
-  /** 재계약: S·A·B, 재문의: '' */
+  /** 재계약: S·A·B, 작년실패: '' */
   grade: string;
-  /** 재계약: 관리일, 재문의: 작년 문의일이 1년 되는 날 */
+  /** 재계약: 관리일, 작년실패: 작년 문의일이 1년 되는 날 */
   dueDate: string;
   /** dueDate - 오늘. 음수 = 지남 */
   daysToDue: number;
@@ -96,11 +96,11 @@ export interface HomeTodo {
   /** 전화번호가 없을 때 보여 줄 이메일 */
   email: string;
   manager: string;
-  /** 재계약: 최근 작업일, 재문의: 작년 문의일 */
+  /** 재계약: 최근 작업일, 작년실패: 작년 문의일 */
   lastWorkDate: string;
   lastService: string;
   lastQuantity: number;
-  /** 재문의: 작년 견적 금액(VAT 포함), 재계약: 0 */
+  /** 작년실패: 작년 견적 금액(VAT 포함), 재계약: 0 */
   quotedAmount: number;
   /** 같은 회사에 진행 중인 딜이 있다 (중복 연락 방지) */
   openDeal: boolean;
@@ -148,7 +148,7 @@ export interface HomeData {
   revenue: RevenueKpi;
   sales: SalesKpi;
   renewal: RenewalKpi;
-  /** 재계약 + 재문의, 급한 순 */
+  /** 재계약 + 작년실패, 급한 순 */
   todos: HomeTodo[];
   events: ScheduleEvent[];
   /** 데이터가 적어 추정할 수 없으면 null */
@@ -379,13 +379,13 @@ export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): Home
   return out.sort(compareTodos);
 }
 
-/** 재문의 연락 — 작년 문의일이 1년 되는 날 기준 이 일수 전부터 이 일수 후까지 보인다 */
+/** 작년실패 연락 — 작년 문의일이 1년 되는 날 기준 이 일수 전부터 이 일수 후까지 보인다 */
 export const WINBACK_WINDOW_DAYS = 14;
-/** 재문의 연락 — 견적 금액(VAT 포함)이 이 금액 이상인 실패 딜만 (2026-11-05 사용자 결정) */
+/** 작년실패 연락 — 견적 금액(VAT 포함)이 이 금액 이상인 실패 딜만 (2026-11-05 사용자 결정) */
 export const WINBACK_MIN_AMOUNT = 3_000_000;
 
 /**
- * 재문의 연락 — 작년 이맘때 문의했다가 계약 실패한 고객에게 다시 연락할 때.
+ * 작년실패 연락 — 작년 이맘때 문의했다가 계약 실패한 고객에게 다시 연락할 때.
  * 1년 되는 날 ±14일만 보이고 지나면 저절로 사라진다(시기를 놓친 건이 쌓이지 않게).
  * 그 뒤 같은 회사가 다시 문의했거나(딜) 작업했으면(작업이력) 이미 돌아온 고객이라 뺀다.
  */

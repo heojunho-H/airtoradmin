@@ -1,5 +1,5 @@
 // 오늘의 할 일 카드 (진행중·완료 공용) — 윗줄(종류 · 남은 날/완료일) · 굵은 제목 · 회색 연락처 줄 · 오른쪽 버튼 둘.
-// 종류: 재계약 연락(고객 관리일) · 재문의 연락(작년 계약 실패 딜의 문의일 1년)
+// 종류: 재계약 연락(고객 관리일) · 작년실패 연락(작년 계약 실패 딜의 문의일 1년)
 import type { ReactNode } from 'react';
 import type { HomeTodo, TodoKind } from '../../../lib/home/metrics';
 import type { TodoRecord } from '../../../lib/home/todosApi';
@@ -14,7 +14,7 @@ const GRADE_CHIP: Record<string, string> = {
 };
 const CHIP = 'inline-flex h-7 items-center whitespace-nowrap rounded-full border px-3 text-[15px] font-bold';
 
-const KIND_LABEL: Record<TodoKind, string> = { renewal: '재계약 연락', winback: '재문의 연락' };
+const KIND_LABEL: Record<TodoKind, string> = { renewal: '재계약 연락', winback: '작년실패 연락' };
 const OPEN_LABEL: Record<TodoKind, string> = { renewal: '고객 정보 보기', winback: '딜 보기' };
 
 const BTN = 'h-[42px] whitespace-nowrap rounded-[10px] border px-4 text-[17px] font-semibold transition-colors';
@@ -26,7 +26,7 @@ interface TodoCardProps {
   todo?: HomeTodo;
   /** 완료 기록 — 있으면 완료 카드 */
   done?: TodoRecord;
-  /** 재계약은 고객 상세, 재문의는 딜 상세를 연다 */
+  /** 재계약은 고객 상세, 작년실패는 딜 상세를 연다 */
   onOpen?: () => void;
   onComplete?: () => void;
   /** 완료 저장소를 못 쓸 때 이유 (버튼을 잠그고 툴팁으로 보여 준다) */
@@ -43,7 +43,7 @@ export function TodoCard({ todo, done, onOpen, onComplete, completeBlockedReason
   let title: string;
   if (done) {
     when = <span className="font-normal text-[#8B9099]"> · {shortKstDate(done.doneAt)} 완료 · {done.doneBy}</span>;
-    title = winback ? `${company} 재문의 연락을 마쳤습니다.` : `${company} 재계약 안내 연락을 마쳤습니다.`;
+    title = winback ? `${company} 작년실패 연락을 마쳤습니다.` : `${company} 재계약 안내 연락을 마쳤습니다.`;
   } else if (winback) {
     when =
       d >= 0 ? (

@@ -1,5 +1,5 @@
 // 홈 — 앱 첫 화면. 인사말 · 지표 3장(이번 달 매출·영업 현황·재계약 현황) · 오늘의 할 일(급한 순 3개) · 일정표.
-// 할 일 = 재계약 연락(S·A·B 고객 관리일) + 재문의 연락(작년 계약 실패 딜, 300만 원 이상).
+// 할 일 = 재계약 연락(S·A·B 고객 관리일) + 작년실패 연락(작년 계약 실패 딜, 300만 원 이상).
 // 레이아웃·타이포는 레퍼런스(Alfred 홈)를 따른다. 팀은 Chrome 75% 줌을 쓰므로 레퍼런스 스크린샷(2000px 폭) 좌표를 그대로 CSS px 로 쓴다.
 import { manwon } from '../../../lib/ai/snapshot/common';
 import type { HomeData, HomeTodo, PeakSeason } from '../../../lib/home/metrics';

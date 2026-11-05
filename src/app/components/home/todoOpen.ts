@@ -1,4 +1,4 @@
-// 할 일 카드의 왼쪽 버튼이 여는 화면 — 재계약 연락은 고객 상세, 재문의 연락은 작년 딜 상세
+// 할 일 카드의 왼쪽 버튼이 여는 화면 — 재계약 연락은 고객 상세, 작년실패 연락은 작년 딜 상세
 import type { HomeTodo, TodoKind } from '../../../lib/home/metrics';
 import type { TodoRecord } from '../../../lib/home/todosApi';
 
@@ -8,7 +8,7 @@ export function kindOf(todo?: HomeTodo, done?: TodoRecord): TodoKind {
   return done?.kind === 'winback' || done?.key.startsWith('winback:') ? 'winback' : 'renewal';
 }
 
-/** 재문의 키 `winback:{dealId}:{1년 되는 날}` 에서 딜 번호 */
+/** 작년실패 키 `winback:{dealId}:{1년 되는 날}` 에서 딜 번호 */
 function dealIdFromKey(key: string): number | null {
   const m = /^winback:(\d+):/.exec(key);
   return m ? Number(m[1]) : null;

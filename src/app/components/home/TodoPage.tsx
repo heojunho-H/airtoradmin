@@ -1,5 +1,5 @@
 // 오늘의 할 일 — 진행중 / 완료 밑줄 탭, 카드 목록, 페이지 넘김 + 'n개씩 보기' (레퍼런스 할 일 페이지 그대로)
-// 진행중 = 계산된 할 일(재계약·재문의 연락) 중 완료 기록이 없는 것. 완료 = D1 완료 기록 최근순.
+// 진행중 = 계산된 할 일(재계약·작년실패 연락) 중 완료 기록이 없는 것. 완료 = D1 완료 기록 최근순.
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { HomeTodo } from '../../../lib/home/metrics';

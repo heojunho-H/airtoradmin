@@ -9,7 +9,7 @@
 import { requireDb } from '../_lib/ai-auth';
 import { AiError, checkOrigin, cleanUserName, errorResponse, jsonFor, nowIso, optionsResponse, readJsonCapped, type AiEnv } from '../_lib/ai-http';
 
-// renewal:{고객ID}:{관리일} 재계약 연락 · winback:{딜ID}:{작년 문의일 1년} 재문의 연락
+// renewal:{고객ID}:{관리일} 재계약 연락 · winback:{딜ID}:{작년 문의일 1년} 작년실패 연락
 const KEY_RE = /^(renewal|winback):\d{1,10}:\d{4}-\d{2}-\d{2}$/;
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_ITEMS = 2000;
