@@ -4,10 +4,11 @@ import type { RenewalTodo } from '../../../lib/home/metrics';
 import type { TodoRecord } from '../../../lib/home/todosApi';
 import { formatPhone, shortKstDate, shortYmd } from './format';
 
+// 고객 등급 — 앱 전체 등급 색과 같게(S 보라 · A 파랑 · B 초록, ui-kit). 연락 우선순위를 바로 알아보게 'S등급'처럼 글자로, 테두리를 진하게
 const GRADE_CHIP: Record<string, string> = {
-  S: 'bg-[#EAF1FF] text-[#1D4ED8]',
-  A: 'bg-[#EEEDFD] text-[#5A50DE]',
-  B: 'bg-[#F1F2F4] text-[#4B5563]',
+  S: 'border-purple-300 bg-purple-50 text-purple-700',
+  A: 'border-blue-300 bg-blue-50 text-blue-700',
+  B: 'border-emerald-300 bg-emerald-50 text-emerald-700',
 };
 
 const BTN = 'h-[42px] whitespace-nowrap rounded-[10px] border px-4 text-[17px] font-semibold transition-colors';
@@ -79,7 +80,7 @@ function TodoMeta({ todo, done }: { todo?: RenewalTodo; done?: TodoRecord }) {
   const Sep = () => <span className="text-[#D0D3D8]">·</span>;
   return (
     <div className="mt-[10px] flex flex-wrap items-center gap-x-[10px] gap-y-1 text-[16px] leading-[24px] text-[#8B9099]">
-      <span className={`inline-flex h-6 min-w-[26px] items-center justify-center rounded-[6px] px-1.5 text-[14px] font-bold ${GRADE_CHIP[todo.grade] ?? GRADE_CHIP.B}`}>{todo.grade}</span>
+      <span className={`inline-flex h-7 items-center whitespace-nowrap rounded-full border px-3 text-[15px] font-bold ${GRADE_CHIP[todo.grade] ?? GRADE_CHIP.B}`}>{todo.grade}등급</span>
       <span>
         {person && <>{person} </>}
         {todo.phone ? (
