@@ -453,7 +453,7 @@ export default function App() {
                   )}
                   {item.id === 'ai' && aiBadge && <span className="absolute top-2.5 left-8 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white" />}
                 </button>
-                {/* 홈·할 일과 업무 페이지 사이 구분선 */}
+                {/* 홈·AI·할 일과 업무 페이지 사이 구분선 */}
                 {item.id === 'todos' && <div className="h-px bg-slate-200 mx-4 my-2.5" />}
               </div>
             );

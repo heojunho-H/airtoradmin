@@ -14,6 +14,14 @@ const CHIP: Record<EventStatus, string> = {
   tent: 'border-[1.5px] border-dashed border-[#8DB0F5] bg-white text-[#2F6BEB]',
 };
 
+// 모바일(칸 폭 약 50px)에서는 칩 대신 작업마다 점 하나 — 날짜를 누르면 아래 목록에 그날 작업이 나온다
+const DOT: Record<EventStatus, string> = {
+  done: 'bg-[#C4C7CC]',
+  today: 'bg-[#2563EB]',
+  plan: 'bg-[#93B4F5]',
+  tent: 'border border-dashed border-[#6E9BF2] bg-white',
+};
+
 const BTN = 'h-[42px] flex-1 whitespace-nowrap rounded-[10px] border px-4 text-[17px] font-semibold transition-colors disabled:cursor-default disabled:border-[#E2E3E6] disabled:bg-[#EEEFF1] disabled:text-[#B4B7BD]';
 
 interface ScheduleCalendarProps {
@@ -129,7 +137,15 @@ export function ScheduleCalendar({ events, today, onOpenCustomer, onOpenProject 
                     </span>
                     {holiday && inMonth && <span className="truncate text-[13px] text-[#E5484D]">{holiday}</span>}
                   </div>
-                  <div className="flex min-w-0 flex-col gap-1">
+                  {list.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 px-1 md:hidden" aria-hidden>
+                      {list.slice(0, 3).map(({ ev, k }) => (
+                        <i key={`${ev.id}:${k}`} className={`inline-block h-2 w-2 rounded-full ${DOT[eventStatus(ev, ds, today)]}`} />
+                      ))}
+                      {list.length > 3 && <span className="text-[11px] leading-none text-[#8B9099]">+{list.length - 3}</span>}
+                    </div>
+                  )}
+                  <div className="hidden min-w-0 flex-col gap-1 md:flex">
                     {list.slice(0, 2).map(({ ev, k }) => (
                       <button
                         key={`${ev.id}:${k}`}
@@ -140,7 +156,7 @@ export function ScheduleCalendar({ events, today, onOpenCustomer, onOpenProject 
                           setSelected(ds);
                           setEventId(ev.id);
                         }}
-                        className={`block h-[22px] w-full truncate rounded-[6px] border px-1.5 text-left text-[12px] font-medium leading-[20px] md:h-[26px] md:px-2 md:text-[14px] md:leading-[24px] ${CHIP[eventStatus(ev, ds, today)]} ${
+                        className={`block h-[26px] w-full truncate rounded-[6px] border px-2 text-left text-[14px] font-medium leading-[24px] ${CHIP[eventStatus(ev, ds, today)]} ${
                           eventId === ev.id ? 'ring-2 ring-[#1A1C20]' : ''
                         }`}
                       >
