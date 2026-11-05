@@ -3,7 +3,7 @@
  *
  * 팀(40대)은 Chrome 75% 줌을 쓴다 → 보이는 크기 = CSS × 0.75. 예전 표 본문 14px 는 10.5px, 배지 12px 는 9px 로 보였다.
  * AI 화면(2026-10-20)과 같은 약 1.2배 비율로, 작은 글자부터 키운다. 28px 이상(KPI 숫자 등)은 그대로.
- *   10→12  11→13  12(xs)→14  13→15  14(sm)→17  15→18  16(base)→19  17→20  18(lg)→21  20(xl)→22  22→24  24(2xl)→26  26→28
+ *   10·11→14  12(xs)→14  13→15  14(sm)→17  15→18  16(base)→19  17→20  18(lg)→21  20(xl)→22  22→24  24(2xl)→26  26→28
  * 연한 회색 글자(slate-400, 대비 2.6:1)는 slate-500(4.8:1)으로. 아이콘(svg)·placeholder·disabled 는 그대로.
  *
  * 휴대폰(768px 미만)은 100% 줌이라 적용하지 않는다.
@@ -23,8 +23,9 @@
     }
 
     /* 숫자로 박힌 크기 */
-    :where(.ux-readable) .text-\[10px\] { font-size: 12px; }
-    :where(.ux-readable) .text-\[11px\] { font-size: 13px; }
+    /* 가장 작은 글자는 14px 바닥(75% 줌에서 10.5px) — 2026-11-05 UI 정돈 때 12·13 → 14 */
+    :where(.ux-readable) .text-\[10px\] { font-size: 14px; }
+    :where(.ux-readable) .text-\[11px\] { font-size: 14px; }
     :where(.ux-readable) .text-\[12px\] { font-size: 14px; }
     :where(.ux-readable) .text-\[13px\] { font-size: 15px; }
     :where(.ux-readable) .text-\[14px\] { font-size: 17px; }
@@ -49,5 +50,6 @@
 
     /* 대비 — 글자에 쓰인 연한 회색만 */
     :where(.ux-readable) .text-slate-400:not(svg) { color: var(--color-slate-500, #64748b); }
+    :where(.ux-readable) .text-slate-300:not(svg) { color: var(--color-slate-400, #94a3b8); }
   }
 }

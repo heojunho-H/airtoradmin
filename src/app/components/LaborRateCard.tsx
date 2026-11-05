@@ -255,13 +255,13 @@ export function LaborRateCard({
             이번 달 역할별 단가 ({currentYearMonth})
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            ▲▼ 또는 숫자 클릭으로 조정 — 변경 즉시 자동 저장
+            − + 버튼 또는 숫자 클릭으로 조정 — 변경 즉시 자동 저장
           </p>
         </div>
         <button
           type="button"
           onClick={() => onCopyPrev(currentYearMonth)}
-          className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 hover:underline transition-colors"
+          className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition-colors"
         >
           <Copy className="w-3.5 h-3.5" />
           전월 단가 복사
@@ -291,7 +291,6 @@ export function LaborRateCard({
           return (
             <div
               key={role}
-              title={role}
               className={`relative border rounded-xl p-4 transition-colors min-w-0 ${borderClass}`}
             >
               {/* 라벨 + 이전 월 배지 + 저장 상태 아이콘 (우상단) */}
@@ -345,7 +344,7 @@ export function LaborRateCard({
                   onClick={() => handleStep(role, -RATE_STEP)}
                   disabled={isAtMin || isSaving || isEditing}
                   aria-disabled={isAtMin || isSaving || isEditing}
-                  className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all"
+                  className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
@@ -371,7 +370,7 @@ export function LaborRateCard({
                       min={RATE_MIN}
                       max={RATE_MAX}
                       aria-label={`${ROLE_LABELS[role]} 단가 직접 입력 (원)`}
-                      className="w-full text-2xl font-bold text-center tabular-nums text-slate-900 border-0 border-b-2 border-teal-400 focus:outline-none focus:border-teal-600 bg-transparent px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="w-full text-2xl font-bold text-center tabular-nums text-slate-900 border-b-2 border-blue-400 focus:outline-none focus:border-blue-600 bg-transparent px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   ) : (
                     <button
@@ -393,7 +392,7 @@ export function LaborRateCard({
                   onClick={() => handleStep(role, +RATE_STEP)}
                   disabled={isAtMax || isSaving || isEditing}
                   aria-disabled={isAtMax || isSaving || isEditing}
-                  className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all"
+                  className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all"
                 >
                   <Plus className="w-4 h-4" />
                 </button>

@@ -286,11 +286,11 @@ export function CompanyFiles({ company, customerId = null, dealId = null, dealId
                   {u.state === 'queued' ? '대기' : u.state === 'uploading' ? `${Math.round(u.progress * 100)}%` : '실패'}
                 </span>
                 {u.state === 'error' && !uploadBlockReason(u.file) && (
-                  <button onClick={() => retry(u.key)} className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-white hover:text-blue-700" aria-label={`${u.file.name} 다시 올리기`}>
+                  <button onClick={() => retry(u.key)} className="shrink-0 rounded p-1.5 text-slate-500 hover:bg-white hover:text-blue-700" aria-label={`${u.file.name} 다시 올리기`}>
                     <RotateCw className="h-3.5 w-3.5" />
                   </button>
                 )}
-                <button onClick={() => removeUpload(u.key)} className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-white hover:text-slate-700" aria-label={`${u.file.name} ${u.state === 'uploading' ? '올리기 취소' : '목록에서 빼기'}`}>
+                <button onClick={() => removeUpload(u.key)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-white hover:text-slate-700" aria-label={`${u.file.name} ${u.state === 'uploading' ? '올리기 취소' : '목록에서 빼기'}`}>
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -306,7 +306,7 @@ export function CompanyFiles({ company, customerId = null, dealId = null, dealId
       )}
 
       {error ? (
-        <p className={`${meta} text-slate-500`}>파일 목록을 불러오지 못했습니다: {error}</p>
+        <p className={`${meta} text-red-600`}>파일 목록을 불러오지 못했습니다: {error}</p>
       ) : items === null ? (
         <p className={`${meta} text-slate-400`}>불러오는 중…</p>
       ) : items.length === 0 ? (
@@ -342,16 +342,16 @@ export function CompanyFiles({ company, customerId = null, dealId = null, dealId
                 </span>
               </div>
               {canView(f) && (
-                <a href={viewUrl(f.id)} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`${f.fileName} 새 탭에서 보기`} title="새 탭에서 보기">
+                <a href={viewUrl(f.id)} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`${f.fileName} 새 탭에서 보기`} title="새 탭에서 보기">
                   <Eye className="h-3.5 w-3.5" />
                 </a>
               )}
-              <a href={downloadUrl(f.id)} className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`${f.fileName} 내려받기`} title="내려받기">
+              <a href={downloadUrl(f.id)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={`${f.fileName} 내려받기`} title="내려받기">
                 <Download className="h-3.5 w-3.5" />
               </a>
               <button
                 onClick={() => void remove(f)}
-                className="shrink-0 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
                 aria-label={`${f.fileName} 삭제`}
                 title={f.uploadedBy === me ? '삭제' : '삭제 (다른 사람이 올린 파일 — 관리자 PIN)'}
               >

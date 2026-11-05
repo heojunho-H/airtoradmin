@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, TrendingUp, Settings, Menu, X, Bell, Search, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles, House, ListChecks } from 'lucide-react';
+import { Users, TrendingUp, Settings, Menu, X, Bell, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles, House, ListChecks, Wind, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { CustomersPage, fetchCustomers } from './components/CustomersPage';
 import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
 import { HomePage } from './components/home/HomePage';
 import { TodoPage } from './components/home/TodoPage';
+import { GlobalSearch } from './components/GlobalSearch';
 import type { AiDatasets } from '../lib/ai/types';
 import { kstYmd } from '../lib/ai/format';
 import { computeHome } from '../lib/home/metrics';
@@ -54,6 +55,7 @@ export default function App() {
   // 홈·일정표에서 '고객 정보 보기'·'프로젝트 보기'로 넘어갈 때 바로 열 대상
   const [customerFocusId, setCustomerFocusId] = useState<number | null>(null);
   const [projectFocusId, setProjectFocusId] = useState<number | null>(null);
+  const [dealFocusId, setDealFocusId] = useState<number | null>(null);
 
   // DB에서 데이터 로드
   useEffect(() => {
@@ -298,6 +300,10 @@ export default function App() {
     setProjectFocusId(projectId);
     goTo('profit');
   };
+  const openDeal = (dealId: number) => {
+    setDealFocusId(dealId);
+    goTo('sales');
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('user_name');
@@ -401,20 +407,28 @@ export default function App() {
         } bg-white border-r border-slate-200 transition-all duration-300 flex flex-col`}
       >
         {/* Logo */}
-        <div className="h-16 border-b border-slate-200 flex items-center justify-between px-4 md:px-6">
+        <div className={`h-16 border-b border-slate-200 flex items-center ${sidebarOpen || isMobile ? 'justify-between px-4 md:px-5' : 'justify-center px-2'}`}>
           {(sidebarOpen || isMobile) && (
             <div className="flex items-center gap-2.5">
-              <span className="text-[15px] font-semibold text-slate-900 tracking-tight">AIRTOR System</span>
+              {/* 로그인 화면과 같은 로고 타일 */}
+              <span className="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+                <Wind className="w-[18px] h-[18px]" />
+              </span>
+              <span className="text-[16px] font-bold text-slate-900 tracking-tight">AIRTOR System</span>
             </div>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors"
+            aria-label={isMobile ? '메뉴 닫기' : sidebarOpen ? '메뉴 접기' : '메뉴 펼치기'}
+            title={isMobile ? '메뉴 닫기' : sidebarOpen ? '메뉴 접기' : '메뉴 펼치기'}
           >
-            {sidebarOpen ? (
+            {isMobile ? (
               <X className="w-5 h-5 text-slate-600" />
+            ) : sidebarOpen ? (
+              <PanelLeftClose className="w-5 h-5 text-slate-600" />
             ) : (
-              <Menu className="w-5 h-5 text-slate-600" />
+              <PanelLeftOpen className="w-5 h-5 text-slate-600" />
             )}
           </button>
         </div>
@@ -435,12 +449,12 @@ export default function App() {
                   className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                     isActive
                       ? accent.side
-                      : 'text-slate-700 hover:bg-slate-50'
+                      : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? accent.icon : 'text-slate-500'}`} />
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? accent.icon : 'text-slate-500'}`} />
                   {expanded && (
-                    <span className={`text-[15px] font-medium ${isActive ? accent.text : 'text-slate-700'}`}>
+                    <span className={`text-[16px] ${isActive ? `font-semibold ${accent.text}` : 'font-medium text-slate-700'}`}>
                       {item.name}
                     </span>
                   )}
@@ -469,11 +483,11 @@ export default function App() {
             aria-current={currentPage === 'settings' ? 'page' : undefined}
             title="설정"
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-              currentPage === 'settings' ? NAV_ACCENT.blue.side : 'text-slate-700 hover:bg-slate-50'
+              currentPage === 'settings' ? NAV_ACCENT.blue.side : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <Settings className={`w-5 h-5 ${currentPage === 'settings' ? NAV_ACCENT.blue.icon : 'text-slate-500'}`} />
-            {(sidebarOpen || isMobile) && <span className="text-[15px] font-medium">설정</span>}
+            <Settings className={`w-5 h-5 shrink-0 ${currentPage === 'settings' ? NAV_ACCENT.blue.icon : 'text-slate-500'}`} />
+            {(sidebarOpen || isMobile) && <span className={`text-[16px] ${currentPage === 'settings' ? 'font-semibold' : 'font-medium'}`}>설정</span>}
           </button>
         </div>
       </aside>
@@ -487,20 +501,22 @@ export default function App() {
             <button
               onClick={() => setSidebarOpen(true)}
               className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors mr-2"
+              aria-label="메뉴 열기"
             >
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
           )}
 
+          {/* 상단 검색 — 고객·영업 딜·프로젝트를 찾아 상세를 바로 연다 (src/app/components/GlobalSearch.tsx) */}
           <div className="flex items-center flex-1 max-w-2xl">
-            <div className="relative w-full">
-              <Search className="absolute left-3 md:left-3.5 top-1/2 -translate-y-1/2 w-4 md:w-[18px] h-4 md:h-[18px] text-slate-400" />
-              <input
-                type="text"
-                placeholder="검색..."
-                className="w-full pl-9 md:pl-11 pr-4 py-2 md:py-2.5 text-[14px] md:text-[15px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
-              />
-            </div>
+            <GlobalSearch
+              customers={customers}
+              deals={deals}
+              projects={projects}
+              onOpenCustomer={openCustomer}
+              onOpenDeal={openDeal}
+              onOpenProject={openProject}
+            />
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 ml-2">
@@ -518,11 +534,14 @@ export default function App() {
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative p-2.5 hover:bg-slate-50 rounded-xl transition-colors"
+                className="relative p-2.5 hover:bg-slate-100 rounded-xl transition-colors"
+                aria-label={unreadCount > 0 ? `알림 ${unreadCount}건` : '알림'}
+                aria-expanded={notificationOpen}
+                title="알림"
               >
                 <Bell className="w-5 h-5 text-slate-600" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 md:top-1.5 right-1 md:right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white px-1">
+                  <span className="absolute top-1 md:top-1.5 right-1 md:right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full ring-2 ring-white px-1">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
@@ -582,7 +601,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <span className="hidden md:inline text-sm text-slate-600 font-medium">{userName}</span>
+            <span className="hidden md:inline text-[15px] text-slate-700 font-medium">{userName}</span>
             <button
               onClick={handleLogout}
               className="p-2.5 hover:bg-red-50 rounded-xl transition-colors group"
@@ -594,7 +613,7 @@ export default function App() {
         </header>
 
         {/* Page Content */}
-        <main ref={mainRef} className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-16' : ''} ${readable ? 'ux-readable' : ''}`}>
+        <main ref={mainRef} className={`flex-1 overflow-auto bg-slate-50 ${isMobile ? 'pb-20' : ''} ${readable ? 'ux-readable' : ''}`}>
           {currentPage === 'home' && (
             <HomePage
               userName={userName}
@@ -609,7 +628,7 @@ export default function App() {
           )}
           {currentPage === 'todos' && <TodoPage todos={homeData?.todos ?? []} todoState={todoState} loading={!homeData} onOpenCustomer={openCustomer} />}
           {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} openCustomerId={customerFocusId} onCustomerOpened={() => setCustomerFocusId(null)} />}
-          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} />}
+          {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} openDealId={dealFocusId} onDealOpened={() => setDealFocusId(null)} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
           {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} openProjectId={projectFocusId} onProjectOpened={() => setProjectFocusId(null)} />}
           {currentPage === 'settings' && (
@@ -638,7 +657,7 @@ export default function App() {
 
       {/* 모바일 하단 네비게이션 */}
       {isMobile && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 z-40 safe-area-bottom">
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] z-40">
           <div className="grid grid-cols-7 max-w-md mx-auto">
             {bottomNavigation.map((item) => {
               const Icon = item.icon;

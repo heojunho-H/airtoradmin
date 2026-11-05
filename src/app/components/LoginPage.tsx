@@ -61,7 +61,7 @@ export function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* 로고 및 타이틀 섹션 */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-sky-600 rounded-2xl shadow-lg shadow-blue-500/25 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-sm mb-4">
             <Wind className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">AIRTOR System</h1>
@@ -130,10 +130,10 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white text-[15px] font-medium
-                       rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30
+              className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-[15px] font-semibold
+                       rounded-xl shadow-sm
                        disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none
-                       transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
+                       transition-colors duration-200
                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
                        flex items-center justify-center gap-2"
             >
@@ -152,9 +152,7 @@ export function LoginPage() {
           <div className="mt-6 pt-6 border-t border-slate-200">
             <p className="text-xs text-center text-slate-500">
               관리자 계정이 필요하신가요?{' '}
-              <button className="text-blue-600 hover:text-blue-700 font-medium transition-colors">
-                문의하기
-              </button>
+              <span className="font-medium text-slate-700">관리자에게 문의하세요</span>
             </p>
           </div>
         </div>

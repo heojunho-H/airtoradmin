@@ -5,22 +5,18 @@ import {
   Phone,
   Mail,
   MapPin,
-  Briefcase,
   Star,
   Plus,
   Search,
-  Download,
   Calendar,
   Building2,
   TrendingUp,
-  CheckCircle2,
-  Clock,
   X,
   Map,
   Trash2,
   FileText,
 } from 'lucide-react';
-import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
+import { btn, ICON_BTN_DANGER, KPI, TILE, TABLE, BADGE, TONE, MODAL_CLOSE, CARD, type Tone } from './ui-kit';
 
 interface CustomerManager {
   id: number;
@@ -581,7 +577,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
         item1Score: 1,
         item2Score: 0,
         totalScore: 1,
-        memo: '우선순��로 협력함',
+        memo: '우선순위로 협력함',
       },
     ],
     certifications: ['기계설비공사업', '냉난방공사업', '환경 ISO 14001'],
@@ -653,7 +649,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
     completedProjects: 34,
     totalContractAmount: 1680000000,
     performanceRating: 4.6,
-    cooperationScore: 0, // 협력평가점��
+    cooperationScore: 0, // 협력평가점수
     evaluationHistory: [
       {
         date: '2024-01-10',
@@ -689,7 +685,7 @@ export const initialSubcontractors: SubcontractorManager[] = [
         totalQuantity: 600,
         detailQuantity: '네트워크 장비 600개',
         estimateAmount: 95000000,
-        customerManager: '��서연',
+        customerManager: '최서연',
         workDate: '2024-01-30',
         subcontractor: '윤서준',
         workEvaluation: '양호',
@@ -711,6 +707,24 @@ export const initialSubcontractors: SubcontractorManager[] = [
     ],
   },
 ];
+
+// 작업팀장 등급(최종 점수 기준) 색 — 1등급 보라 / 2등급 파랑 / 3등급 초록 / 4등급 주황 / 퇴출 심사 빨강
+// Tailwind 는 소스에 적힌 클래스만 만들므로 글자·별 아이콘 색을 통째로 적어 둔다
+type GradeTone = Extract<Tone, 'purple' | 'blue' | 'emerald' | 'amber' | 'red'>;
+const GRADE_TEXT_COLOR: Record<GradeTone, string> = {
+  purple: 'text-purple-700',
+  blue: 'text-blue-700',
+  emerald: 'text-emerald-700',
+  amber: 'text-amber-700',
+  red: 'text-red-700',
+};
+const GRADE_ICON_COLOR: Record<GradeTone, string> = {
+  purple: 'text-purple-600',
+  blue: 'text-blue-600',
+  emerald: 'text-emerald-600',
+  amber: 'text-amber-600',
+  red: 'text-red-600',
+};
 
 interface SupplyChainPageProps {
   externalManagersState?: [CustomerManager[], (m: CustomerManager[] | ((prev: CustomerManager[]) => CustomerManager[])) => void];
@@ -825,7 +839,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     (m) => m.assignedArea.includes('서울') || m.assignedArea.includes('경기') || m.assignedArea.includes('인천')
   ).length;
   const chungcheongManagers = managers.filter(
-    (m) => m.assignedArea.includes('충청') || m.assignedArea.includes('대��') || m.assignedArea.includes('세종')
+    (m) => m.assignedArea.includes('충청') || m.assignedArea.includes('대전') || m.assignedArea.includes('세종')
   ).length;
   const gyeongsangManagers = managers.filter(
     (m) => m.assignedArea.includes('경상') || m.assignedArea.includes('부산') || m.assignedArea.includes('대구') || m.assignedArea.includes('울산')
@@ -927,27 +941,30 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     return '퇴출 심사';
   };
 
-  // 등급별 스타일 반환 함수
-  const getPerformanceGradeStyle = (finalScore: number): string => {
-    if (finalScore >= 80) return 'bg-purple-100 text-purple-700 border-purple-300';
-    if (finalScore >= 60) return 'bg-blue-100 text-blue-700 border-blue-300';
-    if (finalScore >= 40) return 'bg-green-100 text-green-700 border-green-300';
-    if (finalScore >= 20) return 'bg-yellow-100 text-yellow-700 border-yellow-300';
-    return 'bg-red-100 text-red-700 border-red-300';
+  // 등급별 색 (calculatePerformanceGrade 와 같은 기준)
+  const getPerformanceGradeTone = (finalScore: number): GradeTone => {
+    if (finalScore >= 80) return 'purple';
+    if (finalScore >= 60) return 'blue';
+    if (finalScore >= 40) return 'emerald';
+    if (finalScore >= 20) return 'amber';
+    return 'red';
   };
+
+  // 등급별 배지 색 반환 함수 (BADGE 와 함께 씀)
+  const getPerformanceGradeStyle = (finalScore: number): string => TONE[getPerformanceGradeTone(finalScore)];
 
   // 상태 배지 컴포넌트
   const StatusBadge = ({ status, type }: { status: string; type: 'manager' | 'subcontractor' }) => {
-    const managerStyles = {
-      active: 'bg-green-100 text-green-700',
-      vacation: 'bg-yellow-100 text-yellow-700',
-      leave: 'bg-gray-100 text-gray-700',
+    const managerStyles: Record<'active' | 'vacation' | 'leave', Tone> = {
+      active: 'emerald',
+      vacation: 'amber',
+      leave: 'slate',
     };
 
-    const subcontractorStyles = {
-      available: 'bg-green-100 text-green-700',
-      busy: 'bg-orange-100 text-orange-700',
-      unavailable: 'bg-red-100 text-red-700',
+    const subcontractorStyles: Record<'available' | 'busy' | 'unavailable', Tone> = {
+      available: 'emerald',
+      busy: 'orange',
+      unavailable: 'amber',
     };
 
     const managerLabels = {
@@ -959,31 +976,15 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
     const subcontractorLabels = {
       available: '투입가능',
       busy: '업무중',
-      unavailable: '��가',
+      unavailable: '휴가',
     };
 
     const styles = type === 'manager' ? managerStyles : subcontractorStyles;
     const labels = type === 'manager' ? managerLabels : subcontractorLabels;
 
     return (
-      <span className={`px-2.5 py-1 rounded-lg text-[13px] font-medium ${styles[status as keyof typeof styles]}`}>
+      <span className={`${BADGE} ${TONE[(styles as Record<string, Tone>)[status] ?? 'slate']}`}>
         {labels[status as keyof typeof labels]}
-      </span>
-    );
-  };
-
-  // 등급 배지 컴포넌트
-  const GradeBadge = ({ grade }: { grade: 'S' | 'A' | 'B' | 'C' }) => {
-    const styles = {
-      S: 'bg-purple-100 text-purple-700 border-purple-300',
-      A: 'bg-blue-100 text-blue-700 border-blue-300',
-      B: 'bg-green-100 text-green-700 border-green-300',
-      C: 'bg-gray-100 text-gray-700 border-gray-300',
-    };
-
-    return (
-      <span className={`px-3 py-1 rounded-lg text-[13px] font-semibold border ${styles[grade]}`}>
-        {grade}등급
       </span>
     );
   };
@@ -1254,11 +1255,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
-      {/* 페이지 헤 */}
+      {/* 페이지 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold text-slate-900 tracking-tight">공급망 관리</h1>
-          <p className="text-[14px] text-slate-500 mt-1">고객책임자 및 작업팀장(하청) 관리</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">공급망 관리</h1>
+          <p className="text-[15px] text-slate-500 mt-1.5">고객책임자 및 작업팀장(하청) 관리</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
@@ -1269,7 +1270,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                 handleOpenAddSubcontractorModal();
               }
             }}
-            className="px-4 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2"
+            className={btn('primary')}
           >
             <Plus className="w-4 h-4" />
             {activeTab === 'managers' ? '책임자 등록' : '팀장 등록'}
@@ -1280,80 +1281,112 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
       {/* KPI 카드 */}
       {activeTab === 'managers' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">총 고객책임자</span>
-              <Users className="w-5 h-5 text-blue-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>총 고객책임자</p>
+                <p className={KPI.value}>{totalManagers}명</p>
+                <p className={KPI.sub}>근무중: {activeManagers}명</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <Users className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{totalManagers}명</div>
-            <p className="text-[13px] text-slate-500 mt-1">근무중: {activeManagers}명</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">서울 수도권</span>
-              <MapPin className="w-5 h-5 text-green-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>서울 수도권</p>
+                <p className={KPI.value}>{seoulMetroManagers}명</p>
+                <p className={KPI.sub}>서울/경기/인천</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{seoulMetroManagers}명</div>
-            <p className="text-[13px] text-slate-500 mt-1">서울/경기/인천</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">충청권</span>
-              <MapPin className="w-5 h-5 text-orange-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>충청권</p>
+                <p className={KPI.value}>{chungcheongManagers}명</p>
+                <p className={KPI.sub}>대전/충청/세종</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{chungcheongManagers}명</div>
-            <p className="text-[13px] text-slate-500 mt-1">대전/충청/세종</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">경상권</span>
-              <MapPin className="w-5 h-5 text-purple-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>경상권</p>
+                <p className={KPI.value}>{gyeongsangManagers}명</p>
+                <p className={KPI.sub}>부산/대구/울산/경상</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{gyeongsangManagers}명</div>
-            <p className="text-[13px] text-slate-500 mt-1">부산/대구/울산/경상</p>
           </div>
         </div>
       )}
 
       {activeTab === 'subcontractors' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">총 작업팀장</span>
-              <Building2 className="w-5 h-5 text-blue-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>총 작업팀장</p>
+                <p className={KPI.value}>{totalSubcontractors}개사</p>
+                <p className={KPI.sub}>투입가능: {availableSubcontractors}개사</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <Building2 className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{totalSubcontractors}개사</div>
-            <p className="text-[13px] text-slate-500 mt-1">투입가능: {availableSubcontractors}개사</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">서울 수도권</span>
-              <MapPin className="w-5 h-5 text-green-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>서울 수도권</p>
+                <p className={KPI.value}>{seoulMetroSubcontractors}개사</p>
+                <p className={KPI.sub}>서울/경기/인천</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{seoulMetroSubcontractors}개사</div>
-            <p className="text-[13px] text-slate-500 mt-1">서울/경기/인천</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">충청권</span>
-              <MapPin className="w-5 h-5 text-orange-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>충청권</p>
+                <p className={KPI.value}>{chungcheongSubcontractors}개사</p>
+                <p className={KPI.sub}>대전/충청/세종</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{chungcheongSubcontractors}개사</div>
-            <p className="text-[13px] text-slate-500 mt-1">대전/충청/세종</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] text-slate-500">경상권</span>
-              <MapPin className="w-5 h-5 text-purple-500" />
+          <div className={KPI.card}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className={KPI.label}>경상권</p>
+                <p className={KPI.value}>{gyeongsangSubcontractors}개사</p>
+                <p className={KPI.sub}>부산/대구/울산/경상</p>
+              </div>
+              <div className={KPI.iconTile}>
+                <MapPin className={KPI.icon} />
+              </div>
             </div>
-            <div className="text-[26px] font-semibold text-slate-900">{gyeongsangSubcontractors}개사</div>
-            <p className="text-[13px] text-slate-500 mt-1">부산/대구/울산/경상</p>
           </div>
         </div>
       )}
 
       {/* 탭 네비게이션 */}
-      <div className="bg-white rounded-2xl border border-slate-200">
+      <div className={CARD}>
         <div className="border-b border-slate-200 px-6">
           <div className="flex gap-8">
             {[
@@ -1384,7 +1417,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               placeholder={activeTab === 'managers' ? '이름 또는 직책으로 검색...' : '이름 또는 회사명으로 검색...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 text-[15px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
+              className="w-full pl-11 pr-4 py-2 text-[14px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
             />
           </div>
         </div>
@@ -1395,16 +1428,16 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
             {/* 표 영역 */}
             <div className="flex-1 overflow-x-auto">
               <table className="w-full">
-                <thead>
+                <thead className="bg-slate-50">
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">이름</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">직책</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">연락처</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">이메일</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">담당 지역</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">담당 고객</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">재구매율</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">상태</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">이름</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">직책</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">연락처</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">이메일</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">담당 지역</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">담당 고객</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">재구매율</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">상태</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1417,12 +1450,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     .map((manager) => (
                       <tr
                         key={manager.id}
-                        className="hover:bg-slate-50 transition-colors cursor-pointer"
+                        className={TABLE.rowClickable}
                         onClick={() => setSelectedManager(manager)}
                       >
                         <td className="py-4 px-4 text-[14px] text-slate-900 font-medium">{manager.name}</td>
                         <td className="py-4 px-4 text-[14px] text-slate-600">{manager.position}</td>
-                        <td className="py-4 px-4 text-[14px] text-slate-600">{manager.phone}</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-600 tabular-nums">{manager.phone}</td>
                         <td className="py-4 px-4 text-[14px] text-slate-600">{manager.email}</td>
                         <td className="py-4 px-4 text-[14px] text-slate-600">
                           {editingAreaId === manager.id ? (
@@ -1460,8 +1493,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             </span>
                           )}
                         </td>
-                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center">{manager.assignedCustomers}개</td>
-                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center">{manager.repurchaseRate}%</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center tabular-nums">{manager.assignedCustomers}개</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center tabular-nums">{manager.repurchaseRate}%</td>
                         <td className="py-4 px-4 text-center">
                           {editingStatusId === manager.id ? (
                             <select
@@ -1530,15 +1563,15 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
             {/* 표 영역 */}
             <div className="flex-1 overflow-x-auto">
               <table className="w-full">
-                <thead>
+                <thead className="bg-slate-50">
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">팀장명</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">회사명</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">연락처</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">팀원규모</th>
-                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">담당 지역</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">최종점수</th>
-                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">등급</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">팀장명</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">회사명</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">연락처</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">팀원규모</th>
+                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">담당 지역</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">최종점수</th>
+                    <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">등급</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1551,17 +1584,17 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     .map((sub) => (
                       <tr
                         key={sub.id}
-                        className="hover:bg-slate-50 transition-colors cursor-pointer"
+                        className={TABLE.rowClickable}
                         onClick={() => setSelectedSubcontractor(sub)}
                       >
                         <td className="py-4 px-4 text-[14px] text-slate-900 font-medium">{sub.name}</td>
                         <td className="py-4 px-4 text-[14px] text-slate-600">{sub.company}</td>
-                        <td className="py-4 px-4 text-[14px] text-slate-600">{sub.phone}</td>
-                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center">{sub.teamSize}명</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-600 tabular-nums">{sub.phone}</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center tabular-nums">{sub.teamSize}명</td>
                         <td className="py-4 px-4 text-[14px] text-slate-600">{sub.assignedArea}</td>
-                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center font-semibold">{calculateFinalScore(sub)}점</td>
+                        <td className="py-4 px-4 text-[14px] text-slate-900 text-center font-semibold tabular-nums">{calculateFinalScore(sub)}점</td>
                         <td className="py-4 px-4 text-center">
-                          <span className={`px-3 py-1 rounded-lg text-[13px] font-semibold border ${getPerformanceGradeStyle(calculateFinalScore(sub))}`}>
+                          <span className={`${BADGE} ${getPerformanceGradeStyle(calculateFinalScore(sub))}`}>
                             {calculatePerformanceGrade(calculateFinalScore(sub))}
                           </span>
                         </td>
@@ -1600,9 +1633,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <h2 className="text-[18px] font-semibold text-slate-900">고객책임자 상세 정보</h2>
               <button
                 onClick={() => setSelectedManager(null)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1690,17 +1724,17 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               </div>
 
               {/* 담당 고객 */}
-              <div className="bg-blue-50 rounded-xl p-4">
-                <div className="text-[13px] text-blue-600 mb-1">담당 고객</div>
+              <div className={TILE.accentBox}>
+                <div className={TILE.accentLabel}>담당 고객</div>
                 {isEditingManager ? (
                   <input
                     type="number"
                     value={editedManager?.assignedCustomers || 0}
                     onChange={(e) => setEditedManager(editedManager ? { ...editedManager, assignedCustomers: Number(e.target.value) } : null)}
-                    className="text-[22px] font-semibold text-blue-900 bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1.5 text-xl font-bold text-blue-900 tabular-nums bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 ) : (
-                  <div className="text-[22px] font-semibold text-blue-900">{selectedManager.assignedCustomers}개</div>
+                  <div className={TILE.accentValue}>{selectedManager.assignedCustomers}개</div>
                 )}
               </div>
 
@@ -1708,36 +1742,36 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <div>
                 <div className="text-[14px] font-semibold text-slate-700 mb-3">재구매율 분석</div>
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-blue-50 rounded-xl p-4">
-                    <div className="text-[13px] text-blue-600 mb-1">신규 고객</div>
+                  <div className={TILE.box}>
+                    <div className={TILE.label}>신규 고객</div>
                     {isEditingManager ? (
                       <input
                         type="number"
                         value={editedManager?.newCustomers || 0}
                         onChange={(e) => setEditedManager(editedManager ? { ...editedManager, newCustomers: Number(e.target.value) } : null)}
-                        className="text-[22px] font-semibold text-blue-900 bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="mt-1.5 text-xl font-bold text-slate-900 tabular-nums bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
-                      <div className="text-[22px] font-semibold text-blue-900">{selectedManager.newCustomers}명</div>
+                      <div className={TILE.value}>{selectedManager.newCustomers}명</div>
                     )}
                   </div>
-                  <div className="bg-green-50 rounded-xl p-4">
-                    <div className="text-[13px] text-green-600 mb-1">재구매 고객</div>
+                  <div className={TILE.box}>
+                    <div className={TILE.label}>재구매 고객</div>
                     {isEditingManager ? (
                       <input
                         type="number"
                         value={editedManager?.repurchaseCustomers || 0}
                         onChange={(e) => setEditedManager(editedManager ? { ...editedManager, repurchaseCustomers: Number(e.target.value) } : null)}
-                        className="text-[22px] font-semibold text-green-900 bg-white border border-green-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="mt-1.5 text-xl font-bold text-slate-900 tabular-nums bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
-                      <div className="text-[22px] font-semibold text-green-900">{selectedManager.repurchaseCustomers}명</div>
+                      <div className={TILE.value}>{selectedManager.repurchaseCustomers}명</div>
                     )}
                   </div>
-                  <div className="bg-purple-50 rounded-xl p-4">
-                    <div className="text-[13px] text-purple-600 mb-1">재구매율</div>
-                    <div className="text-[22px] font-semibold text-purple-900 flex items-center gap-1">
-                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                  <div className={TILE.box}>
+                    <div className={TILE.label}>재구매율</div>
+                    <div className={`${TILE.value} flex items-center gap-1`}>
+                      <TrendingUp className="w-5 h-5 text-blue-600" />
                       {selectedManager.repurchaseRate}%
                     </div>
                   </div>
@@ -1751,36 +1785,37 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   <table className="w-full border border-slate-200 rounded-xl overflow-hidden">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">문의 등록일</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">고객사</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">프로젝트명</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">총수량</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">상세수량</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">견적금액</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">고객책임자</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업일자</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업팀장(하청)</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">삭제</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">문의 등록일</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">고객사</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">프로젝트명</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">총수량</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">상세수량</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">견적금액</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">고객책임자</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업일자</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업팀장(하청)</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">삭제</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {selectedManager.recentActivities.map((activity, index) => (
                         <tr key={index} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.inquiryDate}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.inquiryDate}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.customerCompany}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.projectName}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.totalQuantity}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.totalQuantity}</td>
                           <td className="py-3 px-4">{formatDetailedQuantity(activity.detailQuantity)}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-900">{formatAmount(activity.estimateAmount)}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-900 tabular-nums">{formatAmount(activity.estimateAmount)}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.customerManager}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.workDate}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.workDate}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.subcontractor}</td>
                           <td className="py-3 px-4 text-center">
                             <button
                               onClick={() => handleDeleteManagerActivity(index, activity.projectName)}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              className={ICON_BTN_DANGER}
+                              aria-label="작업 삭제"
                             >
-                              <Trash2 className="w-4 h-4 text-red-600" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
@@ -1796,13 +1831,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                 <>
                   <button
                     onClick={handleCancelEditManager}
-                    className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    className={btn('secondary')}
                   >
                     취소
                   </button>
                   <button
                     onClick={handleSaveManager}
-                    className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                    className={btn('primary')}
                   >
                     저장
                   </button>
@@ -1815,13 +1850,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       setIsEditingManager(false);
                       setEditedManager(null);
                     }}
-                    className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    className={btn('secondary')}
                   >
                     닫기
                   </button>
                   <button
                     onClick={handleEditManager}
-                    className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                    className={btn('primary')}
                   >
                     정보 수정
                   </button>
@@ -1840,9 +1875,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <h2 className="text-[18px] font-semibold text-slate-900">작업팀장 상세 정보</h2>
               <button
                 onClick={() => setSelectedSubcontractor(null)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1852,8 +1888,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                 {/* 기본 정보 */}
                 <div className="col-span-3">
                   <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-10 h-10 text-purple-600" />
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-10 h-10 text-blue-600" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -1868,7 +1904,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           <h3 className="text-[20px] font-semibold text-slate-900">{selectedSubcontractor.name}</h3>
                         )}
                         <StatusBadge status={selectedSubcontractor.status} type="subcontractor" />
-                        <span className={`px-3 py-1 rounded-lg text-[13px] font-semibold border ${getPerformanceGradeStyle(calculateFinalScore(selectedSubcontractor))}`}>
+                        <span className={`${BADGE} ${getPerformanceGradeStyle(calculateFinalScore(selectedSubcontractor))}`}>
                           {calculatePerformanceGrade(calculateFinalScore(selectedSubcontractor))}
                         </span>
                       </div>
@@ -1972,20 +2008,9 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-[14px]">
-                          <Star className={`w-4 h-4 ${
-                            selectedSubcontractor.grade === 'S' ? 'text-purple-600' :
-                            selectedSubcontractor.grade === 'A' ? 'text-blue-600' :
-                            selectedSubcontractor.grade === 'B' ? 'text-green-600' :
-                            'text-gray-600'
-                          }`} />
+                          <Star className={`w-4 h-4 ${GRADE_ICON_COLOR[getPerformanceGradeTone(calculateFinalScore(selectedSubcontractor))]}`} />
                           <span className="text-slate-600">등급:</span>
-                          <span className={`font-semibold ${
-                            calculateFinalScore(selectedSubcontractor) >= 80 ? 'text-purple-700' :
-                            calculateFinalScore(selectedSubcontractor) >= 60 ? 'text-blue-700' :
-                            calculateFinalScore(selectedSubcontractor) >= 40 ? 'text-green-700' :
-                            calculateFinalScore(selectedSubcontractor) >= 20 ? 'text-yellow-700' :
-                            'text-red-700'
-                          }`}>{calculatePerformanceGrade(calculateFinalScore(selectedSubcontractor))}</span>
+                          <span className={`font-semibold ${GRADE_TEXT_COLOR[getPerformanceGradeTone(calculateFinalScore(selectedSubcontractor))]}`}>{calculatePerformanceGrade(calculateFinalScore(selectedSubcontractor))}</span>
                         </div>
                       </div>
                     </div>
@@ -2034,8 +2059,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
 
               {/* 대시보드 KPI */}
               <div className="grid grid-cols-6 gap-4">
-                <div className="bg-indigo-50 rounded-xl p-4">
-                  <div className="text-[13px] text-indigo-600 mb-1">기본점수</div>
+                <div className={TILE.box}>
+                  <div className={TILE.label}>기본점수</div>
                   <input
                     type="number"
                     value={selectedSubcontractor.baseScore ?? 50}
@@ -2057,38 +2082,38 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                         updateSubcontractor(current).catch(err => console.error('기본점수 저장 API 실패:', err));
                       }
                     }}
-                    className="w-full text-[22px] font-semibold text-indigo-900 bg-transparent border-b border-indigo-200 focus:border-indigo-500 focus:outline-none text-center"
+                    className="mt-1.5 w-full text-xl font-bold text-slate-900 tabular-nums bg-transparent border-b border-slate-300 hover:border-slate-400 focus:border-blue-500 focus:outline-none text-center"
                   />
-                  <div className="text-[11px] text-indigo-500 text-center mt-1">수정 가능</div>
+                  <div className="text-[11px] text-slate-500 text-center mt-1">수정 가능</div>
                 </div>
-                <div className="bg-green-50 rounded-xl p-4">
-                  <div className="text-[13px] text-green-600 mb-1">작업평가 점수</div>
-                  <div className="text-[22px] font-semibold text-green-900">
+                <div className={TILE.box}>
+                  <div className={TILE.label}>작업평가 점수</div>
+                  <div className={TILE.value}>
                     {(selectedSubcontractor.recentActivities || []).reduce((sum, activity) => sum + (activity.workEvaluationScore || 0), 0)}점
                   </div>
                 </div>
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="text-[13px] text-blue-600 mb-1">재��매 건수</div>
+                <div className={TILE.box}>
+                  <div className={TILE.label}>재구매 건수</div>
                   {isEditingSubcontractor ? (
                     <input
                       type="number"
                       value={editedSubcontractor?.repurchaseCount || 0}
                       onChange={(e) => setEditedSubcontractor(editedSubcontractor ? { ...editedSubcontractor, repurchaseCount: Number(e.target.value) } : null)}
-                      className="text-[22px] font-semibold text-blue-900 bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="mt-1.5 text-xl font-bold text-slate-900 tabular-nums bg-white border border-blue-500 rounded-lg px-3 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (
-                    <div className="text-[22px] font-semibold text-blue-900">{selectedSubcontractor.repurchaseCount}건</div>
+                    <div className={TILE.value}>{selectedSubcontractor.repurchaseCount}건</div>
                   )}
                 </div>
-                <div className="bg-cyan-50 rounded-xl p-4">
-                  <div className="text-[13px] text-cyan-600 mb-1">재구매 점수</div>
-                  <div className="text-[22px] font-semibold text-cyan-900">{selectedSubcontractor.repurchaseCount * 3}점</div>
+                <div className={TILE.box}>
+                  <div className={TILE.label}>재구매 점수</div>
+                  <div className={TILE.value}>{selectedSubcontractor.repurchaseCount * 3}점</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[13px] text-purple-600">협력평가점수</div>
+                <div className={TILE.box}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className={TILE.label}>협력평가점수</div>
                     <button 
-                      className="px-2 py-1 text-[11px] font-medium text-purple-600 bg-purple-100 hover:bg-purple-200 rounded-md transition-colors"
+                      className={btn('secondary', 'sm')}
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowEvaluationModal(true);
@@ -2097,13 +2122,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       평가하기
                     </button>
                   </div>
-                  <div className="text-[22px] font-semibold text-purple-900">
+                  <div className={TILE.value}>
                     {selectedSubcontractor.cooperationScore > 0 ? '+' : ''}{selectedSubcontractor.cooperationScore}점
                   </div>
                 </div>
-                <div className="bg-orange-50 rounded-xl p-4">
-                  <div className="text-[13px] text-orange-600 mb-1">최종 점수</div>
-                  <div className="text-[22px] font-semibold text-orange-900">{calculateFinalScore(selectedSubcontractor)}점</div>
+                <div className={TILE.accentBox}>
+                  <div className={TILE.accentLabel}>최종 점수</div>
+                  <div className={TILE.accentValue}>{calculateFinalScore(selectedSubcontractor)}점</div>
                 </div>
               </div>
 
@@ -2114,35 +2139,35 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   <table className="w-full border border-slate-200 rounded-xl overflow-hidden">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">문의 등록일</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">고객사</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">프로젝트명</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">총수량</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">상세수량</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">견적금액</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">고객책임자</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업일자</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업팀장(하청)</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업평가</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">작업평가 점수</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">삭제</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">문의 등록일</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">고객사</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">프로젝트명</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">총수량</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">상세수량</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">견적금액</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">고객책임자</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업일자</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업팀장(하청)</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업평가</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">작업평가 점수</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">삭제</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {(selectedSubcontractor.recentActivities || []).map((activity, index) => (
                         <tr key={index} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.inquiryDate}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.inquiryDate}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.customerCompany}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{activity.projectName}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.totalQuantity}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.totalQuantity}</td>
                           <td className="py-3 px-4">{formatDetailedQuantity(activity.detailQuantity)}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-900">{formatAmount(activity.estimateAmount)}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-900 tabular-nums">{formatAmount(activity.estimateAmount)}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.customerManager}</td>
-                          <td className="py-3 px-4 text-[14px] text-slate-600">{activity.workDate}</td>
+                          <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{activity.workDate}</td>
                           <td className="py-3 px-4 text-[14px] text-slate-600">{activity.subcontractor}</td>
                           <td className="py-3 px-4 text-[14px]">
                             <button 
-                              className="px-3 py-1 text-[12px] font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors border border-blue-200"
+                              className={btn('secondary', 'sm')}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedActivity(activity);
@@ -2160,14 +2185,15 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             </button>
                           </td>
                           <td className="py-3 px-4 text-[14px]">
-                            <span className="font-semibold text-slate-900">{activity.workEvaluationScore}점</span>
+                            <span className="font-semibold text-slate-900 tabular-nums">{activity.workEvaluationScore}점</span>
                           </td>
                           <td className="py-3 px-4 text-center">
                             <button
                               onClick={() => handleDeleteSubcontractorActivity(index, activity.projectName)}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              className={ICON_BTN_DANGER}
+                              aria-label="작업 삭제"
                             >
-                              <Trash2 className="w-4 h-4 text-red-600" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
@@ -2183,13 +2209,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                 <>
                   <button
                     onClick={handleCancelEditSubcontractor}
-                    className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    className={btn('secondary')}
                   >
                     취소
                   </button>
                   <button
                     onClick={handleSaveSubcontractor}
-                    className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                    className={btn('primary')}
                   >
                     저장
                   </button>
@@ -2202,13 +2228,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       setIsEditingSubcontractor(false);
                       setEditedSubcontractor(null);
                     }}
-                    className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    className={btn('secondary')}
                   >
                     닫기
                   </button>
                   <button
                     onClick={handleEditSubcontractor}
-                    className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                    className={btn('primary')}
                   >
                     정보 수정
                   </button>
@@ -2227,24 +2253,25 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <h2 className="text-[18px] font-semibold text-slate-900">협력평가</h2>
               <button
                 onClick={() => setShowEvaluationModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-6">
               {/* 기본 정보 */}
               <div className="flex items-start gap-4">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Building2 className="w-10 h-10 text-purple-600" />
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-10 h-10 text-blue-600" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-[20px] font-semibold text-slate-900">{selectedSubcontractor?.name}</h3>
                     <StatusBadge status={selectedSubcontractor?.status} type="subcontractor" />
                     {selectedSubcontractor && (
-                      <span className={`px-3 py-1 rounded-lg text-[13px] font-semibold border ${getPerformanceGradeStyle(calculateFinalScore(selectedSubcontractor))}`}>
+                      <span className={`${BADGE} ${getPerformanceGradeStyle(calculateFinalScore(selectedSubcontractor))}`}>
                         {calculatePerformanceGrade(calculateFinalScore(selectedSubcontractor))}
                       </span>
                     )}
@@ -2272,28 +2299,20 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       나이: {selectedSubcontractor?.age}세
                     </div>
                     <div className="flex items-center gap-2 text-[14px]">
-                      <Star className={`w-4 h-4 ${
-                        selectedSubcontractor?.grade === 'S' ? 'text-purple-600' :
-                        selectedSubcontractor?.grade === 'A' ? 'text-blue-600' :
-                        selectedSubcontractor?.grade === 'B' ? 'text-green-600' :
-                        'text-gray-600'
-                      }`} />
+                      <Star className={`w-4 h-4 ${selectedSubcontractor ? GRADE_ICON_COLOR[getPerformanceGradeTone(calculateFinalScore(selectedSubcontractor))] : 'text-slate-400'}`} />
                       <span className="text-slate-600">등급:</span>
-                      <span className={`font-semibold ${
-                        selectedSubcontractor?.grade === 'S' ? 'text-purple-700' :
-                        selectedSubcontractor?.grade === 'A' ? 'text-blue-700' :
-                        selectedSubcontractor?.grade === 'B' ? 'text-green-700' :
-                        'text-gray-700'
-                      }`}>{selectedSubcontractor?.grade}등급</span>
+                      <span className={`font-semibold ${selectedSubcontractor ? GRADE_TEXT_COLOR[getPerformanceGradeTone(calculateFinalScore(selectedSubcontractor))] : 'text-slate-700'}`}>
+                        {selectedSubcontractor ? calculatePerformanceGrade(calculateFinalScore(selectedSubcontractor)) : '-'}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* 현재 협력평가점수 */}
-              <div className="bg-purple-50 rounded-xl p-4">
-                <div className="text-[13px] text-purple-600 mb-1">현재 협력평가점수</div>
-                <div className="text-[22px] font-semibold text-purple-900">
+              <div className={TILE.accentBox}>
+                <div className={TILE.accentLabel}>현재 협력평가점수</div>
+                <div className={TILE.accentValue}>
                   {selectedSubcontractor?.cooperationScore > 0 ? '+' : ''}{selectedSubcontractor?.cooperationScore}점
                 </div>
               </div>
@@ -2305,24 +2324,24 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   <div className="text-[14px] font-semibold text-slate-700">오더 제공 시 우선순위로 협력하는가?</div>
                   <div className="flex items-center gap-2">
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem1 === 1 ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem1 === 1 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem1(1)}
                     >
                       +1
                     </button>
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem1 === 0 ? 'bg-gray-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem1 === 0 ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem1(0)}
                     >
                       0
                     </button>
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem1 === -1 ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem1 === -1 ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem1(-1)}
                     >
@@ -2334,24 +2353,24 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   <div className="text-[14px] font-semibold text-slate-700">에어터 공급가보다 더 요구하는가?</div>
                   <div className="flex items-center gap-2">
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem2 === 1 ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem2 === 1 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem2(1)}
                     >
                       +1
                     </button>
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem2 === 0 ? 'bg-gray-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem2 === 0 ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem2(0)}
                     >
                       0
                     </button>
                     <button
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg ${
-                        evaluationItem2 === -1 ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'
+                      className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+                        evaluationItem2 === -1 ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                       onClick={() => setEvaluationItem2(-1)}
                     >
@@ -2377,12 +2396,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   <table className="w-full border border-slate-200 rounded-xl overflow-hidden">
                     <thead className="sticky top-0 bg-slate-50">
                       <tr className="border-b border-slate-200">
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">평가일</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">평가자</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">우선순위 협력</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">공급가 요구</th>
-                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-700">합계</th>
-                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-700">메모</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">평가일</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">평가자</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">우선순위 협력</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">공급가 요구</th>
+                        <th className="text-center py-3 px-4 text-[13px] font-semibold text-slate-600">합계</th>
+                        <th className="text-left py-3 px-4 text-[13px] font-semibold text-slate-600">메모</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
@@ -2395,16 +2414,16 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       ) : (
                         selectedSubcontractor?.evaluationHistory.map((evaluation, index) => (
                           <tr key={index} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-3 px-4 text-[14px] text-slate-600">{evaluation.date}</td>
+                            <td className="py-3 px-4 text-[14px] text-slate-600 tabular-nums">{evaluation.date}</td>
                             <td className="py-3 px-4 text-[14px] text-slate-900 font-medium">{evaluation.evaluator}</td>
                             <td className="py-3 px-4 text-center">
                               <span
-                                className={`px-2 py-1 rounded text-[13px] font-medium ${
+                                className={`px-2 py-1 rounded text-[13px] font-medium tabular-nums ${
                                   evaluation.item1Score === 1
-                                    ? 'bg-green-100 text-green-700'
+                                    ? 'bg-emerald-100 text-emerald-700'
                                     : evaluation.item1Score === -1
                                     ? 'bg-red-100 text-red-700'
-                                    : 'bg-gray-100 text-gray-700'
+                                    : 'bg-slate-100 text-slate-700'
                                 }`}
                               >
                                 {evaluation.item1Score > 0 ? '+' : ''}{evaluation.item1Score}
@@ -2412,12 +2431,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             </td>
                             <td className="py-3 px-4 text-center">
                               <span
-                                className={`px-2 py-1 rounded text-[13px] font-medium ${
+                                className={`px-2 py-1 rounded text-[13px] font-medium tabular-nums ${
                                   evaluation.item2Score === 1
-                                    ? 'bg-green-100 text-green-700'
+                                    ? 'bg-emerald-100 text-emerald-700'
                                     : evaluation.item2Score === -1
                                     ? 'bg-red-100 text-red-700'
-                                    : 'bg-gray-100 text-gray-700'
+                                    : 'bg-slate-100 text-slate-700'
                                 }`}
                               >
                                 {evaluation.item2Score > 0 ? '+' : ''}{evaluation.item2Score}
@@ -2425,12 +2444,12 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             </td>
                             <td className="py-3 px-4 text-center">
                               <span
-                                className={`px-2 py-1 rounded text-[13px] font-semibold ${
+                                className={`px-2 py-1 rounded text-[13px] font-semibold tabular-nums ${
                                   evaluation.totalScore > 0
-                                    ? 'bg-green-100 text-green-700'
+                                    ? 'bg-emerald-100 text-emerald-700'
                                     : evaluation.totalScore < 0
                                     ? 'bg-red-100 text-red-700'
-                                    : 'bg-gray-100 text-gray-700'
+                                    : 'bg-slate-100 text-slate-700'
                                 }`}
                               >
                                 {evaluation.totalScore > 0 ? '+' : ''}{evaluation.totalScore}
@@ -2449,7 +2468,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
             <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={() => setShowEvaluationModal(false)}
-                className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className={btn('secondary')}
               >
                 취소
               </button>
@@ -2492,7 +2511,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     setShowEvaluationModal(false);
                   }
                 }}
-                className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                className={btn('primary')}
               >
                 평가 저장
               </button>
@@ -2512,9 +2531,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   setShowWorkEvaluationModal(false);
                   setSelectedActivity(null);
                 }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -2552,11 +2572,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           className={`flex-1 py-2 px-3 text-[13px] font-medium rounded-lg transition-colors ${
                             workEvalCustomerClaim === value
                               ? value > 0
-                                ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500'
                                 : value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2567,8 +2587,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 클래임 발생하여 재방문 발생</div>
                         <div><span className="font-medium text-red-600">-1점:</span> 클래임 발생</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 클래임 발생 없음</div>
-                        <div><span className="font-medium text-green-700">+1점:</span> 긍정적 피드백 발생</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 클래임 발생 없음</div>
+                        <div><span className="font-medium text-emerald-700">+1점:</span> 긍정적 피드백 발생</div>
                       </div>
                     </div>
                   </div>
@@ -2585,8 +2605,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                             workEvalAllDevices === value
                               ? value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2596,7 +2616,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                     <div className="mt-3 pt-3 border-t border-slate-200">
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 의뢰 대수 중 1대 이상 스킵</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 의뢰 대수 모두 작업</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 의뢰 대수 모두 작업</div>
                       </div>
                     </div>
                   </div>
@@ -2612,11 +2632,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           className={`flex-1 py-2 px-3 text-[13px] font-medium rounded-lg transition-colors ${
                             workEvalOnTime === value
                               ? value > 0
-                                ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500'
                                 : value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2627,8 +2647,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 다음날로 넘어감</div>
                         <div><span className="font-medium text-red-600">-1점:</span> 예정시간 1시간 이상 초과함</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 예정시간 1시간 미만 범위에 완료함</div>
-                        <div><span className="font-medium text-green-700">+1점:</span> 예정시간보다 일찍 완료했으며, 작업 품질도 우수함</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 예정시간 1시간 미만 범위에 완료함</div>
+                        <div><span className="font-medium text-emerald-700">+1점:</span> 예정시간보다 일찍 완료했으며, 작업 품질도 우수함</div>
                       </div>
                     </div>
                   </div>
@@ -2644,11 +2664,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           className={`flex-1 py-2 px-3 text-[13px] font-medium rounded-lg transition-colors ${
                             workEvalAfterService === value
                               ? value > 0
-                                ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500'
                                 : value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2659,8 +2679,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 외부 A/S 서비스 신청, 고객 물건 파손, 심한 부품 파손</div>
                         <div><span className="font-medium text-red-600">-1점:</span> 간단 오류 발생 후 자체 해결</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 오류 및 파손 없이 완료</div>
-                        <div><span className="font-medium text-green-700">+1점:</span> 에어컨청소 작업 외 추가 A/S 서비스 제공</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 오류 및 파손 없이 완료</div>
+                        <div><span className="font-medium text-emerald-700">+1점:</span> 에어컨청소 작업 외 추가 A/S 서비스 제공</div>
                       </div>
                     </div>
                   </div>
@@ -2682,11 +2702,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           className={`flex-1 py-2 px-3 text-[13px] font-medium rounded-lg transition-colors ${
                             workEvalUniform === value
                               ? value > 0
-                                ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500'
                                 : value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2697,8 +2717,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 작업 조끼, 작업 티셔츠 모두 미착용 적발</div>
                         <div><span className="font-medium text-red-600">-1점:</span> 작업 티셔츠 미착용 적발(조끼만 착용)</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 작업 조끼, 작업 티셔츠 착용</div>
-                        <div><span className="font-medium text-green-700">+1점:</span> 유니폼 착용 우수</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 작업 조끼, 작업 티셔츠 착용</div>
+                        <div><span className="font-medium text-emerald-700">+1점:</span> 유니폼 착용 우수</div>
                       </div>
                     </div>
                   </div>
@@ -2714,11 +2734,11 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                           className={`flex-1 py-2 px-3 text-[13px] font-medium rounded-lg transition-colors ${
                             workEvalKindness === value
                               ? value > 0
-                                ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                                ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500'
                                 : value < 0
                                 ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                                : 'bg-gray-100 text-gray-700 border-2 border-gray-500'
-                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                : 'bg-slate-100 text-slate-700 border-2 border-slate-500'
+                              : 'bg-slate-50 text-slate-600 border-2 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           {value > 0 ? '+' : ''}{value}점
@@ -2729,8 +2749,8 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                       <div className="text-[12px] text-slate-500 space-y-1">
                         <div><span className="font-medium text-red-700">-2점:</span> 고객에게 불쾌감 전달</div>
                         <div><span className="font-medium text-red-600">-1점:</span> 고객 질의에 무응답</div>
-                        <div><span className="font-medium text-gray-700">0점:</span> 고객 응대 적절</div>
-                        <div><span className="font-medium text-green-700">+1점:</span> 고객 응대 우수</div>
+                        <div><span className="font-medium text-slate-700">0점:</span> 고객 응대 적절</div>
+                        <div><span className="font-medium text-emerald-700">+1점:</span> 고객 응대 우수</div>
                       </div>
                     </div>
                   </div>
@@ -2738,9 +2758,15 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               </div>
 
               {/* 총 점수 표시 */}
-              <div className="bg-blue-50 rounded-xl p-4">
-                <div className="text-[13px] text-blue-600 mb-1">총 평가 점수</div>
-                <div className="text-[24px] font-semibold text-blue-900">
+              <div className={TILE.accentBox}>
+                <div className={TILE.accentLabel}>총 평가 점수</div>
+                <div
+                  className={`mt-1.5 text-[24px] font-semibold tabular-nums ${
+                    workEvalCustomerClaim + workEvalAllDevices + workEvalOnTime + workEvalAfterService + workEvalUniform + workEvalKindness < 0
+                      ? 'text-red-700'
+                      : 'text-blue-900'
+                  }`}
+                >
                   {workEvalCustomerClaim + workEvalAllDevices + workEvalOnTime + workEvalAfterService + workEvalUniform + workEvalKindness > 0 ? '+' : ''}
                   {workEvalCustomerClaim + workEvalAllDevices + workEvalOnTime + workEvalAfterService + workEvalUniform + workEvalKindness}점
                 </div>
@@ -2760,7 +2786,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   setWorkEvalUniform(0);
                   setWorkEvalKindness(0);
                 }}
-                className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className={btn('secondary')}
               >
                 취소
               </button>
@@ -2815,7 +2841,7 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
                   setShowWorkEvaluationModal(false);
                   setSelectedActivity(null);
                 }}
-                className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                className={btn('primary')}
               >
                 평가 저장
               </button>
@@ -2832,9 +2858,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <h2 className="text-[18px] font-semibold text-slate-900">책임자 등록</h2>
               <button
                 onClick={handleCancelAddManager}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -2943,13 +2970,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
             <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={handleCancelAddManager}
-                className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className={btn('secondary')}
               >
                 취소
               </button>
               <button
                 onClick={handleSaveNewManager}
-                className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                className={btn('primary')}
               >
                 등록
               </button>
@@ -2966,9 +2993,10 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
               <h2 className="text-[18px] font-semibold text-slate-900">작업팀장 등록</h2>
               <button
                 onClick={handleCancelAddSubcontractor}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -3128,13 +3156,13 @@ export function SupplyChainPage({ externalManagersState, externalSubcontractorsS
             <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={handleCancelAddSubcontractor}
-                className="px-5 py-2.5 text-[14px] font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className={btn('secondary')}
               >
                 취소
               </button>
               <button
                 onClick={handleSaveNewSubcontractor}
-                className="px-5 py-2.5 text-[14px] font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors"
+                className={btn('primary')}
               >
                 등록
               </button>

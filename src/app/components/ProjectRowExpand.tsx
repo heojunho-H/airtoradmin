@@ -20,6 +20,13 @@ import {
   RefreshCw,
   AlertCircle,
   Trash2,
+  Info,
+  ChevronRight,
+  User,
+  Target,
+  BarChart3,
+  Search,
+  type LucideIcon,
 } from 'lucide-react';
 import type { LaborRate, LaborRole } from './LaborRateCard';
 import {
@@ -30,6 +37,7 @@ import {
   emptyRoleAssignments,
 } from '../../lib/roles';
 import { formatDetailedQuantity } from '../../lib/quantity';
+import { btn, ICON_BTN_DANGER, MODAL_CLOSE, TONE, type Tone } from './ui-kit';
 
 // 자유 입력 추가 인력 (5개 고정 역할 외 특이 상황 대응용)
 export interface ExtraLaborEntry {
@@ -180,7 +188,7 @@ function RoleInputCard({
   return (
     <div
       className={`bg-white border rounded-lg p-4 transition ${
-        cascaded ? 'border-amber-200' : 'border-slate-200 hover:border-teal-300'
+        cascaded ? 'border-amber-200' : 'border-slate-200 hover:border-blue-300'
       }`}
     >
       {/* 라벨 + 단가 */}
@@ -202,7 +210,7 @@ function RoleInputCard({
             onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
             className="w-full text-center text-base font-semibold
                        border border-slate-300 rounded px-2 py-1.5 pr-7
-                       focus:outline-none focus:border-teal-500
+                       focus:outline-none focus:border-blue-500
                        tabular-nums"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2
@@ -216,7 +224,7 @@ function RoleInputCard({
         <div className="flex-1 text-right min-w-0">
           <span
             className={`text-base font-bold tabular-nums ${
-              hasInput ? 'text-teal-700' : 'text-slate-300'
+              hasInput ? 'text-blue-700' : 'text-slate-300'
             }`}
           >
             ₩{formatKRW(subtotal)}
@@ -252,7 +260,7 @@ function ExtraRoleCard({
       <button
         type="button"
         onClick={onRemove}
-        className="absolute top-2 right-2 p-1 rounded text-slate-400 hover:bg-red-50 hover:text-red-500"
+        className={`absolute top-2 right-2 ${ICON_BTN_DANGER}`}
         aria-label="이 항목 삭제"
       >
         <X className="w-3.5 h-3.5" />
@@ -266,7 +274,7 @@ function ExtraRoleCard({
           onChange={(e) => onChange({ ...entry, label: e.target.value })}
           placeholder="역할명 (예: 외주반장)"
           className="w-full text-sm font-semibold text-slate-900 bg-transparent
-                     border-b border-amber-200 focus:border-amber-500
+                     border-b border-amber-200 focus:border-blue-500
                      focus:outline-none pb-0.5 placeholder:text-slate-300 placeholder:font-normal"
         />
         <div className="flex items-center gap-1 mt-1.5">
@@ -281,7 +289,7 @@ function ExtraRoleCard({
               onChange({ ...entry, dailyRate: parseInt(raw) || 0 });
             }}
             className="flex-1 text-[11px] tabular-nums text-slate-600
-                       border-0 bg-transparent focus:outline-none p-0 placeholder:text-slate-300"
+                       border-b border-amber-200 bg-transparent focus:outline-none focus:border-blue-500 p-0 placeholder:text-slate-300"
           />
           <span className="text-[11px] text-slate-400 whitespace-nowrap">/일</span>
         </div>
@@ -299,7 +307,7 @@ function ExtraRoleCard({
             }
             className="w-full text-center text-base font-semibold
                        border border-slate-300 rounded px-2 py-1.5 pr-7
-                       focus:outline-none focus:border-amber-500
+                       focus:outline-none focus:border-blue-500
                        tabular-nums"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2
@@ -352,7 +360,7 @@ function LaborSummary({
   }
 
   return (
-    <div className="bg-teal-50 border border-teal-200 rounded-lg p-3">
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-slate-700">합계 인건비</span>
@@ -361,7 +369,7 @@ function LaborSummary({
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-teal-700 tabular-nums">
+          <span className="text-xl font-bold text-blue-700 tabular-nums">
             ₩{formatKRW(totalLaborCost)}
           </span>
           <span className={`text-sm font-medium tabular-nums ${laborRatioColor(ratio)}`}>
@@ -401,7 +409,7 @@ function CostInputCard({
       : null;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4 hover:border-teal-300 transition">
+    <div className="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition">
       <div className="mb-3">
         <div className="text-sm font-semibold text-slate-900">{label}</div>
         <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>
@@ -419,7 +427,7 @@ function CostInputCard({
           }}
           className="w-full text-right text-base font-semibold
                      border border-slate-300 rounded px-3 py-2 pr-8
-                     focus:outline-none focus:border-teal-500
+                     focus:outline-none focus:border-blue-500
                      tabular-nums"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
@@ -429,8 +437,8 @@ function CostInputCard({
 
       {(manwon || perPerson) && (
         <div className="text-[11px] text-slate-500 mt-2 text-right flex justify-end gap-2">
-          {manwon && <span>{manwon}</span>}
-          {perPerson && <span>· 1인 1일 ₩{formatKRW(perPerson)}</span>}
+          {manwon && <span className="tabular-nums">{manwon}</span>}
+          {perPerson && <span className="tabular-nums">· 1인 1일 ₩{formatKRW(perPerson)}</span>}
         </div>
       )}
     </div>
@@ -469,7 +477,7 @@ function ResultBlock({
       : isLoss
         ? 'bg-red-50 border-red-200'
         : state === 'full'
-          ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-200'
+          ? 'bg-blue-50 border-blue-200'
           : 'bg-amber-50 border-amber-200';
 
   return (
@@ -480,8 +488,9 @@ function ResultBlock({
         </div>
       )}
       {state === 'partial' && (
-        <div className="text-center text-xs text-amber-700 mb-3">
-          ⓘ 일부 비용만 입력됨 — 정확하지 않을 수 있습니다
+        <div className="text-center text-xs text-amber-700 mb-3 flex items-center justify-center gap-1">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          일부 비용만 입력됨 — 정확하지 않을 수 있습니다
         </div>
       )}
 
@@ -555,18 +564,20 @@ function ResultStat({
 // Phase 1.7 / Step 5 — AI 상태/학습 영향도 배지 + 추천 근거 펼침
 // ============================================================
 function AiInfluenceBadge({ influence }: { influence?: string }) {
-  const config: Record<string, { color: string; label: string; tooltip: string }> = {
-    high:   { color: 'bg-emerald-100 text-emerald-700', label: '🎯 학습 강함', tooltip: '5건 이상 유사 프로젝트 + 우수 사례 기반 추천' },
-    medium: { color: 'bg-teal-100 text-teal-700',       label: '📊 학습 보통', tooltip: '1~4건 유사 프로젝트 기반 추천' },
-    low:    { color: 'bg-amber-100 text-amber-700',     label: '🔍 학습 약함', tooltip: '유사 사례 부족, 일반 추정 기반' },
-    none:   { color: 'bg-slate-100 text-slate-600',     label: '🆕 첫 사례',   tooltip: '이 서비스/수량의 첫 케이스 — 일반 추정' },
+  const config: Record<string, { tone: Tone; icon: LucideIcon; label: string; tooltip: string }> = {
+    high:   { tone: 'emerald', icon: Target,    label: '학습 강함', tooltip: '5건 이상 유사 프로젝트 + 우수 사례 기반 추천' },
+    medium: { tone: 'blue',    icon: BarChart3, label: '학습 보통', tooltip: '1~4건 유사 프로젝트 기반 추천' },
+    low:    { tone: 'amber',   icon: Search,    label: '학습 약함', tooltip: '유사 사례 부족, 일반 추정 기반' },
+    none:   { tone: 'slate',   icon: Sparkles,  label: '첫 사례',   tooltip: '이 서비스/수량의 첫 케이스 — 일반 추정' },
   };
   const c = config[influence || 'none'] || config.none;
+  const Icon = c.icon;
   return (
     <span
-      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${c.color}`}
+      className={`text-[11px] px-2 py-0.5 rounded-full font-medium border inline-flex items-center gap-1 ${TONE[c.tone]}`}
       title={c.tooltip}
     >
+      <Icon className="w-3 h-3 flex-shrink-0" />
       {c.label}
     </span>
   );
@@ -575,7 +586,7 @@ function AiInfluenceBadge({ influence }: { influence?: string }) {
 function AiStatusBadge({ project }: { project: ProjectForExpand }) {
   if (project.aiStatus === 'generating') {
     return (
-      <span className="text-xs text-teal-600 flex items-center gap-1 px-2 py-0.5 bg-teal-50 rounded-full">
+      <span className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-full border ${TONE.blue}`}>
         <Loader2 className="w-3 h-3 animate-spin" />
         AI 분석 중...
       </span>
@@ -584,7 +595,7 @@ function AiStatusBadge({ project }: { project: ProjectForExpand }) {
   if (project.aiStatus === 'failed') {
     return (
       <span
-        className="text-xs text-red-600 flex items-center gap-1 px-2 py-0.5 bg-red-50 rounded-full"
+        className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-full border ${TONE.red}`}
         title={project.aiError || '알 수 없는 오류'}
       >
         <AlertCircle className="w-3 h-3" />
@@ -597,8 +608,9 @@ function AiStatusBadge({ project }: { project: ProjectForExpand }) {
   }
   if (project.aiStatus === 'manual') {
     return (
-      <span className="text-xs text-slate-500 flex items-center gap-1 px-2 py-0.5 bg-slate-100 rounded-full">
-        👤 수동 입력
+      <span className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-full border ${TONE.slate}`}>
+        <User className="w-3 h-3" />
+        수동 입력
       </span>
     );
   }
@@ -625,10 +637,11 @@ function AiRationale({ project }: { project: ProjectForExpand }) {
   const warnings = parsed.warnings && parsed.warnings.length > 0 ? parsed.warnings : null;
 
   return (
-    <details className="mb-3 text-sm bg-slate-50 border border-slate-200 rounded-lg">
+    <details className="group mb-3 text-sm bg-slate-50 border border-slate-200 rounded-lg">
       <summary className="cursor-pointer font-medium text-slate-700 hover:text-slate-900
-                          px-3 py-2 select-none flex items-center gap-2">
-        <Sparkles className="w-4 h-4 text-teal-600" />
+                          px-3 py-2 select-none flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 transition-transform group-open:rotate-90" />
+        <Sparkles className="w-4 h-4 text-blue-600" />
         AI 추천 근거 보기
         {warnings && (
           <span className="ml-auto text-xs text-amber-600 flex items-center gap-1">
@@ -643,7 +656,7 @@ function AiRationale({ project }: { project: ProjectForExpand }) {
         )}
 
         {parsed.estimatedProfitRatio !== undefined && (
-          <div className="text-xs text-slate-500 flex flex-wrap gap-3">
+          <div className="text-xs text-slate-500 flex flex-wrap gap-3 tabular-nums">
             <span>예상 인건비: ₩{(parsed.estimatedLaborCost || 0).toLocaleString('ko-KR')}</span>
             <span>예상 순이익: ₩{(parsed.estimatedNetProfit || 0).toLocaleString('ko-KR')}</span>
             <span>예상 순익률: {((parsed.estimatedProfitRatio || 0) * 100).toFixed(1)}%</span>
@@ -698,29 +711,22 @@ function ConfirmModal({
           <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
           <button
             onClick={onCancel}
-            className="p-1 rounded hover:bg-slate-100"
+            className={MODAL_CLOSE}
             aria-label="닫기"
           >
-            <X className="w-4 h-4 text-slate-500" />
+            <X className="w-4 h-4" />
           </button>
         </div>
         <div className="px-5 py-4 text-[13px] text-slate-600 leading-relaxed">
           {description}
         </div>
         <div className="px-5 py-3 bg-slate-50 flex items-center justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-          >
+          <button onClick={onCancel} className={btn('ghost', 'sm')}>
             취소
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-[13px] font-medium text-white rounded-lg transition-colors ${
-              destructive
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}
+            className={destructive ? btn('danger', 'sm') : btn('primary', 'sm')}
           >
             {confirmLabel}
           </button>
@@ -906,8 +912,8 @@ export function ProjectRowExpand({
   return (
     <div className="bg-slate-50 border-t border-slate-200 px-4 md:px-6 py-5 space-y-4">
       {/* ============ 블록 1: 메타 정보 (회색, 읽기 전용) ============ */}
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-3">
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <div className="text-[11px] font-semibold text-slate-500 mb-3">
           프로젝트 정보
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -935,7 +941,7 @@ export function ProjectRowExpand({
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-              <Users className="w-4 h-4 text-teal-600" />
+              <Users className="w-4 h-4 text-blue-600" />
               인력 배치
             </h4>
             <AiStatusBadge project={project} />
@@ -954,8 +960,8 @@ export function ProjectRowExpand({
                   onChange={(e) =>
                     setDays(Math.max(0, parseFloat(e.target.value) || 0))
                   }
-                  className="w-full text-center text-base font-bold border-0 bg-transparent
-                             focus:outline-none tabular-nums pr-4"
+                  className="w-full text-center text-base font-bold border-0 bg-transparent rounded
+                             focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums pr-4"
                 />
                 <span className="absolute right-1 top-1/2 -translate-y-1/2
                                  text-xs text-slate-500 pointer-events-none">
@@ -975,10 +981,7 @@ export function ProjectRowExpand({
               type="button"
               onClick={() => onReRunAi(project.id)}
               disabled={project.aiStatus === 'generating'}
-              className="bg-white border border-teal-300 text-teal-700 px-3 py-1.5 rounded-lg
-                         text-xs font-medium hover:bg-teal-50
-                         disabled:opacity-50 disabled:cursor-not-allowed
-                         flex items-center gap-1.5 transition"
+              className={btn('secondary', 'sm')}
               title="학습 데이터를 반영해 다시 추천"
             >
               <RefreshCw
@@ -1047,7 +1050,7 @@ export function ProjectRowExpand({
       {/* ============ 블록 2-2: 변동비 ============ */}
       <div>
         <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-          <Receipt className="w-4 h-4 text-teal-600" />
+          <Receipt className="w-4 h-4 text-blue-600" />
           변동비
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1091,7 +1094,7 @@ export function ProjectRowExpand({
           onChange={(e) => setMemo(e.target.value)}
           rows={3}
           placeholder="프로젝트 메모..."
-          className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       )}
 
@@ -1099,7 +1102,7 @@ export function ProjectRowExpand({
       <div className="flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-slate-200">
         <button
           onClick={() => setShowMemo((s) => !s)}
-          className="text-[13px] text-slate-500 hover:text-slate-700 flex items-center gap-1.5 transition-colors"
+          className="text-[13px] text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-2 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
         >
           {memo ? <FileText className="w-4 h-4" /> : <StickyNote className="w-4 h-4" />}
           {memo ? '메모 보기/수정' : '메모 추가'}
@@ -1109,7 +1112,7 @@ export function ProjectRowExpand({
           {project.status === 'in-progress' && (
             <button
               onClick={handleCompleteClick}
-              className="text-[13px] text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-1"
+              className="text-[13px] text-slate-500 hover:text-emerald-600 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1"
             >
               <CheckCircle className="w-4 h-4" />
               완료 처리 →
@@ -1123,10 +1126,7 @@ export function ProjectRowExpand({
             <button
               onClick={handleSave}
               disabled={!hasChanges || isSaving}
-              className="bg-teal-600 text-white px-5 py-2 rounded-lg font-medium
-                         hover:bg-teal-700 active:bg-teal-800
-                         disabled:bg-slate-300 disabled:cursor-not-allowed
-                         transition-colors flex items-center gap-2 shadow-sm"
+              className={btn('primary', 'md')}
             >
               {isSaving ? (
                 <>
@@ -1149,7 +1149,7 @@ export function ProjectRowExpand({
         <div className="flex justify-end pt-2">
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="text-[12px] text-slate-400 hover:text-red-600 flex items-center gap-1.5 transition-colors"
+            className="text-[12px] text-slate-400 hover:text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
             프로젝트 삭제

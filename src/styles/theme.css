@@ -130,6 +130,12 @@
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
   }
 
+  /* 키보드로 움직일 때만 보이는 포커스 링 (마우스로 누를 때는 안 보인다). 입력칸은 각자 focus:ring 을 쓴다 */
+  :where(button, a, [role='button'], [role='tab'], [role='option'], summary, [tabindex]):focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
   /**
   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
   * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.

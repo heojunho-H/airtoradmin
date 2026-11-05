@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
+import { btn, ICON_BTN_DANGER, KPI, TILE, BADGE, TONE, MODAL_CLOSE, TABLE, type Tone } from './ui-kit';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
 import {
@@ -694,7 +695,7 @@ export const initialCustomers: Customer[] = [
     managementCycle: 90,
     nextManagementDate: '2024-04-24',
     reminderStatus: '미발송',
-    accountManager: '김수��',
+    accountManager: '김수진',
     phone: '031-7890-1234',
     email: 'sohee.yoon@kakao.com',
     address: '경기도 성남시 분당구 판교역로 235',
@@ -866,7 +867,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
         ref={buttonRef}
         type="button"
         onClick={handleOpen}
-        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-amber-500"
+        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <span className={selected.length ? 'text-slate-900' : 'text-slate-400'}>
           {selected.length ? selected.join(', ') : '선택하세요'}
@@ -887,7 +888,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
                     type="checkbox"
                     checked={selected.includes(name)}
                     onChange={() => toggle(name)}
-                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-sm text-slate-700">{name}</span>
                 </label>
@@ -1564,29 +1565,28 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     });
   };
 
+  // 배지 색 — 등급(S 보라·A 파랑·B 초록·그 외 회색)과 고객 상태만 뜻 있는 색을 쓴다 (ui-kit TONE)
+  const gradeTone = (grade: string): Tone =>
+    grade === 'S' ? 'purple' : grade === 'A' ? 'blue' : grade === 'B' ? 'emerald' : 'slate';
+  const CUSTOMER_STATUS_TONE: Record<string, Tone> = {
+    신규: 'slate',
+    재구매: 'orange',
+    충성고객: 'emerald',
+    고객이탈: 'red',
+  };
+  const customerStatusTone = (status: string): Tone => CUSTOMER_STATUS_TONE[status] ?? 'slate';
+
   const getGradeBadge = (grade: string) => {
-    const styles = {
-      S: 'bg-purple-50 text-purple-700 border-purple-200',
-      A: 'bg-blue-50 text-blue-700 border-blue-200',
-      B: 'bg-green-50 text-green-700 border-green-200',
-      '그 외': 'bg-slate-50 text-slate-700 border-slate-200',
-    };
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${styles[grade as keyof typeof styles] || styles['그 외']}`}>
+      <span className={`${BADGE.replace('font-medium', 'font-bold')} ${TONE[gradeTone(grade)]}`}>
         {grade}
       </span>
     );
   };
 
   const getCustomerStatusBadge = (status: string) => {
-    const styles = {
-      신규: 'bg-gray-50 text-gray-700 border-gray-200',
-      재구매: 'bg-orange-50 text-orange-700 border-orange-200',
-      충성고객: 'bg-green-50 text-green-700 border-green-200',
-      고객이탈: 'bg-red-50 text-red-700 border-red-200',
-    };
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${styles[status as keyof typeof styles]}`}>
+      <span className={`${BADGE} ${TONE[customerStatusTone(status)]}`}>
         {status}
       </span>
     );
@@ -1595,15 +1595,15 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   // 스티비 뉴스레터 상태 배지 (newsletterStatus 캐시 기준; 웹훅/동기화로 갱신됨)
   const getNewsletterBadge = (status?: NewsletterStatus) => {
     const s: NewsletterStatus = status || 'none';
-    const config: Record<NewsletterStatus, { color: string; icon: typeof Mail }> = {
-      none: { color: 'bg-slate-50 text-slate-500 border-slate-200', icon: Mail },
-      subscribed: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle },
-      unsubscribed: { color: 'bg-red-50 text-red-700 border-red-200', icon: X },
-      bounced: { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: AlertCircle },
+    const config: Record<NewsletterStatus, { tone: Tone; icon: typeof Mail }> = {
+      none: { tone: 'slate', icon: Mail },
+      subscribed: { tone: 'emerald', icon: CheckCircle },
+      unsubscribed: { tone: 'red', icon: X },
+      bounced: { tone: 'amber', icon: AlertCircle },
     };
-    const { color, icon: Icon } = config[s];
+    const { tone, icon: Icon } = config[s];
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${color}`}>
+      <span className={`${BADGE} ${TONE[tone]}`}>
         <Icon className="w-3 h-3" />
         {NEWSLETTER_STATUS_LABEL[s]}
       </span>
@@ -1612,21 +1612,21 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
 
   const getReminderBadge = (status: string) => {
     const config = {
-      미발송: { label: '미발송', color: 'bg-slate-50 text-slate-700 border-slate-200', icon: Clock },
-      발송예약완료: { label: '발송예약 완료', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Send },
+      미발송: { label: '미발송', tone: 'slate' as Tone, icon: Clock },
+      발송예약완료: { label: '발송예약 완료', tone: 'blue' as Tone, icon: Send },
     };
     const statusConfig = config[status as keyof typeof config];
     if (!statusConfig) {
       // Fallback for unknown status
       return (
-        <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-50 text-slate-700 border-slate-200">
+        <span className={`${BADGE} ${TONE.slate}`}>
           {status}
         </span>
       );
     }
-    const { label, color, icon: Icon } = statusConfig;
+    const { label, tone, icon: Icon } = statusConfig;
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1 ${color}`}>
+      <span className={`${BADGE} ${TONE[tone]}`}>
         <Icon className="w-3 h-3" />
         {label}
       </span>
@@ -1636,7 +1636,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const getEmailStatusBadge = (status: string) => {
     const config = {
       sent: { label: '발송', color: 'bg-blue-50 text-blue-700', icon: Send },
-      opened: { label: '열람', color: 'bg-green-50 text-green-700', icon: CheckCircle },
+      opened: { label: '열람', color: 'bg-emerald-50 text-emerald-700', icon: CheckCircle },
       failed: { label: '실패', color: 'bg-red-50 text-red-700', icon: AlertCircle },
     };
     const { label, color, icon: Icon } = config[status as keyof typeof config];
@@ -1720,8 +1720,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
           onClick={() => setGradeFilter('B')}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             gradeFilter === 'B'
-              ? 'bg-green-600 text-white'
-              : 'bg-green-50 text-green-700 hover:bg-green-100'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
           }`}
         >
           B등급
@@ -1740,62 +1740,62 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">총 고객 수</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{totalCustomers}</p>
+              <p className={KPI.label}>총 고객 수</p>
+              <p className={KPI.value}>{totalCustomers}</p>
             </div>
-            <div className="p-3 bg-blue-50 rounded-xl">
-              <Users className="w-6 h-6 text-blue-600" />
+            <div className={KPI.iconTile}>
+              <Users className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">2회 이상 재구매 고객 수</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{repeatCustomers}</p>
+              <p className={KPI.label}>2회 이상 재구매 고객 수</p>
+              <p className={KPI.value}>{repeatCustomers}</p>
             </div>
-            <div className="p-3 bg-green-50 rounded-xl">
-              <UserCheck className="w-6 h-6 text-green-600" />
+            <div className={KPI.iconTile}>
+              <UserCheck className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">2회 이상 재구매율</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{repeatRate}%</p>
+              <p className={KPI.label}>2회 이상 재구매율</p>
+              <p className={KPI.value}>{repeatRate}%</p>
             </div>
-            <div className="p-3 bg-purple-50 rounded-xl">
-              <Percent className="w-6 h-6 text-purple-600" />
+            <div className={KPI.iconTile}>
+              <Percent className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">충성고객 수(3회 이상 재구매)</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{loyalCustomers}</p>
+              <p className={KPI.label}>충성고객 수(3회 이상 재구매)</p>
+              <p className={KPI.value}>{loyalCustomers}</p>
             </div>
-            <div className="p-3 bg-amber-50 rounded-xl">
-              <Star className="w-6 h-6 text-amber-600" />
+            <div className={KPI.iconTile}>
+              <Star className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">충성고객 전환율</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{loyalCustomerRate}%</p>
+              <p className={KPI.label}>충성고객 전환율</p>
+              <p className={KPI.value}>{loyalCustomerRate}%</p>
             </div>
-            <div className="p-3 bg-rose-50 rounded-xl">
-              <Award className="w-6 h-6 text-rose-600" />
+            <div className={KPI.iconTile}>
+              <Award className={KPI.icon} />
             </div>
           </div>
         </div>
@@ -1804,47 +1804,47 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">고객 관리</h1>
-          <p className="text-slate-500 mt-1">{sortedCustomers.length}명의 고객</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">고객 관리</h1>
+          <p className="text-[15px] text-slate-500 mt-1.5">{sortedCustomers.length}명의 고객</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-3">
           <button
             onClick={handleExport}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+            className={btn('secondary')}
           >
             <Download className="w-4 h-4" />
-            <span className="text-sm font-medium">내보내기</span>
+            <span>내보내기</span>
           </button>
           <button
             onClick={handleSyncNewsletter}
             disabled={isSyncingNewsletter}
             title="이메일이 등록된 담당자 전원을 스티비 주소록에 추가/갱신합니다"
-            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={btn('secondary')}
           >
             <Send className={`w-4 h-4 ${isSyncingNewsletter ? 'animate-pulse' : ''}`} />
-            <span className="text-sm font-medium">{isSyncingNewsletter ? '동기화 중…' : '스티비 동기화'}</span>
+            <span>{isSyncingNewsletter ? '동기화 중…' : '스티비 동기화'}</span>
           </button>
           <button
             onClick={handleCheckFollowups}
             disabled={isCheckingFollowups}
             title="오늘 자동 발송될 팔로업 대상을 미리 봅니다 (발송하지 않음)"
-            className="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={btn('secondary')}
           >
             <Clock className={`w-4 h-4 ${isCheckingFollowups ? 'animate-pulse' : ''}`} />
-            <span className="text-sm font-medium">{isCheckingFollowups ? '점검 중…' : '팔로업 점검'}</span>
+            <span>{isCheckingFollowups ? '점검 중…' : '팔로업 점검'}</span>
           </button>
           <button
             onClick={() => setShowAddCustomerModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            className={btn('primary')}
           >
             <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">고객 추가</span>
+            <span>고객 추가</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-4">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -1882,7 +1882,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    {grade === 'all' ? '전체' : grade === 'other' ? '기타' : grade}
+                    {grade === 'all' ? '전체' : grade === 'other' ? '그 외' : grade}
                   </button>
                 ))}
               </div>
@@ -1898,21 +1898,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
           {sortedCustomers.map((customer) => (
             <MobileCard key={customer.id} onClick={() => setSelectedCustomer(customer)}>
               <MobileCardRow className="mb-2">
-                <MobileCardBadge 
-                  variant={
-                    customer.grade === 'S' ? 'primary' : 
-                    customer.grade === 'A' ? 'info' : 
-                    customer.grade === 'B' ? 'success' : 'default'
-                  }
-                >
-                  {customer.grade}등급
+                <MobileCardBadge tone={gradeTone(customer.grade)}>
+                  {['S', 'A', 'B'].includes(customer.grade) ? `${customer.grade}등급` : '그 외'}
                 </MobileCardBadge>
-                <MobileCardBadge variant={
-                  customer.status === '충성고객' ? 'primary' :
-                  customer.status === '재구매' ? 'success' :
-                  customer.status === '신규' ? 'info' : 'warning'
-                }>
-                  {customer.status}
+                <MobileCardBadge tone={customerStatusTone(customer.customerStatus)}>
+                  {customer.customerStatus}
                 </MobileCardBadge>
               </MobileCardRow>
               
@@ -1928,36 +1918,36 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
               
               <div className="grid grid-cols-2 gap-3">
                 <MobileCardField
-                  label="산업분야"
-                  value={<span className="text-[14px]">{customer.industry}</span>}
+                  label="주소"
+                  value={<span className="text-[14px]">{customer.address || '—'}</span>}
                 />
                 <MobileCardField
-                  label="지역"
-                  value={<span className="text-[14px]">{customer.region}</span>}
+                  label="담당자"
+                  value={<span className="text-[14px]">{customer.contactName || '—'}</span>}
                 />
               </div>
               
               <div className="grid grid-cols-2 gap-3">
                 <MobileCardField
                   label="거래 횟수"
-                  value={<span className="font-semibold text-blue-600">{customer.deals}회</span>}
+                  value={<span className="text-slate-900 tabular-nums">{customer.deals}회</span>}
                 />
                 <MobileCardField
                   label="총 금액"
-                  value={<span className="font-semibold text-green-600">{formatAmount(customer.workHistory && customer.workHistory.length > 0 ? customer.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : customer.totalAmount)}</span>}
+                  value={<span className="font-semibold text-slate-900 tabular-nums">{formatAmount(customer.workHistory && customer.workHistory.length > 0 ? customer.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : customer.totalAmount)}</span>}
                 />
               </div>
               
               <MobileCardField
                 label="고객책임자"
-                value={<span className="font-medium">{customer.accountManager}</span>}
+                value={<span className="font-medium">{customer.accountManager || '미지정'}</span>}
               />
               
               <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                 <div className="text-[11px] text-slate-500">
                   최근 작업: {customer.lastWorkDate}
                 </div>
-                <div className="text-[11px] font-medium text-amber-600">
+                <div className="text-[11px] font-medium text-slate-700">
                   다음 관리: {customer.nextManagementDate}
                 </div>
               </div>
@@ -1966,26 +1956,26 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
         </div>
       ) : (
         /* 데스크톱 테이블 뷰 */
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             {/* data-nowrap-cells: 글자를 키운 화면(readable.css)에서 날짜·배지·이름이 두 줄로 꺾이지 않게 — 긴 글 칸만 data-wrap */}
             <table className="w-full" data-nowrap-cells>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   기업명
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   고객 등급
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   고객 상태
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   담당자명 / 직책
                 </th>
                 <th 
-                  className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-50 transition-colors"
+                  className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                   onClick={() => handleSort('lastWorkDate')}
                 >
                   <div className="flex items-center gap-2">
@@ -1996,7 +1986,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-50 transition-colors"
+                  className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                   onClick={() => handleSort('totalQuantity')}
                 >
                   <div className="flex items-center gap-2">
@@ -2007,7 +1997,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-50 transition-colors"
+                  className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                   onClick={() => handleSort('totalAmount')}
                 >
                   <div className="flex items-center gap-2">
@@ -2017,11 +2007,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   관리 주기
                 </th>
                 <th 
-                  className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-50 transition-colors"
+                  className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                   onClick={() => handleSort('nextManagementDate')}
                 >
                   <div className="flex items-center gap-2">
@@ -2031,16 +2021,16 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   리마인드 상태
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   뉴스레터
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   고객 책임자
                 </th>
-                <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                   삭제
                 </th>
               </tr>
@@ -2049,7 +2039,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
               {sortedCustomers.map((customer) => (
                 <tr
                   key={customer.id}
-                  className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  className={TABLE.rowClickable}
                   onClick={() => setSelectedCustomer(customer)}
                 >
                   <td className="px-4 py-4" data-wrap>
@@ -2068,7 +2058,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     {editingCell?.customerId === customer.id && editingCell?.field === 'grade' ? (
                       <div className="relative">
                         <select
-                          className="text-xs font-bold border rounded-full px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className={`${BADGE.replace('font-medium', 'font-bold')} ${TONE[gradeTone(customer.grade)]} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                           value={customer.grade}
                           onChange={(e) => updateCustomerField(customer.id, 'grade', e.target.value)}
                           onBlur={() => setEditingCell(null)}
@@ -2096,7 +2086,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     {editingCell?.customerId === customer.id && editingCell?.field === 'customerStatus' ? (
                       <div className="relative">
                         <select
-                          className="text-xs font-medium border rounded-full px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className={`${BADGE} ${TONE[customerStatusTone(customer.customerStatus)]} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                           value={customer.customerStatus}
                           onChange={(e) => updateCustomerField(customer.id, 'customerStatus', e.target.value)}
                           onBlur={() => setEditingCell(null)}
@@ -2121,7 +2111,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                    <div className="flex items-center gap-1.5 text-sm text-slate-600 tabular-nums">
                       <Calendar className="w-4 h-4 text-slate-400" />
                       {customer.lastWorkDate}
                     </div>
@@ -2129,7 +2119,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1.5">
                       <Package className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-700">
+                      <span className="text-sm text-slate-700 tabular-nums">
                         {(customer.workHistory && customer.workHistory.length > 0
                           ? customer.workHistory.reduce((sum, work) => sum + work.totalQuantity, 0)
                           : customer.totalQuantity
@@ -2138,7 +2128,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm font-semibold text-slate-900">
+                    <span className="text-sm font-semibold text-slate-900 tabular-nums">
                       {formatAmount(
                         customer.workHistory && customer.workHistory.length > 0
                           ? customer.workHistory.reduce((sum, work) => sum + work.quotationAmount, 0)
@@ -2153,7 +2143,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-slate-600">{customer.nextManagementDate}</span>
+                    <span className="text-sm text-slate-600 tabular-nums">{customer.nextManagementDate}</span>
                   </td>
                   <td 
                     className="px-4 py-4 relative"
@@ -2165,7 +2155,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     {editingCell?.customerId === customer.id && editingCell?.field === 'reminderStatus' ? (
                       <div className="relative">
                         <select
-                          className="text-xs font-medium border rounded-full px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className={`${BADGE} ${TONE[customer.reminderStatus === '발송예약완료' ? 'blue' : 'slate']} focus:outline-none focus:ring-2 focus:ring-blue-500`}
                           value={customer.reminderStatus}
                           onChange={(e) => updateCustomerField(customer.id, 'reminderStatus', e.target.value)}
                           onBlur={() => setEditingCell(null)}
@@ -2219,18 +2209,24 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   </td>
                   <td className="px-4 py-4 text-right">
                     <button
-                      className="p-1.5 hover:bg-slate-100 rounded transition-colors text-slate-400 hover:text-slate-600"
+                      className={ICON_BTN_DANGER}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteCustomer(customer.id, customer.company);
                       }}
                       title="삭제"
+                      aria-label="삭제"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
               ))}
+              {sortedCustomers.length === 0 && (
+                <tr>
+                  <td colSpan={13} className="py-16 text-center text-[15px] text-slate-500">조건에 맞는 고객이 없어요.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -2254,9 +2250,10 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   setEditedCustomer(null);
                   setSelectedCustomer(null);
                 }}
-                className="p-1 hover:bg-slate-100 rounded transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -2272,7 +2269,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     </div>
                     <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
                       <div className="col-span-2">
-                        <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">기업명</label>
+                        <label className="text-xs font-medium text-slate-500">기업명</label>
                         {isEditing && editedCustomer ? (
                           <input
                             type="text"
@@ -2289,7 +2286,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                       </div>
                       <div className="col-span-2">
                         <div className="flex items-center justify-between mb-2">
-                          <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">담당자 정보</label>
+                          <label className="text-xs font-medium text-slate-500">담당자 정보</label>
                           {isEditing && (
                             <button
                               onClick={handleAddContact}
@@ -2336,8 +2333,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 />
                                 <button
                                   onClick={() => handleRemoveContact(i)}
-                                  className="flex-shrink-0 p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                  className={`${ICON_BTN_DANGER} flex-shrink-0`}
                                   title="삭제"
+                                  aria-label="담당자 삭제"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
@@ -2366,7 +2364,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         )}
                       </div>
                       <div className="col-span-2">
-                        <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">주소</label>
+                        <label className="text-xs font-medium text-slate-500">주소</label>
                         {isEditing && editedCustomer ? (
                           <div className="mt-1 flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-slate-400" />
@@ -2391,7 +2389,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   <div className="col-span-1">
                     <div className="flex flex-col h-full">
                       <div className="flex items-center gap-2 mb-4">
-                        <FileText className="w-5 h-5 text-slate-600" />
+                        <FileText className="w-5 h-5 text-blue-600" />
                         <h3 className="text-lg font-semibold text-slate-900">내부 관리 메모</h3>
                       </div>
                       
@@ -2434,7 +2432,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 <span className="text-slate-400 shrink-0">{e.date}</span>
                                 <span className="truncate">{e.type}</span>
                                 <span className="text-slate-400 truncate">{e.recipient}</span>
-                                <span className={`shrink-0 ${e.status === 'sent' ? 'text-emerald-600' : e.status === 'failed' ? 'text-red-600' : 'text-slate-400'}`}>
+                                <span className={`shrink-0 ${e.status === 'sent' ? 'text-emerald-600' : e.status === 'failed' ? 'text-red-600' : 'text-slate-500'}`}>
                                   {e.status === 'sent' ? '발송' : e.status === 'failed' ? '실패' : e.status === 'opened' ? '열람' : '건너뜀'}
                                 </span>
                               </li>
@@ -2457,56 +2455,56 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 {/* 하단 영역 - 작업 히스토리 */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <History className="w-5 h-5 text-amber-600" />
+                    <History className="w-5 h-5 text-blue-600" />
                     <h3 className="text-lg font-semibold text-slate-900">작업 히스토리</h3>
                   </div>
 
                   {/* 거래 현황 KPI */}
                   <div className="grid grid-cols-7 gap-4 mb-4">
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                      <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">작업 횟수</p>
-                      <p className="text-2xl font-bold text-blue-900 mt-2">{selectedCustomer.workHistory.length}회</p>
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>작업 횟수</p>
+                      <p className={TILE.value}>{selectedCustomer.workHistory.length}회</p>
                     </div>
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-100">
-                      <p className="text-xs font-medium text-green-600 uppercase tracking-wider">총 금액 합계</p>
-                      <p className="text-2xl font-bold text-green-900 mt-2">
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>총 금액 합계</p>
+                      <p className={TILE.value}>
                         {formatAmount(selectedCustomer.workHistory.reduce((sum, work) => sum + work.quotationAmount, 0))}
                       </p>
                     </div>
-                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
-                      <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">보유 수량</p>
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>보유 수량</p>
                       {isEditing && editedCustomer ? (
                         <input
                           type="number"
                           value={editedCustomer.totalQuantity}
                           onChange={(e) => updateEditedField('totalQuantity', Number(e.target.value))}
-                          className="text-2xl font-bold text-purple-900 mt-2 w-full border border-purple-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className="mt-1.5 text-xl font-bold text-slate-900 tabular-nums w-full border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       ) : (
-                        <p className="text-2xl font-bold text-purple-900 mt-2">{selectedCustomer.totalQuantity.toLocaleString()}</p>
+                        <p className={TILE.value}>{selectedCustomer.totalQuantity.toLocaleString()}</p>
                       )}
                     </div>
-                    <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
-                      <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">총 작업 수량</p>
-                      <p className="text-2xl font-bold text-amber-900 mt-2">
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>총 작업 수량</p>
+                      <p className={TILE.value}>
                         {selectedCustomer.workHistory.reduce((sum, work) => sum + work.totalQuantity, 0).toLocaleString()}
                       </p>
                     </div>
-                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
-                      <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">최근 작업일</p>
-                      <p className="text-sm font-semibold text-orange-900 mt-2">{selectedCustomer.lastWorkDate}</p>
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>최근 작업일</p>
+                      <p className={TILE.value}>{selectedCustomer.lastWorkDate}</p>
                     </div>
-                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
-                      <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">관리 주기</p>
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>관리 주기</p>
                       {isEditing && editedCustomer ? (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-1.5 space-y-2">
                           <select
                             value={isPresetCycle(editedCustomer.managementCycle) ? editedCustomer.managementCycle : -1}
                             onChange={(e) => {
                               const val = Number(e.target.value);
                               if (val !== -1) updateEditedField('managementCycle', val);
                             }}
-                            className="text-lg font-bold text-indigo-900 w-full border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="text-lg font-bold text-slate-900 w-full border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             {CYCLE_OPTIONS.map(o => (
                               <option key={o.value} value={o.value}>{o.label}</option>
@@ -2519,19 +2517,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                 min="1"
                                 value={editedCustomer.managementCycle}
                                 onChange={(e) => updateEditedField('managementCycle', Number(e.target.value) || 1)}
-                                className="flex-1 text-lg font-bold text-indigo-900 border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                className="flex-1 text-lg font-bold text-slate-900 tabular-nums border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
-                              <span className="text-sm text-indigo-600 font-medium">일</span>
+                              <span className="text-sm text-slate-600 font-medium">일</span>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <p className="text-2xl font-bold text-indigo-900 mt-2">{getCycleLabel(selectedCustomer.managementCycle)}</p>
+                        <p className={TILE.value}>{getCycleLabel(selectedCustomer.managementCycle)}</p>
                       )}
                     </div>
-                    <div className="bg-teal-50 p-4 rounded-lg border border-teal-100">
-                      <p className="text-xs font-medium text-teal-600 uppercase tracking-wider">다음 관리 예정일</p>
-                      <p className="text-sm font-semibold text-teal-900 mt-2">
+                    <div className={TILE.box}>
+                      <p className={TILE.label}>다음 관리 예정일</p>
+                      <p className={TILE.value}>
                         {calculateNextManagementDate(selectedCustomer.lastWorkDate, selectedCustomer.managementCycle)}
                       </p>
                     </div>
@@ -2543,7 +2541,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                       onClick={() => setShowAddWorkForm(!showAddWorkForm)}
                       disabled={isEditing}
                       title={isEditing ? '수정 중에는 작업을 추가할 수 없습니다 — 먼저 저장하거나 취소해 주세요' : undefined}
-                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={btn('secondary', 'sm')}
                     >
                       <Plus className="w-4 h-4" />
                       {showAddWorkForm ? '취소' : '작업 추가'}
@@ -2561,7 +2559,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             type="date"
                             value={newWork.inquiryDate}
                             onChange={(e) => setNewWork({ ...newWork, inquiryDate: e.target.value })}
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2571,7 +2569,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             value={newWork.projectName}
                             onChange={(e) => setNewWork({ ...newWork, projectName: e.target.value })}
                             placeholder="프로젝트명 입력"
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2581,7 +2579,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             value={newWork.totalQuantity || ''}
                             onChange={(e) => setNewWork({ ...newWork, totalQuantity: parseInt(e.target.value) || 0 })}
                             placeholder="0"
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2591,7 +2589,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             value={newWork.detailedQuantity}
                             onChange={(e) => setNewWork({ ...newWork, detailedQuantity: e.target.value })}
                             placeholder="예: A4 용지 1000개"
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2601,7 +2599,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             value={newWork.quotationAmount || ''}
                             onChange={(e) => setNewWork({ ...newWork, quotationAmount: parseInt(e.target.value) || 0 })}
                             placeholder="0"
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2609,7 +2607,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                           <select
                             value={newWork.accountManager}
                             onChange={(e) => setNewWork({ ...newWork, accountManager: e.target.value })}
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="">선택하세요</option>
                             {customerManagerNames.map((name) => (
@@ -2623,7 +2621,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             type="date"
                             value={newWork.workDate}
                             onChange={(e) => setNewWork({ ...newWork, workDate: e.target.value })}
-                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                         <div>
@@ -2640,7 +2638,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               type="checkbox"
                               checked={newWork.reportSent}
                               onChange={(e) => setNewWork({ ...newWork, reportSent: e.target.checked })}
-                              className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                             />
                             <span className="text-xs font-medium text-slate-700">리포트전송</span>
                           </label>
@@ -2649,7 +2647,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               type="checkbox"
                               checked={newWork.reminder1}
                               onChange={(e) => setNewWork({ ...newWork, reminder1: e.target.checked })}
-                              className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                             />
                             <span className="text-xs font-medium text-slate-700">리마인드1차</span>
                           </label>
@@ -2658,7 +2656,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               type="checkbox"
                               checked={newWork.reminder2}
                               onChange={(e) => setNewWork({ ...newWork, reminder2: e.target.checked })}
-                              className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                             />
                             <span className="text-xs font-medium text-slate-700">리마인드2차</span>
                           </label>
@@ -2667,7 +2665,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               type="checkbox"
                               checked={newWork.reminder3}
                               onChange={(e) => setNewWork({ ...newWork, reminder3: e.target.checked })}
-                              className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                             />
                             <span className="text-xs font-medium text-slate-700">리마인드3차</span>
                           </label>
@@ -2712,7 +2710,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               setShowAddWorkForm(false);
                             }
                           }}
-                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+                          className={btn('primary', 'sm')}
                         >
                           작업 추가
                         </button>
@@ -2726,43 +2724,43 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                       <table className="w-full">
                         <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               문의 등록일
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               프로젝트명
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               총수량
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               상세수량
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               견적금액
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               고객책임자
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               작업일자
                             </th>
-                            <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                               작업팀장(하청)
                             </th>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               리포트전송
                             </th>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               리마인드1차
                             </th>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               리마인드2차
                             </th>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               리마인드3차
                             </th>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               작업
                             </th>
                           </tr>
@@ -2783,7 +2781,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
-                                    <div className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap">
+                                    <div className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap tabular-nums">
                                       <Calendar className="w-4 h-4 text-slate-400" />
                                       {work.inquiryDate}
                                     </div>
@@ -2802,7 +2800,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   )}
                                   {linkState && linkState !== 'won' && (
                                     <span
-                                      className="mt-1 inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-rose-50 text-rose-600 whitespace-nowrap"
+                                      className={`${BADGE} ${TONE.rose} mt-1`}
                                       title={`영업관리 딜 #${dealId}이(가) ${linkState === 'lost' ? '수주가 아닌 상태(실패·미견적)' : '삭제된 상태'}입니다. 기록은 그대로 둡니다.`}
                                     >
                                       {DEAL_LINK_LABEL[linkState]}
@@ -2820,7 +2818,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                   ) : (
                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                       <Package className="w-4 h-4 text-slate-400" />
-                                      <span className="text-sm text-slate-700">{work.totalQuantity.toLocaleString()}개</span>
+                                      <span className="text-sm text-slate-700 tabular-nums">{work.totalQuantity.toLocaleString()}개</span>
                                     </div>
                                   )}
                                 </td>
@@ -2847,10 +2845,10 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       type="number"
                                       value={ew?.quotationAmount ?? work.quotationAmount ?? 0}
                                       onChange={(e) => updateEditedWorkHistory(index, 'quotationAmount', Number(e.target.value))}
-                                      className="text-sm font-semibold text-blue-600 border border-slate-300 rounded px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      className="text-sm font-semibold text-slate-900 tabular-nums border border-slate-300 rounded px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
-                                    <span className="text-sm font-semibold text-blue-600 whitespace-nowrap">{formatAmount(work.quotationAmount)}</span>
+                                    <span className="text-sm font-semibold text-slate-900 whitespace-nowrap tabular-nums">{formatAmount(work.quotationAmount)}</span>
                                   )}
                                 </td>
                                 <td className="px-3 py-3">
@@ -2881,7 +2879,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       className="text-sm text-slate-700 border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
-                                    <div className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap">
+                                    <div className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap tabular-nums">
                                       <Calendar className="w-4 h-4 text-slate-400" />
                                       {work.workDate}
                                     </div>
@@ -2911,9 +2909,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                     className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                   >
                                     {work.reportSent ? (
-                                      <CheckCircle className="w-5 h-5 text-green-600" />
+                                      <CheckCircle className="w-5 h-5 text-emerald-600" />
                                     ) : (
-                                      <X className="w-5 h-5 text-slate-300" />
+                                      <X className="w-5 h-5 text-slate-400" />
                                     )}
                                   </button>
                                 </td>
@@ -2928,9 +2926,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder1 ? (
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
                                       ) : (
-                                        <X className="w-5 h-5 text-slate-300" />
+                                        <X className="w-5 h-5 text-slate-400" />
                                       )}
                                     </button>
                                     <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 1) ? '자동 발송 예정일' : '자동 발송 미설정'}>
@@ -2952,9 +2950,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder2 ? (
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
                                       ) : (
-                                        <X className="w-5 h-5 text-slate-300" />
+                                        <X className="w-5 h-5 text-slate-400" />
                                       )}
                                     </button>
                                     <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 2) ? '자동 발송 예정일' : '자동 발송 미설정'}>
@@ -2976,9 +2974,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                       className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       {work.reminder3 ? (
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
                                       ) : (
-                                        <X className="w-5 h-5 text-slate-300" />
+                                        <X className="w-5 h-5 text-slate-400" />
                                       )}
                                     </button>
                                     <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 3) ? '자동 발송 예정일' : '자동 발송 미설정'}>
@@ -2998,7 +2996,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                           e.stopPropagation();
                                           onNavigateToProfit(work.dealId!);
                                         }}
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors whitespace-nowrap"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
                                         title="프로젝트 관리에서 손익 보기"
                                       >
                                         <Calculator className="w-3 h-3" />
@@ -3033,10 +3031,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                         }, '작업 삭제');
                                       }}
                                       disabled={isEditing}
-                                      className="p-1.5 hover:bg-red-50 rounded transition-colors group disabled:cursor-not-allowed disabled:opacity-40"
+                                      className={`${ICON_BTN_DANGER} disabled:cursor-not-allowed disabled:opacity-40`}
                                       title="작업 삭제"
+                                      aria-label="작업 삭제"
                                     >
-                                      <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </td>
@@ -3055,13 +3054,13 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     <>
                       <button 
                         onClick={handleSaveEdit}
-                        className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                        className={`${btn('primary', 'lg')} flex-1`}
                       >
                         저장하기
                       </button>
                       <button 
                         onClick={handleCancelEdit}
-                        className="flex-1 px-4 py-2.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
+                        className={`${btn('secondary', 'lg')} flex-1`}
                       >
                         취소
                       </button>
@@ -3070,13 +3069,13 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     <>
                       <button 
                         onClick={handleStartEdit}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        className={`${btn('primary', 'lg')} flex-1`}
                       >
                         수정하기
                       </button>
                       <button 
                         onClick={() => setSelectedCustomer(null)}
-                        className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                        className={`${btn('secondary', 'lg')} flex-1`}
                       >
                         목록보기
                       </button>
@@ -3097,9 +3096,10 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
               <h2 className="text-xl font-bold text-slate-900">신규 고객 추가</h2>
               <button
                 onClick={() => setShowAddCustomerModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -3261,13 +3261,13 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
               <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
                 <button
                   onClick={() => setShowAddCustomerModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-medium text-slate-700"
+                  className={`${btn('secondary', 'lg')} flex-1`}
                 >
                   취소
                 </button>
                 <button
                   onClick={handleAddCustomer}
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  className={`${btn('primary', 'lg')} flex-1`}
                 >
                   고객 추가
                 </button>

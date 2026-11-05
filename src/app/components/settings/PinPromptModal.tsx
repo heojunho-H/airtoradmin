@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { KeyRound, X } from 'lucide-react';
+import { btn, MODAL_CLOSE } from '../ui-kit';
 
 interface Props {
   open: boolean;
@@ -37,14 +38,14 @@ export function PinPromptModal({ open, title, description, submitting, error, on
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="pin-title">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100">
-              <KeyRound className="h-4 w-4 text-purple-600" />
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100">
+              <KeyRound className="h-4 w-4 text-blue-600" />
             </span>
             <h2 id="pin-title" className="text-[17px] font-semibold text-slate-900">
               {title}
             </h2>
           </div>
-          <button onClick={onClose} disabled={submitting} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100" aria-label="닫기">
+          <button onClick={onClose} disabled={submitting} className={MODAL_CLOSE} aria-label="닫기">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -67,14 +68,14 @@ export function PinPromptModal({ open, title, description, submitting, error, on
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             placeholder="관리자 PIN"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {error && <p className="text-[13px] text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} disabled={submitting} className="rounded-xl px-4 py-2 text-[15px] font-medium text-slate-600 hover:bg-slate-100">
+            <button type="button" onClick={onClose} disabled={submitting} className={btn('ghost')}>
               취소
             </button>
-            <button type="submit" disabled={!pin || submitting} className="rounded-xl bg-purple-600 px-5 py-2 text-[15px] font-semibold text-white hover:bg-purple-700 disabled:bg-slate-300">
+            <button type="submit" disabled={!pin || submitting} className={btn('primary')}>
               {submitting ? '저장 중…' : '확인'}
             </button>
           </div>

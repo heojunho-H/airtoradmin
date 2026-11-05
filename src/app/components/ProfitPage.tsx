@@ -1,12 +1,11 @@
 // 손익 관리 (프로젝트 관리) 페이지
-// SalesPage/CustomersPage 디자인 패턴 채택: p-4 md:p-8 space-y-, KPI 32px, uppercase 헤더, blue 강조
+// SalesPage/CustomersPage 디자인 패턴 채택: p-4 md:p-8 space-y-, KPI 32px, 한글 표 머리글, blue 강조 (ui-kit)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
   Filter,
   Download,
-  Plus,
   ChevronDown,
   ChevronUp,
   TrendingUp,
@@ -15,7 +14,6 @@ import {
   CheckCircle2,
   Sparkles,
   Briefcase,
-  AlertCircle,
   Calendar,
   Building2,
   Package,
@@ -31,6 +29,10 @@ import {
 } from '../../lib/staffing-learning';
 import { ROLE_ORDER, ROLE_LABELS, type RoleAssignments, type RoleCode } from '../../lib/roles';
 import { DEAL_LINK_LABEL, dealLinkState, type DealStateMap } from '../../lib/dealSync';
+import { btn, KPI, TABLE, BADGE, TONE } from './ui-kit';
+
+// 지표 값 — 뜻 있는 색(손실 빨강·낮은 순익률 주황)일 때만 기본 글자색을 바꾼다 (text-* 겹침 방지)
+const kpiValue = (color: string = 'text-slate-900') => KPI.value.replace('text-slate-900', color);
 
 // ============================================================
 // 타입
@@ -375,10 +377,6 @@ export function ProfitPage({
       console.error('전월 단가 복사 실패:', err);
       onNotification?.('전월 단가 복사 실패');
     }
-  };
-
-  const handleAddManualProject = () => {
-    onNotification?.('수동 추가는 미지원 — 영업관리에서 수주확정한 딜만 자동 등록됩니다');
   };
 
   const handleExport = () => {
@@ -766,19 +764,9 @@ export function ProfitPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleExport}
-            className="px-5 py-2.5 bg-white text-green-700 border border-green-300 rounded-xl hover:bg-green-50 transition-all shadow-sm hover:shadow flex items-center gap-2"
-          >
+          <button onClick={handleExport} className={btn('secondary')}>
             <Download className="w-[18px] h-[18px]" />
-            <span className="text-[14px] font-semibold">내보내기</span>
-          </button>
-          <button
-            onClick={handleAddManualProject}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
-          >
-            <Plus className="w-[18px] h-[18px]" />
-            <span className="text-[14px] font-semibold">수동 추가</span>
+            <span>내보내기</span>
           </button>
         </div>
       </div>
@@ -805,7 +793,7 @@ export function ProfitPage({
           }}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'completed'
-              ? 'bg-slate-900 text-white'
+              ? 'bg-blue-600 text-white'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
@@ -815,87 +803,85 @@ export function ProfitPage({
 
       {/* KPI Cards — SalesPage/CustomersPage 동일 패턴 (p-6, 32px value, icon tile) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">
+              <p className={KPI.label}>
                 {activeTab === 'in-progress' ? '진행중 프로젝트' : '완료 프로젝트'}
               </p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+              <p className={KPI.value}>
                 {tabProjects.length}
               </p>
             </div>
-            <div className="p-3 bg-blue-50 rounded-xl">
-              <Briefcase className="w-6 h-6 text-blue-600" />
+            <div className={KPI.iconTile}>
+              <Briefcase className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">누적 순매출</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+              <p className={KPI.label}>누적 순매출</p>
+              <p className={KPI.value}>
                 ₩{formatKRWShort(tabRevenue)}
               </p>
             </div>
-            <div className="p-3 bg-cyan-50 rounded-xl">
-              <DollarSign className="w-6 h-6 text-cyan-600" />
+            <div className={KPI.iconTile}>
+              <DollarSign className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">누적 순이익</p>
+              <p className={KPI.label}>누적 순이익</p>
               <p
-                className={`text-[32px] font-bold mt-2 tracking-tight ${
-                  tabProfit >= 0 ? 'text-slate-900' : 'text-red-700'
-                }`}
+                className={kpiValue(tabProfit >= 0 ? 'text-slate-900' : 'text-red-700')}
               >
                 ₩{formatKRWShort(tabProfit)}
               </p>
             </div>
-            <div className="p-3 bg-emerald-50 rounded-xl">
-              <TrendingUp className="w-6 h-6 text-emerald-600" />
+            <div className={KPI.iconTile}>
+              <TrendingUp className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">평균 순익률</p>
+              <p className={KPI.label}>평균 순익률</p>
               <p
-                className={`text-[32px] font-bold mt-2 tracking-tight ${
+                className={kpiValue(
                   tabAvgRatio >= 0.2
                     ? 'text-slate-900'
                     : tabAvgRatio >= 0
                       ? 'text-amber-700'
-                      : 'text-red-700'
-                }`}
+                      : 'text-red-700',
+                )}
               >
                 {formatPct(tabAvgRatio)}
               </p>
             </div>
-            <div className="p-3 bg-purple-50 rounded-xl">
-              <Percent className="w-6 h-6 text-purple-600" />
+            <div className={KPI.iconTile}>
+              <Percent className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">AI 채택률</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+              <p className={KPI.label}>AI 채택률</p>
+              <p className={KPI.value}>
                 {formatPct(tabAiAdoptionRate)}
               </p>
-              <p className="text-[11px] text-slate-500 mt-1">{tabAiAdopted}건 채택</p>
+              <p className="text-[11px] text-slate-500 mt-1 tabular-nums">{tabAiAdopted}건 채택</p>
             </div>
-            <div className="p-3 bg-orange-50 rounded-xl">
-              <Sparkles className="w-6 h-6 text-orange-600" />
+            <div className={KPI.iconTile}>
+              <Sparkles className={KPI.icon} />
             </div>
           </div>
         </div>
@@ -903,18 +889,17 @@ export function ProfitPage({
 
       {/* AI 자동 호출 상태 인디케이터 (큐에 작업이 있을 때만) */}
       {(aiQueue.processing.size > 0 || aiQueue.pending.length > 0) && (
-        <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200
-                        rounded-lg px-4 py-3 flex items-center gap-3">
-          <Sparkles className="w-5 h-5 text-teal-600 animate-pulse flex-shrink-0" />
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center gap-3">
+          <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0" />
           <div className="flex-1">
-            <div className="text-sm font-medium text-teal-700">
+            <div className="text-sm font-medium text-blue-700">
               AI가 인력 초안을 생성 중입니다
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">
+            <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
               진행 중 {aiQueue.processing.size}건 · 대기 {aiQueue.pending.length}건
             </div>
           </div>
-          <Loader2 className="w-4 h-4 text-teal-500 animate-spin flex-shrink-0" />
+          <Loader2 className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
         </div>
       )}
 
@@ -985,14 +970,14 @@ export function ProfitPage({
                   type="date"
                   value={dateFilter.start}
                   onChange={(e) => setDateFilter((prev) => ({ ...prev, start: e.target.value }))}
-                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <span className="text-slate-400 text-sm">~</span>
                 <input
                   type="date"
                   value={dateFilter.end}
                   onChange={(e) => setDateFilter((prev) => ({ ...prev, end: e.target.value }))}
-                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -1006,7 +991,7 @@ export function ProfitPage({
                   placeholder="최소"
                   value={profitFilter.min}
                   onChange={(e) => setProfitFilter((prev) => ({ ...prev, min: e.target.value }))}
-                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <span className="text-slate-400 text-sm">~</span>
                 <input
@@ -1014,7 +999,7 @@ export function ProfitPage({
                   placeholder="최대"
                   value={profitFilter.max}
                   onChange={(e) => setProfitFilter((prev) => ({ ...prev, max: e.target.value }))}
-                  className="flex-1 px-2 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -1025,7 +1010,7 @@ export function ProfitPage({
       {/* Table / Mobile Cards */}
       {filteredProjects.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm py-16 text-center">
-          <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
+          <Search className="w-8 h-8 text-slate-400 mx-auto" />
           <p className="mt-3 text-[15px] text-slate-500">조건에 맞는 프로젝트가 없습니다</p>
           <p className="text-[13px] text-slate-400 mt-2">다른 검색어나 필터를 시도해보세요.</p>
         </div>
@@ -1053,43 +1038,43 @@ export function ProfitPage({
           ))}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     작업일자
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     기업명
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     서비스
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                     견적금액
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                     인건비
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                     순이익
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                     순익률
                   </th>
                   {activeTab === 'completed' && (
                     <>
-                      <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                         완료일자
                       </th>
-                      <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                         완료사유
                       </th>
                     </>
                   )}
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider w-10"></th>
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1132,7 +1117,7 @@ export function ProfitPage({
 function LinkBadge({ label }: { label: string }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-rose-50 text-rose-600 whitespace-nowrap"
+      className={`${BADGE} ${TONE.rose} shrink-0`}
       title="영업관리에서 이 딜이 수주가 아닌 상태이거나 삭제되었습니다. 프로젝트는 그대로 두었으니 필요하면 직접 삭제해 주세요."
     >
       {label}
@@ -1185,13 +1170,11 @@ function ProjectTableRow({
     <>
       <tr
         data-project-id={p.id}
-        className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-          isExpanded ? 'bg-blue-50/40' : ''
-        }`}
+        className={`${TABLE.rowClickable} ${isExpanded ? 'bg-blue-50/40' : ''}`}
         onClick={onToggleExpand}
       >
         <td className="px-4 py-4">
-          <div className="flex items-center gap-2 text-sm text-slate-700">
+          <div className="flex items-center gap-2 text-sm text-slate-700 tabular-nums">
             <Calendar className="w-4 h-4 text-slate-400" />
             {p.workDate || '-'}
           </div>
@@ -1238,40 +1221,28 @@ function ProjectTableRow({
             className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${ratioColorClass(p)}`}
           >
             {formatPct(p.profitRatio)}
-            {p.aiApplied && <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
+            {p.aiApplied && (
+              <span title="AI 추천 채택" className="inline-flex">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" aria-label="AI 추천 채택" />
+              </span>
+            )}
           </span>
         </td>
         {isCompleted && (
           <>
             <td className="px-4 py-4">
-              <span className="text-sm text-slate-600">
+              <span className="text-sm text-slate-600 tabular-nums">
                 {p.completedAt?.substring(0, 10) || '-'}
               </span>
             </td>
             <td className="px-4 py-4">
               {p.completedReason === 'report_sent' ? (
-                <span
-                  className="px-2.5 py-1 rounded-full text-xs font-medium border"
-                  style={{
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    borderColor: '#bfdbfe',
-                  }}
-                >
-                  <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                <span className={`${BADGE} ${TONE.blue}`}>
+                  <CheckCircle2 className="w-3 h-3" />
                   리포트전송
                 </span>
               ) : (
-                <span
-                  className="px-2.5 py-1 rounded-full text-xs font-medium border"
-                  style={{
-                    backgroundColor: '#f1f5f9',
-                    color: '#475569',
-                    borderColor: '#cbd5e1',
-                  }}
-                >
-                  수동
-                </span>
+                <span className={`${BADGE} ${TONE.slate}`}>수동</span>
               )}
             </td>
           </>
@@ -1287,7 +1258,7 @@ function ProjectTableRow({
       {isExpanded && (
         <tr>
           <td colSpan={colCount} className="p-0">
-            <div className="border-l-4 border-teal-400">
+            <div className="border-l-4 border-blue-400">
               <ProjectRowExpand
                 project={p}
                 laborRates={laborRates}

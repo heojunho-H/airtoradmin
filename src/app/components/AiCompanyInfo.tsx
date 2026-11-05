@@ -4,6 +4,7 @@ import { streamCompanyInfo, toAiRequestError } from '../../lib/ai/api';
 import { formatKrw, prettyModelId } from '../../lib/ai/format';
 import type { AiSource } from '../../lib/ai/types';
 import { normalizeCompanyName } from '../../lib/company';
+import { MODAL_CLOSE } from './ui-kit';
 
 // AI 기업정보 — Claude 웹 검색(서버: functions/_lib/ai-company.ts). 모델은 설정 화면에서 지정.
 // 같은 회사를 10분 안에 다시 열면 웹 검색 비용이 들지 않도록 결과를 재사용한다.
@@ -109,7 +110,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
     <>
       <button
         onClick={handleSearch}
-        className="inline-flex items-center gap-1 px-2 py-1 text-[12px] font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 text-[12px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
         title="AI 기업 정보 조회"
       >
         <Sparkles className="w-3 h-3" />
@@ -119,21 +120,21 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
       {/* 모달 */}
       {isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
+          <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
           <div className="relative w-full max-w-lg mx-4 bg-white rounded-2xl shadow-2xl max-h-[80vh] flex flex-col" role="dialog" aria-label="AI 기업 정보">
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Building2 className="w-4 h-4 text-purple-600" />
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Building2 className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
                   <h3 className="text-[16px] font-semibold text-slate-800">AI 기업 정보</h3>
                   <p className="text-[13px] text-slate-400">{companyName}</p>
                 </div>
               </div>
-              <button onClick={handleClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" aria-label="닫기">
-                <X className="w-4 h-4 text-slate-400" />
+              <button onClick={handleClose} className={MODAL_CLOSE} aria-label="닫기">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -142,7 +143,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
               {isLoading ? (
                 <div>
                   <div className="flex items-center gap-2 text-[14px] text-slate-500">
-                    {status?.phase === 'searching' ? <Search className="w-4 h-4 text-purple-400" /> : <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
+                    {status?.phase === 'searching' ? <Search className="w-4 h-4 text-blue-500" /> : <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
                     <span>{statusText}…</span>
                   </div>
                   {draft && <div className="mt-3 text-[16px] text-slate-400 leading-relaxed whitespace-pre-wrap">{draft}</div>}
@@ -167,7 +168,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
                               href={s.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[12px] text-purple-600 hover:text-purple-700 hover:underline break-all inline-flex items-center gap-1"
+                              className="text-[12px] text-blue-600 hover:text-blue-700 hover:underline break-all inline-flex items-center gap-1"
                             >
                               <span className="line-clamp-1">{s.title || s.url}</span>
                               <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -188,7 +189,7 @@ export function AiCompanyInfoButton({ companyName }: AiCompanyInfoProps) {
                 {result?.costUsd ? ` · ${formatKrw(result.costUsd)}` : ''} · 정보가 정확하지 않을 수 있습니다
               </p>
               {!isLoading && (result || error) && (
-                <button onClick={handleRetry} className="flex-shrink-0 text-[13px] text-purple-600 hover:text-purple-700 font-medium">
+                <button onClick={handleRetry} className="flex-shrink-0 text-[13px] text-blue-600 hover:text-blue-700 font-medium">
                   다시 조회
                 </button>
               )}

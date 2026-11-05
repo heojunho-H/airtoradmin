@@ -3,7 +3,7 @@ import {
   Search,
   Filter,
   Plus,
-  MoreVertical,
+  Trash2,
   Calendar,
   TrendingUp,
   DollarSign,
@@ -39,6 +39,7 @@ import * as XLSX from 'xlsx';
 import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './MobileCard';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
+import { btn, ICON_BTN_DANGER, KPI, TABLE, TILE, BADGE, TONE, STAGE_COLORS, INPUT, MODAL_CLOSE, type Tone } from './ui-kit';
 import { diffDeal, isValidYmd, isWonDeal, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
 
 interface Deal {
@@ -104,6 +105,14 @@ const customerJourneyStages = [
   { id: 'schedule', name: '일정조율', icon: CalendarCheck, color: 'orange' },
   { id: 'confirmed', name: '수주확정', icon: CheckCircle, color: 'green' },
 ];
+
+// 성공여부 배지 색 — 성공 초록 · 실패 빨강 · 미견적 주황 · 진행중 회색 (표·상세·파이프라인·모바일 공통)
+function successTone(status: string): Tone {
+  if (status === 'success') return 'emerald';
+  if (status === 'failed') return 'red';
+  if (status === 'no-quote') return 'orange';
+  return 'slate';
+}
 
 const QUANTITY_CATEGORIES = [
   '벽걸이형', '스탠드 일반형', '스탠드 대형', '1way 천정형', '2way 천정형',
@@ -187,9 +196,12 @@ interface SalesPageProps {
   externalViewState?: [SalesViewState, (s: SalesViewState | ((prev: SalesViewState) => SalesViewState)) => void];
   customerManagerNames?: string[];
   onNotification?: (message: string) => void;
+  /** 상단 검색에서 딜을 고르면 바로 열 딜 — 열고 나면 onDealOpened 로 알린다 */
+  openDealId?: number | null;
+  onDealOpened?: () => void;
 }
 
-export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomerIds, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification }: SalesPageProps = {}) {
+export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomerIds, externalDealsState, externalDateFilterState, externalViewState, customerManagerNames = [], onNotification, openDealId = null, onDealOpened }: SalesPageProps = {}) {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [editingSuccessStatusId, setEditingSuccessStatusId] = useState<number | null>(null);
@@ -369,32 +381,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
     return `${amount.toLocaleString()}`;
   };
 
-  // 고객여정 스테이지 색상 매핑 함수
-  const getStageColorStyle = (color: string) => {
-    const colorMap: Record<string, { border: string; bg: string; icon: string }> = {
-      blue: { border: '#93c5fd', bg: '#dbeafe', icon: '#1d4ed8' },
-      cyan: { border: '#67e8f9', bg: '#cffafe', icon: '#0891b2' },
-      purple: { border: '#c4b5fd', bg: '#ede9fe', icon: '#7c3aed' },
-      indigo: { border: '#a5b4fc', bg: '#e0e7ff', icon: '#4f46e5' },
-      amber: { border: '#fcd34d', bg: '#fef3c7', icon: '#d97706' },
-      orange: { border: '#fdba74', bg: '#fed7aa', icon: '#ea580c' },
-      green: { border: '#86efac', bg: '#d1fae5', icon: '#15803d' },
-    };
-    return colorMap[color] || colorMap.green;
-  };
-
-  const getPipelineColorByStage = (color: string) => {
-    const colorMap: Record<string, string> = {
-      blue: '#3b82f6',
-      cyan: '#06b6d4',
-      purple: '#8b5cf6',
-      indigo: '#6366f1',
-      amber: '#f59e0b',
-      orange: '#f97316',
-      green: '#10b981',
-    };
-    return colorMap[color] || colorMap.green;
-  };
+  // 고객여정 단계 색 — ui-kit STAGE_COLORS (배지·아이콘·점이 같은 계열)
+  const stageStyle = (color: string) => STAGE_COLORS[color] || STAGE_COLORS.green;
 
   // 기간에 따라 필터링된 데이터
   const dateFilteredDeals = dealsData.filter((deal) => {
@@ -581,6 +569,9 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
     return stageData?.color || 'slate';
   };
 
+  // 진행상태 배지 색 (모르는 값은 회색)
+  const getStageTone = (status: string): Tone => STAGE_COLORS[getStatusColor(status)]?.tone ?? 'slate';
+
   // 고유한 고객책임자 목록 추출
   const uniqueSalesManagers = Array.from(new Set(dealsData.map(deal => deal.salesManager)));
 
@@ -659,6 +650,16 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
       setSelectedDeal(deal);
     }
   };
+
+  // 상단 검색에서 딜을 고르면 그 딜 상세를 바로 연다 (한 번만, 목록 클릭과 같게 미확인이면 확인 처리)
+  useEffect(() => {
+    if (openDealId == null) return;
+    const target = dealsData.find((d) => Number(d.id) === openDealId);
+    if (!target && dealsData.length === 0) return; // 목록을 아직 못 불러옴
+    if (target) handleDealSelect(target);
+    onDealOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDealId, dealsData]);
 
   // 확인 상태 토글
   const handleToggleChecked = (dealId: number, e: React.MouseEvent) => {
@@ -930,11 +931,11 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       {/* 기간 설정 */}
-      <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-500" />
-            <span className="text-[13px] font-medium text-slate-600 font-bold">조회 기간</span>
+            <span className="text-[13px] font-semibold text-slate-600">조회 기간</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <input
@@ -1010,78 +1011,78 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">견적 문의 수</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{totalDeals}</p>
+              <p className={KPI.label}>견적 문의 수</p>
+              <p className={KPI.value}>{totalDeals}</p>
             </div>
-            <div className="p-3 bg-blue-50 rounded-xl">
-              <FileText className="w-6 h-6 text-blue-600" />
+            <div className={KPI.iconTile}>
+              <FileText className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">총 견적 금액</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+              <p className={KPI.label}>총 견적 금액</p>
+              <p className={KPI.value}>
                 ₩{formatAmount(totalQuotationAmount)}
               </p>
             </div>
-            <div className="p-3 bg-cyan-50 rounded-xl">
-              <DollarSign className="w-6 h-6 text-cyan-600" />
+            <div className={KPI.iconTile}>
+              <DollarSign className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">계약 성공 수</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{successfulDeals}</p>
+              <p className={KPI.label}>계약 성공 수</p>
+              <p className={KPI.value}>{successfulDeals}</p>
             </div>
-            <div className="p-3 bg-green-50 rounded-xl">
-              <CheckCircle2 className="w-6 h-6 text-green-600" />
+            <div className={KPI.iconTile}>
+              <CheckCircle2 className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">계약 성공 금액</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">
+              <p className={KPI.label}>계약 성공 금액</p>
+              <p className={KPI.value}>
                 ₩{formatAmount(successfulAmount)}
               </p>
             </div>
-            <div className="p-3 bg-emerald-50 rounded-xl">
-              <TrendingUp className="w-6 h-6 text-emerald-600" />
+            <div className={KPI.iconTile}>
+              <TrendingUp className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">계약 성공률(건수)</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{successRateByCount}%</p>
+              <p className={KPI.label}>계약 성공률(건수)</p>
+              <p className={KPI.value}>{successRateByCount}%</p>
             </div>
-            <div className="p-3 bg-purple-50 rounded-xl">
-              <Percent className="w-6 h-6 text-purple-600" />
+            <div className={KPI.iconTile}>
+              <Percent className={KPI.icon} />
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className={KPI.card}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] text-slate-500 font-medium font-bold">계약 성공률(금액)</p>
-              <p className="text-[32px] font-bold text-slate-900 mt-2 tracking-tight">{successRateByAmount}%</p>
+              <p className={KPI.label}>계약 성공률(금액)</p>
+              <p className={KPI.value}>{successRateByAmount}%</p>
             </div>
-            <div className="p-3 bg-orange-50 rounded-xl">
-              <Target className="w-6 h-6 text-orange-600" />
+            <div className={KPI.iconTile}>
+              <Target className={KPI.icon} />
             </div>
           </div>
         </div>
@@ -1091,7 +1092,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <div className="mb-6">
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">고객여정 진행상황</h2>
-          <p className="text-[13px] text-slate-500 mt-1">각 단계별 고객 수와 전환율을 확인하세요</p>
+          <p className="text-[13px] text-slate-500 mt-1">각 단계별 고객 수를 확인하세요</p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -1110,27 +1111,12 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                 )}
                 
                 {/* Stage Card */}
-                <div 
-                  className="bg-gradient-to-br from-white to-slate-50 rounded-xl border-2 border-slate-200 p-4 hover:shadow-lg transition-all hover:scale-105 cursor-pointer"
-                  style={{
-                    borderColor: getStageColorStyle(stage.color).border
-                  }}
-                >
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <div className="flex flex-col space-y-3">
                     {/* Icon + Stage Name */}
                     <div className="flex items-center gap-2">
-                      <div 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0"
-                        style={{
-                          backgroundColor: getStageColorStyle(stage.color).bg
-                        }}
-                      >
-                        <Icon 
-                          className="w-4 h-4"
-                          style={{
-                            color: getStageColorStyle(stage.color).icon
-                          }}
-                        />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${stageStyle(stage.color).iconTile}`}>
+                        <Icon className="w-4 h-4" />
                       </div>
                       <p className="text-[15px] font-bold text-slate-800 leading-tight">{stage.name}</p>
                     </div>
@@ -1179,17 +1165,17 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
           </div>
           <button
             onClick={handleExport}
-            className="px-5 py-2.5 bg-white text-green-700 border border-green-300 rounded-xl hover:bg-green-50 transition-all shadow-sm hover:shadow flex items-center gap-2"
+            className={btn('secondary')}
           >
             <Download className="w-[18px] h-[18px]" />
-            <span className="text-[14px] font-semibold">내보내기</span>
+            <span>내보내기</span>
           </button>
           <button
             onClick={handleAddNewDeal}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center gap-2"
+            className={btn('primary')}
           >
             <Plus className="w-[18px] h-[18px]" />
-            <span className="text-[14px] font-semibold">거래 추가</span>
+            <span>거래 추가</span>
           </button>
         </div>
       </div>
@@ -1209,8 +1195,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 border rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm ${
-              activeFiltersCount > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'
+            className={`px-4 py-2 border rounded-lg transition-colors flex items-center gap-2 shadow-sm ${
+              activeFiltersCount > 0 ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
           >
             <Filter className="w-4 h-4" />
@@ -1389,7 +1375,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
               </div>
             </div>
 
-            {/* 필터 초��화 버튼 */}
+            {/* 필터 초기화 버튼 */}
             <div className="flex items-end">
               <button
                 onClick={resetFilters}
@@ -1411,10 +1397,10 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
               {filteredDeals.map((deal) => (
                 <MobileCard key={deal.id} onClick={() => handleDealSelect(deal)}>
                   <MobileCardRow className="mb-2">
-                    <MobileCardBadge variant={deal.successStatus === 'success' ? 'success' : deal.successStatus === 'failed' ? 'danger' : deal.successStatus === 'no-quote' ? 'warning' : 'default'}>
+                    <MobileCardBadge tone={successTone(deal.successStatus)}>
                       {deal.successStatus === 'success' ? '성공' : deal.successStatus === 'failed' ? '실패' : deal.successStatus === 'no-quote' ? '미견적' : '진행중'}
                     </MobileCardBadge>
-                    <MobileCardBadge variant="primary">
+                    <MobileCardBadge tone={getStageTone(deal.status)}>
                       {getStatusLabel(deal.status)}
                     </MobileCardBadge>
                     {!deal.isChecked && (
@@ -1454,7 +1440,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   
                   <MobileCardField
                     label="희망서비스"
-                    value={<span className="font-medium text-blue-600">{deal.desiredService}</span>}
+                    value={<span className="font-medium text-slate-900">{deal.desiredService}</span>}
                   />
                   
                   <div className="grid grid-cols-2 gap-3">
@@ -1464,7 +1450,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     />
                     <MobileCardField
                       label="견적금액"
-                      value={<span className="font-semibold text-green-600">{deal.quotationAmount}</span>}
+                      value={<span className="font-semibold text-slate-900">{deal.quotationAmount}</span>}
                     />
                   </div>
                   
@@ -1482,18 +1468,18 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
             </div>
           ) : (
             /* 데스크톱 테이블 뷰 */
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm relative">
+            <div className={`${TABLE.wrap} relative`}>
               <div 
                 className={statusDropdownOpen || salesManagerDropdownOpen || successStatusDropdownOpen ? "overflow-visible" : "overflow-x-auto"}
               >
                 <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
+              <thead className={TABLE.thead}>
                 <tr>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     확인
                   </th>
                   <th 
-                    className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                    className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                     onClick={() => handleSort('registrationDate')}
                   >
                     <div className="flex items-center gap-1">
@@ -1507,7 +1493,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider relative">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 relative">
                     <div className="flex items-center gap-1">
                       진행상태
                       <button
@@ -1517,7 +1503,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           setSalesManagerDropdownOpen(false);
                           setSuccessStatusDropdownOpen(false);
                         }}
-                        className="hover:bg-slate-200 rounded p-1 transition-colors"
+                        className="hover:bg-slate-200 rounded p-1.5 transition-colors"
+                        aria-label="필터"
                       >
                         <ChevronDown className="w-3 h-3" />
                       </button>
@@ -1548,20 +1535,20 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       </div>
                     )}
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     기업명
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     담당자명/직책
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     연락처
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                     희망서비스
                   </th>
                   <th 
-                    className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                    className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                     onClick={() => handleSort('totalQuantity')}
                   >
                     <div className="flex items-center gap-1">
@@ -1576,7 +1563,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                    className={`px-4 py-4 text-left text-xs font-semibold text-slate-600 ${TABLE.thSortable}`}
                     onClick={() => handleSort('quotationAmount')}
                   >
                     <div className="flex items-center gap-1">
@@ -1590,7 +1577,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider relative">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 relative">
                     <div className="flex items-center gap-1">
                       고객책임자
                       <button
@@ -1600,7 +1587,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           setStatusDropdownOpen(false);
                           setSuccessStatusDropdownOpen(false);
                         }}
-                        className="hover:bg-slate-200 rounded p-1 transition-colors"
+                        className="hover:bg-slate-200 rounded p-1.5 transition-colors"
+                        aria-label="필터"
                       >
                         <ChevronDown className="w-3 h-3" />
                       </button>
@@ -1631,7 +1619,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       </div>
                     )}
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider relative">
+                  <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 relative">
                     <div className="flex items-center gap-1">
                       성공여부
                       <button
@@ -1641,7 +1629,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           setStatusDropdownOpen(false);
                           setSalesManagerDropdownOpen(false);
                         }}
-                        className="hover:bg-slate-200 rounded p-1 transition-colors"
+                        className="hover:bg-slate-200 rounded p-1.5 transition-colors"
+                        aria-label="필터"
                       >
                         <ChevronDown className="w-3 h-3" />
                       </button>
@@ -1694,7 +1683,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       </div>
                     )}
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">
                     삭제
                   </th>
                 </tr>
@@ -1703,20 +1692,20 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                 {sortedDeals.map((deal) => (
                   <tr
                     key={deal.id}
-                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    className={TABLE.rowClickable}
                     onClick={() => handleDealSelect(deal)}
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-center" onClick={(e) => handleToggleChecked(deal.id, e)}>
                         {deal.isChecked ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-600 cursor-pointer hover:text-green-700" />
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 cursor-pointer hover:text-emerald-700" />
                         ) : (
-                          <div className="w-5 h-5 border-2 border-slate-300 rounded-full cursor-pointer hover:border-green-400" />
+                          <div className="w-5 h-5 border-2 border-slate-400 rounded-full cursor-pointer hover:border-emerald-400" />
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <div className="flex items-center gap-2 text-sm text-slate-700 tabular-nums">
                         <Calendar className="w-4 h-4 text-slate-400" />
                         {deal.registrationDate}
                       </div>
@@ -1730,7 +1719,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                               onChange={(e) => handleStatusChange(deal.id, e.target.value as Deal['status'])}
                               onBlur={() => setEditingStatusId(null)}
                               autoFocus
-                              className="px-2.5 py-1 rounded-full text-xs font-medium border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="px-2.5 py-1 rounded-full text-xs font-medium border border-slate-300 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {customerJourneyStages.map((stage) => (
@@ -1742,51 +1731,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           </div>
                         ) : (
                           <span
-                            className="px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer hover:shadow-md transition-shadow"
-                            style={{
-                              backgroundColor:
-                                getStatusColor(deal.status) === 'blue'
-                                  ? '#eff6ff'
-                                  : getStatusColor(deal.status) === 'cyan'
-                                  ? '#ecfeff'
-                                  : getStatusColor(deal.status) === 'purple'
-                                  ? '#f5f3ff'
-                                  : getStatusColor(deal.status) === 'indigo'
-                                  ? '#eef2ff'
-                                  : getStatusColor(deal.status) === 'amber'
-                                  ? '#fffbeb'
-                                  : getStatusColor(deal.status) === 'orange'
-                                  ? '#fff7ed'
-                                  : '#f0fdf4',
-                              color:
-                                getStatusColor(deal.status) === 'blue'
-                                  ? '#1d4ed8'
-                                  : getStatusColor(deal.status) === 'cyan'
-                                  ? '#0891b2'
-                                  : getStatusColor(deal.status) === 'purple'
-                                  ? '#7c3aed'
-                                  : getStatusColor(deal.status) === 'indigo'
-                                  ? '#4f46e5'
-                                  : getStatusColor(deal.status) === 'amber'
-                                  ? '#d97706'
-                                  : getStatusColor(deal.status) === 'orange'
-                                  ? '#ea580c'
-                                  : '#15803d',
-                              borderColor:
-                                getStatusColor(deal.status) === 'blue'
-                                  ? '#bfdbfe'
-                                  : getStatusColor(deal.status) === 'cyan'
-                                  ? '#a5f3fc'
-                                  : getStatusColor(deal.status) === 'purple'
-                                  ? '#ddd6fe'
-                                  : getStatusColor(deal.status) === 'indigo'
-                                  ? '#a5b4fc'
-                                  : getStatusColor(deal.status) === 'amber'
-                                  ? '#fde68a'
-                                  : getStatusColor(deal.status) === 'orange'
-                                  ? '#fdba74'
-                                  : '#bbf7d0',
-                            }}
+                            className={`${BADGE} ${TONE[getStageTone(deal.status)]} cursor-pointer hover:shadow-md transition-shadow`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingStatusId(deal.id);
@@ -1811,7 +1756,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     </td>
                     <td className="px-4 py-4">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-700 tabular-nums">
                           <Phone className="w-3.5 h-3.5 text-slate-400" />
                           {deal.phone}
                         </div>
@@ -1825,13 +1770,13 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       <p className="text-sm text-slate-900">{deal.desiredService}</p>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                      <div className="flex items-center gap-1.5 text-sm text-slate-700 tabular-nums">
                         <Package className="w-4 h-4 text-slate-400" />
                         {deal.totalQuantity}
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-sm font-semibold text-slate-900">₩{formatAmount(parseQuotationAmount(deal.quotationAmount))}</span>
+                      <span className="text-sm font-semibold text-slate-900 tabular-nums">₩{formatAmount(parseQuotationAmount(deal.quotationAmount))}</span>
                     </td>
                     <td className="px-4 py-4">
                       {editingSalesManagerId === deal.id ? (
@@ -1856,12 +1801,18 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                             setEditingSalesManagerId(deal.id);
                           }}
                         >
-                          <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xs font-medium">
-                              {deal.salesManager.charAt(0)}
-                            </span>
-                          </div>
-                          <span className="text-sm text-slate-700">{deal.salesManager}</span>
+                          {deal.salesManager ? (
+                            <>
+                              <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="text-blue-700 text-xs font-semibold">
+                                  {deal.salesManager.charAt(0)}
+                                </span>
+                              </div>
+                              <span className="text-sm text-slate-700">{deal.salesManager}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-slate-400">미지정</span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -1874,7 +1825,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                               onChange={(e) => handleSuccessStatusChange(deal.id, e.target.value as Deal['successStatus'])}
                               onBlur={() => setEditingSuccessStatusId(null)}
                               autoFocus
-                              className="px-2.5 py-1 rounded-full text-xs font-medium border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="px-2.5 py-1 rounded-full text-xs font-medium border border-slate-300 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <option value="in-progress">진행중</option>
@@ -1885,33 +1836,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           </div>
                         ) : (
                           <span
-                            className="px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer hover:shadow-md transition-shadow"
-                            style={{
-                              backgroundColor:
-                                deal.successStatus === 'success'
-                                  ? '#ecfdf5'
-                                  : deal.successStatus === 'failed'
-                                  ? '#fef2f2'
-                                  : deal.successStatus === 'no-quote'
-                                  ? '#fff7ed'
-                                  : '#f0fdf4',
-                              color:
-                                deal.successStatus === 'success'
-                                  ? '#16a34a'
-                                  : deal.successStatus === 'failed'
-                                  ? '#dc2626'
-                                  : deal.successStatus === 'no-quote'
-                                  ? '#c2410c'
-                                  : '#6b7280',
-                              borderColor:
-                                deal.successStatus === 'success'
-                                  ? '#a7f3d0'
-                                  : deal.successStatus === 'failed'
-                                  ? '#f87171'
-                                  : deal.successStatus === 'no-quote'
-                                  ? '#fdba74'
-                                  : '#d1d5db',
-                            }}
+                            className={`${BADGE} ${TONE[successTone(deal.successStatus)]} cursor-pointer hover:shadow-md transition-shadow`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingSuccessStatusId(deal.id);
@@ -1924,10 +1849,11 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     </td>
                     <td className="px-4 py-4 text-right">
                       <button
-                        className="p-1 hover:bg-slate-100 rounded transition-colors"
+                        className={ICON_BTN_DANGER}
                         onClick={(e) => handleDeleteDeal(deal.id, e)}
+                        aria-label="삭제"
                       >
-                        <MoreVertical className="w-5 h-5 text-slate-400" />
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
                   </tr>
@@ -1935,10 +1861,16 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
               </tbody>
             </table>
             {sortedDeals.length === 0 && (
-              <div className="text-center py-12 text-slate-500">
-                <p className="text-[15px]">검색 결과가 없습니다.</p>
-                <p className="text-[13px] mt-2">다른 검색어나 필터를 시도해보세요.</p>
-              </div>
+              isLoading && dealsData.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-[15px]">불러오는 중…</p>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-[15px]">검색 결과가 없습니다.</p>
+                  <p className="text-[13px] mt-2">다른 검색어나 필터를 시도해보세요.</p>
+                </div>
+              )
             )}
           </div>
         </div>
@@ -1958,15 +1890,10 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
             const Icon = stage.icon;
 
             return (
-              <div key={stage.id} className="bg-slate-50 rounded-xl p-4">
+              <div key={stage.id} className="bg-slate-100/70 border border-slate-200 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        backgroundColor: getPipelineColorByStage(stage.color)
-                      }}
-                    ></div>
+                    <div className={`w-2 h-2 rounded-full ${stageStyle(stage.color).dot}`}></div>
                     <h3 className="font-semibold text-slate-900 text-sm">{stage.name}</h3>
                   </div>
                   <span className="text-xs font-medium text-slate-500 bg-white px-2 py-1 rounded">
@@ -1991,9 +1918,9 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                         </h4>
                         <div onClick={(e) => handleToggleChecked(deal.id, e)}>
                           {deal.isChecked ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 cursor-pointer hover:text-green-700" />
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 cursor-pointer hover:text-emerald-700" />
                           ) : (
-                            <div className="w-4 h-4 border-2 border-slate-300 rounded-full flex-shrink-0 cursor-pointer hover:border-green-400" />
+                            <div className="w-4 h-4 border-2 border-slate-400 rounded-full flex-shrink-0 cursor-pointer hover:border-emerald-400" />
                           )}
                         </div>
                       </div>
@@ -2008,7 +1935,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       </div>
 
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-slate-900">₩{formatAmount(parseQuotationAmount(deal.quotationAmount))}</span>
+                        <span className="text-sm font-semibold text-slate-900 tabular-nums">₩{formatAmount(parseQuotationAmount(deal.quotationAmount))}</span>
                         <div className="flex items-center gap-1 text-xs text-slate-500">
                           <Package className="w-3 h-3" />
                           {deal.totalQuantity}
@@ -2021,12 +1948,12 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           {deal.salesManager}
                         </div>
                         {deal.successStatus === 'success' && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${TONE.emerald}`}>
                             성공
                           </span>
                         )}
                         {deal.successStatus === 'failed' && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${TONE.red}`}>
                             실패
                           </span>
                         )}
@@ -2060,9 +1987,10 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   setIsEditMode(false);
                   setEditedDeal(null);
                 }}
-                className="p-2.5 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
+                className={`${MODAL_CLOSE} flex-shrink-0`}
+                aria-label="닫기"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -2087,7 +2015,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                           isActive
                             ? 'bg-blue-50 border-blue-300 shadow-sm'
                             : isPast
-                            ? 'bg-green-50 border-green-200'
+                            ? 'bg-emerald-50 border-emerald-200'
                             : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                         }`}
                         onClick={() => {
@@ -2105,7 +2033,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                             isActive
                               ? 'bg-blue-600 text-white shadow-md'
                               : isPast
-                              ? 'bg-green-600 text-white'
+                              ? 'bg-emerald-600 text-white'
                               : 'bg-slate-200 text-slate-400 group-hover:bg-slate-300'
                           }`}
                         >
@@ -2120,7 +2048,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                             isActive
                               ? 'text-blue-700'
                               : isPast
-                              ? 'text-green-700'
+                              ? 'text-emerald-700'
                               : 'text-slate-500'
                           }`}
                         >
@@ -2257,44 +2185,46 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   거래 정보
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <p className="text-[13px] font-medium text-blue-600 uppercase tracking-wider mb-1">문의 등록일</p>
+                  <div className={TILE.box}>
+                    <p className={`${TILE.label} mb-1`}>문의 등록일</p>
                     {isEditMode ? (
                       <input
                         type="date"
                         value={editedDeal?.registrationDate || ''}
                         onChange={(e) => handleFieldChange('registrationDate', e.target.value)}
-                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                        className={`w-full px-3 py-2 text-lg md:text-xl font-bold tabular-nums mt-2 ${INPUT}`}
                       />
                     ) : (
-                      <p className="text-lg md:text-xl font-bold text-blue-900 mt-2">
+                      <p className={TILE.value}>
                         {selectedDeal.registrationDate}
                       </p>
                     )}
                   </div>
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                    <p className="text-[13px] font-medium text-purple-600 uppercase tracking-wider mb-1">진행상태</p>
-                    <p className="text-lg md:text-xl font-bold text-purple-900 mt-2">
-                      {getStatusLabel(selectedDeal.status)}
+                  <div className={TILE.box}>
+                    <p className={`${TILE.label} mb-1`}>진행상태</p>
+                    <p className="mt-2">
+                      <span className={`${BADGE} ${TONE[getStageTone(selectedDeal.status)]}`}>
+                        {getStatusLabel(selectedDeal.status)}
+                      </span>
                     </p>
                   </div>
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <p className="text-[13px] font-medium text-green-600 uppercase tracking-wider mb-1">총수량</p>
+                  <div className={TILE.box}>
+                    <p className={`${TILE.label} mb-1`}>총수량</p>
                     {isEditMode ? (
                       <input
                         type="number"
                         value={editedDeal?.totalQuantity || 0}
                         onChange={(e) => handleFieldChange('totalQuantity', parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-green-900 bg-white border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mt-2"
+                        className={`w-full px-3 py-2 text-lg md:text-xl font-bold tabular-nums mt-2 ${INPUT}`}
                       />
                     ) : (
-                      <p className="text-lg md:text-xl font-bold text-green-900 mt-2">
+                      <p className={TILE.value}>
                         {selectedDeal.totalQuantity}
                       </p>
                     )}
                   </div>
-                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                    <p className="text-[13px] font-medium text-orange-600 uppercase tracking-wider mb-1">견적금액</p>
+                  <div className={TILE.box}>
+                    <p className={`${TILE.label} mb-1`}>견적금액</p>
                     {isEditMode ? (
                       <input
                         type="text"
@@ -2302,10 +2232,10 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                         value={editedDeal?.quotationAmount || ''}
                         onChange={(e) => handleFieldChange('quotationAmount', e.target.value)}
                         placeholder="₩0만"
-                        className="w-full px-3 py-2 text-lg md:text-xl font-bold text-orange-900 bg-white border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mt-2"
+                        className={`w-full px-3 py-2 text-lg md:text-xl font-bold tabular-nums mt-2 ${INPUT}`}
                       />
                     ) : (
-                      <p className="text-lg md:text-xl font-bold text-orange-900 mt-2">
+                      <p className={TILE.value}>
                         {selectedDeal.quotationAmount}
                       </p>
                     )}
@@ -2395,7 +2325,8 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                                 const updated = dqData.others.filter((_, i) => i !== idx);
                                 updateDQ({ ...dqData, others: updated });
                               }}
-                              className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0"
+                              className={`${ICON_BTN_DANGER} flex-shrink-0`}
+                              aria-label="항목 삭제"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -2411,22 +2342,22 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
 
               {/* 요구사항 및 메모 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-amber-50 p-5 rounded-xl border border-amber-200">
-                  <h4 className="text-[15px] font-semibold text-amber-800 mb-3">세부 전달사항</h4>
+                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                  <h4 className="text-[15px] font-semibold text-slate-700 mb-3">세부 전달사항</h4>
                   {isEditMode ? (
                     <textarea
                       value={editedDeal?.requirements || ''}
                       onChange={(e) => handleFieldChange('requirements', e.target.value)}
                       placeholder="세부 전달사항을 입력하세요"
                       rows={3}
-                      className="w-full px-3 py-2 text-base text-amber-900 bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                      className="w-full px-3 py-2 text-base text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                   ) : (
-                    <p className="text-[15px] text-amber-900">{selectedDeal.requirements}</p>
+                    <p className="text-[15px] text-slate-700">{selectedDeal.requirements}</p>
                   )}
                 </div>
-                <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-200">
-                  <h4 className="text-[15px] font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                  <h4 className="text-[15px] font-semibold text-slate-700 mb-3 flex items-center gap-2">
                     <StickyNote className="w-4 h-4" />
                     관리 메모
                   </h4>
@@ -2455,7 +2386,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     }}
                     placeholder="내부 관리용 메모를 입력하세요"
                     rows={3}
-                    className="w-full px-3 py-2 text-base text-indigo-900 bg-white border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    className="w-full px-3 py-2 text-base text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                 </div>
               </div>
@@ -2503,7 +2434,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
               {/* 담당자 및 일정 정보 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">고객책임자</p>
+                  <p className="text-[13px] font-medium text-slate-500 mb-2">고객책임자</p>
                   {isEditMode ? (
                     <select
                       value={editedDeal?.salesManager || ''}
@@ -2517,17 +2448,23 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     </select>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                        <span className="text-white text-[13px] font-medium">
-                          {selectedDeal.salesManager.charAt(0)}
-                        </span>
-                      </div>
-                      <span className="text-[15px] font-medium text-slate-900">{selectedDeal.salesManager}</span>
+                      {selectedDeal.salesManager ? (
+                        <>
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-700 text-xs font-semibold">
+                              {selectedDeal.salesManager.charAt(0)}
+                            </span>
+                          </div>
+                          <span className="text-[15px] font-medium text-slate-900">{selectedDeal.salesManager}</span>
+                        </>
+                      ) : (
+                        <span className="text-sm text-slate-400">미지정</span>
+                      )}
                     </div>
                   )}
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">확정작업일</p>
+                  <p className="text-[13px] font-medium text-slate-500 mb-2">확정작업일</p>
                   <input
                     type="date"
                     value={isEditMode ? (editedDeal?.confirmedWorkDate || '') : (selectedDeal.confirmedWorkDate || '')}
@@ -2564,22 +2501,22 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   />
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-2">성공여부</p>
+                  <p className="text-[13px] font-medium text-slate-500 mb-2">성공여부</p>
                   <div className="mt-2">
                     {selectedDeal.successStatus === 'success' ? (
-                      <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-green-100 text-green-800 border-2 border-green-300">
+                      <span className={`px-3 py-1.5 rounded-full text-[15px] font-semibold border ${TONE.emerald}`}>
                         계약 성공
                       </span>
                     ) : selectedDeal.successStatus === 'failed' ? (
-                      <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-red-100 text-red-800 border-2 border-red-300">
+                      <span className={`px-3 py-1.5 rounded-full text-[15px] font-semibold border ${TONE.red}`}>
                         계약 실패
                       </span>
                     ) : selectedDeal.successStatus === 'no-quote' ? (
-                      <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-orange-100 text-orange-800 border-2 border-orange-300">
+                      <span className={`px-3 py-1.5 rounded-full text-[15px] font-semibold border ${TONE.orange}`}>
                         미견적
                       </span>
                     ) : (
-                      <span className="px-3 py-1.5 rounded-full text-[15px] font-semibold bg-slate-100 text-slate-700 border-2 border-slate-300">
+                      <span className={`px-3 py-1.5 rounded-full text-[15px] font-semibold border ${TONE.slate}`}>
                         진행중
                       </span>
                     )}
@@ -2595,13 +2532,13 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   <>
                     <button
                       onClick={handleSaveEdit}
-                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm hover:shadow"
+                      className={`${btn('primary', 'lg')} flex-1`}
                     >
                       {isAddingNewDeal ? '거래 추가' : '저장하기'}
                     </button>
                     <button
                       onClick={handleCancelEdit}
-                      className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
+                      className={`${btn('secondary', 'lg')} flex-1`}
                     >
                       취소
                     </button>
@@ -2610,13 +2547,13 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                   <>
                     <button
                       onClick={handleEditClick}
-                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm hover:shadow"
+                      className={`${btn('primary', 'lg')} flex-1`}
                     >
                       수정하기
                     </button>
                     <button
                       onClick={() => setSelectedDeal(null)}
-                      className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
+                      className={`${btn('secondary', 'lg')} flex-1`}
                     >
                       목록보기
                     </button>
@@ -2648,10 +2585,10 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
               </div>
               <button
                 onClick={() => setWorkDateModal(null)}
-                className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                className={MODAL_CLOSE}
                 aria-label="닫기"
               >
-                <X className="w-4 h-4 text-slate-500" />
+                <X className="w-4 h-4" />
               </button>
             </div>
             <div className="px-6 py-5 space-y-4">
@@ -2676,14 +2613,14 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex gap-2">
               <button
                 onClick={() => workDateModal.onSubmit('')}
-                className="flex-1 px-4 py-2.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors text-[14px] font-semibold text-slate-700"
+                className={`${btn('secondary')} flex-1`}
               >
                 다음에 입력하기
               </button>
               <button
                 onClick={() => workDateModal.onSubmit(workDateModal.date)}
                 disabled={!workDateModal.date}
-                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-[14px] font-semibold shadow-sm"
+                className={`${btn('primary')} flex-1`}
               >
                 저장하고 진행
               </button>
