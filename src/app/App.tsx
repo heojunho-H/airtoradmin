@@ -623,10 +623,11 @@ export default function App() {
               todoState={todoState}
               onOpenTodos={() => goTo('todos')}
               onOpenCustomer={openCustomer}
+              onOpenDeal={openDeal}
               onOpenProject={openProject}
             />
           )}
-          {currentPage === 'todos' && <TodoPage todos={homeData?.todos ?? []} todoState={todoState} loading={!homeData} onOpenCustomer={openCustomer} />}
+          {currentPage === 'todos' && <TodoPage todos={homeData?.todos ?? []} todoState={todoState} loading={!homeData} onOpenCustomer={openCustomer} onOpenDeal={openDeal} />}
           {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} openCustomerId={customerFocusId} onCustomerOpened={() => setCustomerFocusId(null)} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} openDealId={dealFocusId} onDealOpened={() => setDealFocusId(null)} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}

@@ -9,7 +9,8 @@
 import { requireDb } from '../_lib/ai-auth';
 import { AiError, checkOrigin, cleanUserName, errorResponse, jsonFor, nowIso, optionsResponse, readJsonCapped, type AiEnv } from '../_lib/ai-http';
 
-const KEY_RE = /^renewal:\d{1,10}:\d{4}-\d{2}-\d{2}$/;
+// renewal:{고객ID}:{관리일} 재계약 연락 · winback:{딜ID}:{작년 문의일 1년} 재문의 연락
+const KEY_RE = /^(renewal|winback):\d{1,10}:\d{4}-\d{2}-\d{2}$/;
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_ITEMS = 2000;
 
@@ -82,7 +83,7 @@ export const onRequestPost: PagesFunction<AiEnv> = async ({ request, env }) => {
       // 동시에 눌러도 먼저 완료한 사람의 기록이 남는다
       await db
         .prepare('INSERT OR IGNORE INTO home_todos (todo_key, kind, customer_id, company, due_date, done_by, done_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(key, 'renewal', Number.isInteger(customerId) && customerId > 0 ? customerId : null, company, dueDate, cleanUserName(body.userName), nowIso())
+        .bind(key, key.slice(0, key.indexOf(':')), Number.isInteger(customerId) && customerId > 0 ? customerId : null, company, dueDate, cleanUserName(body.userName), nowIso())
         .run();
       const row = await getRow(db, key);
       if (!row) throw new AiError(500, 'persist_failed', '완료 기록을 저장하지 못했습니다.', { retryable: true });

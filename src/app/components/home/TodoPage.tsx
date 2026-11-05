@@ -1,25 +1,27 @@
 // 오늘의 할 일 — 진행중 / 완료 밑줄 탭, 카드 목록, 페이지 넘김 + 'n개씩 보기' (레퍼런스 할 일 페이지 그대로)
-// 진행중 = 계산된 재계약 연락 할 일 중 완료 기록이 없는 것. 완료 = D1 완료 기록 최근순.
+// 진행중 = 계산된 할 일(재계약·재문의 연락) 중 완료 기록이 없는 것. 완료 = D1 완료 기록 최근순.
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { RenewalTodo } from '../../../lib/home/metrics';
+import type { HomeTodo } from '../../../lib/home/metrics';
 import type { TodoRecordsState } from '../../../lib/home/useTodoRecords';
 import { TodoCard } from './TodoCard';
+import { openDoneTarget, openTodoTarget } from './todoOpen';
 import { UndoToast, useUndoToast } from './UndoToast';
 
 type Tab = 'progress' | 'done';
 const PAGE_SIZES = [10, 20, 50];
 
 interface TodoPageProps {
-  /** 계산된 재계약 연락 할 일 전체 (급한 순) */
-  todos: RenewalTodo[];
+  /** 계산된 할 일 전체 (급한 순) */
+  todos: HomeTodo[];
   todoState: TodoRecordsState;
   /** 고객 데이터를 아직 못 불러옴 */
   loading: boolean;
   onOpenCustomer: (customerId: number) => void;
+  onOpenDeal: (dealId: number) => void;
 }
 
-export function TodoPage({ todos, todoState, loading, onOpenCustomer }: TodoPageProps) {
+export function TodoPage({ todos, todoState, loading, onOpenCustomer, onOpenDeal }: TodoPageProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
@@ -38,7 +40,7 @@ export function TodoPage({ todos, todoState, loading, onOpenCustomer }: TodoPage
   const start = (Math.min(page, pages) - 1) * perPage;
   const blocked = status === 'unavailable' ? `완료 기록 저장소에 연결하지 못했습니다 — ${error}` : status === 'loading' ? '완료 기록을 불러오는 중입니다' : undefined;
 
-  const handleComplete = async (t: RenewalTodo) => {
+  const handleComplete = async (t: HomeTodo) => {
     show({ message: '완료로 옮겼어요', undoKey: t.key });
     const ok = await complete(t);
     if (!ok) clear();
@@ -93,7 +95,7 @@ export function TodoPage({ todos, todoState, loading, onOpenCustomer }: TodoPage
                 <TodoCard
                   key={t.key}
                   todo={t}
-                  onOpenCustomer={() => onOpenCustomer(t.customerId)}
+                  onOpen={openTodoTarget(t, onOpenCustomer, onOpenDeal)}
                   onComplete={() => void handleComplete(t)}
                   completeBlockedReason={blocked}
                 />
@@ -107,7 +109,7 @@ export function TodoPage({ todos, todoState, loading, onOpenCustomer }: TodoPage
                 key={r.key}
                 todo={todoByKey.get(r.key)}
                 done={r}
-                onOpenCustomer={r.customerId ? () => onOpenCustomer(r.customerId!) : undefined}
+                onOpen={openDoneTarget(todoByKey.get(r.key), r, onOpenCustomer, onOpenDeal)}
               />
             ))
           )}

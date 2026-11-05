@@ -1,12 +1,14 @@
 // 홈 — 앱 첫 화면. 인사말 · 지표 3장(이번 달 매출·영업 현황·재계약 현황) · 오늘의 할 일(급한 순 3개) · 일정표.
+// 할 일 = 재계약 연락(S·A·B 고객 관리일) + 재문의 연락(작년 계약 실패 딜, 300만 원 이상).
 // 레이아웃·타이포는 레퍼런스(Alfred 홈)를 따른다. 팀은 Chrome 75% 줌을 쓰므로 레퍼런스 스크린샷(2000px 폭) 좌표를 그대로 CSS px 로 쓴다.
 import { manwon } from '../../../lib/ai/snapshot/common';
-import type { HomeData, PeakSeason, RenewalTodo } from '../../../lib/home/metrics';
+import type { HomeData, HomeTodo, PeakSeason } from '../../../lib/home/metrics';
 import type { TodoRecordsState } from '../../../lib/home/useTodoRecords';
 import { WEEKDAYS, weekdayOf, won } from './format';
 import { KpiCard, KpiCardSkeleton } from './KpiCard';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { TodoCard } from './TodoCard';
+import { openTodoTarget } from './todoOpen';
 import { UndoToast, useUndoToast } from './UndoToast';
 
 interface HomePageProps {
@@ -15,10 +17,11 @@ interface HomePageProps {
   /** null = 데이터를 아직 못 불러옴 */
   data: HomeData | null;
   /** 진행중 할 일 (완료 기록 제외, 급한 순) */
-  openTodos: RenewalTodo[];
+  openTodos: HomeTodo[];
   todoState: TodoRecordsState;
   onOpenTodos: () => void;
   onOpenCustomer: (customerId: number) => void;
+  onOpenDeal: (dealId: number) => void;
   onOpenProject: (projectId: number) => void;
 }
 
@@ -45,13 +48,13 @@ function pctText(change: number): string {
   return `${change >= 0 ? '▲' : '▼'}${Math.abs(change * 100).toFixed(1)}%`;
 }
 
-export function HomePage({ userName, today, data, openTodos, todoState, onOpenTodos, onOpenCustomer, onOpenProject }: HomePageProps) {
+export function HomePage({ userName, today, data, openTodos, todoState, onOpenTodos, onOpenCustomer, onOpenDeal, onOpenProject }: HomePageProps) {
   const { toast, show, clear } = useUndoToast();
   const month = Number(today.slice(5, 7));
   const blocked =
     todoState.status === 'unavailable' ? `완료 기록 저장소에 연결하지 못했습니다 — ${todoState.error}` : todoState.status === 'loading' ? '완료 기록을 불러오는 중입니다' : undefined;
 
-  const handleComplete = async (t: RenewalTodo) => {
+  const handleComplete = async (t: HomeTodo) => {
     show({ message: '완료로 옮겼어요', undoKey: t.key });
     const ok = await todoState.complete(t);
     if (!ok) clear();
@@ -94,7 +97,7 @@ export function HomePage({ userName, today, data, openTodos, todoState, onOpenTo
                 <TodoCard
                   key={t.key}
                   todo={t}
-                  onOpenCustomer={() => onOpenCustomer(t.customerId)}
+                  onOpen={openTodoTarget(t, onOpenCustomer, onOpenDeal)}
                   onComplete={() => void handleComplete(t)}
                   completeBlockedReason={blocked}
                 />

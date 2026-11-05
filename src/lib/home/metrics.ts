@@ -7,7 +7,7 @@ import { normalizeCompanyName } from '../company';
 import { ROLE_LABELS, ROLE_ORDER } from '../roles';
 import { daysBetween } from '../ai/format';
 import type { AiDatasets } from '../ai/types';
-import { equipmentMix, num, parseAmount, ymd } from '../ai/snapshot/common';
+import { addMonths, equipmentMix, num, parseAmount, ymd } from '../ai/snapshot/common';
 import {
   AUTO_FAIL_DAYS,
   buildCtx,
@@ -67,14 +67,27 @@ export interface RenewalKpi {
   rate: number | null;
 }
 
-export interface RenewalTodo {
-  /** renewal:{고객ID}:{관리일} — 재작업하면 관리일이 바뀌어 새 할 일이 된다 */
+export type TodoKind = 'renewal' | 'winback';
+
+/**
+ * 오늘의 할 일 한 건 — 두 종류를 같은 모양으로 다룬다.
+ *  - renewal(재계약 연락): S·A·B 고객의 관리일 30일 전부터 완료할 때까지
+ *  - winback(재문의 연락): 작년에 문의했다가 계약 실패한 300만원 이상 딜, 작년 문의일 1년 되는 날 ±14일
+ */
+export interface HomeTodo {
+  kind: TodoKind;
+  /** renewal:{고객ID}:{관리일} / winback:{딜ID}:{작년 문의일+1년} — 다음 회차는 새 키가 된다 */
   key: string;
-  customerId: number;
+  /** 재계약: 고객 ID, 재문의: null */
+  customerId: number | null;
+  /** 재문의: 딜 ID, 재계약: null */
+  dealId: number | null;
   company: string;
+  /** 재계약: S·A·B, 재문의: '' */
   grade: string;
+  /** 재계약: 관리일, 재문의: 작년 문의일이 1년 되는 날 */
   dueDate: string;
-  /** 관리일 - 오늘. 음수 = 지남 */
+  /** dueDate - 오늘. 음수 = 지남 */
   daysToDue: number;
   contactName: string;
   contactPosition: string;
@@ -83,9 +96,12 @@ export interface RenewalTodo {
   /** 전화번호가 없을 때 보여 줄 이메일 */
   email: string;
   manager: string;
+  /** 재계약: 최근 작업일, 재문의: 작년 문의일 */
   lastWorkDate: string;
   lastService: string;
   lastQuantity: number;
+  /** 재문의: 작년 견적 금액(VAT 포함), 재계약: 0 */
+  quotedAmount: number;
   /** 같은 회사에 진행 중인 딜이 있다 (중복 연락 방지) */
   openDeal: boolean;
 }
@@ -132,7 +148,8 @@ export interface HomeData {
   revenue: RevenueKpi;
   sales: SalesKpi;
   renewal: RenewalKpi;
-  todos: RenewalTodo[];
+  /** 재계약 + 재문의, 급한 순 */
+  todos: HomeTodo[];
   events: ScheduleEvent[];
   /** 데이터가 적어 추정할 수 없으면 null */
   peak: PeakSeason | null;
@@ -312,7 +329,7 @@ function latestDealContacts(deals: DealFact[]): Map<string, ContactInfo> {
 const GRADE_ORDER: Record<string, number> = { S: 0, A: 1, B: 2 };
 
 /** ① 연락 적기(D-30~D-0) D가 작은 순 ② 관리일 지난 곳, 최근에 지난 순. 같으면 S → A → B */
-export function compareTodos(a: RenewalTodo, b: RenewalTodo): number {
+export function compareTodos(a: HomeTodo, b: HomeTodo): number {
   const wa = a.daysToDue >= 0 ? 0 : 1;
   const wb = b.daysToDue >= 0 ? 0 : 1;
   if (wa !== wb) return wa - wb;
@@ -320,7 +337,7 @@ export function compareTodos(a: RenewalTodo, b: RenewalTodo): number {
   return (GRADE_ORDER[a.grade] ?? 9) - (GRADE_ORDER[b.grade] ?? 9) || a.company.localeCompare(b.company, 'ko');
 }
 
-export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): RenewalTodo[] {
+export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): HomeTodo[] {
   const openCompanies = new Set(
     deals
       .filter(isOpenDeal)
@@ -330,7 +347,7 @@ export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): Rene
   const dealContacts = latestDealContacts(deals);
   const dealById = new Map<number, any>();
   for (const f of deals) if (f.id != null) dealById.set(f.id, f.d);
-  const out: RenewalTodo[] = [];
+  const out: HomeTodo[] = [];
   for (const c of customers) {
     if (!RENEWAL_GRADES.includes(c.grade)) continue;
     if (!c.nextMgmt || c.daysToMgmt == null || c.daysToMgmt > RENEWAL_LEAD_DAYS) continue;
@@ -339,8 +356,10 @@ export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): Rene
     const contact = pickContact(c.c, dealContacts.get(normalizeCompanyName(c.company)));
     const last = c.jobs.find((j) => j.workDate) ?? c.jobs[0];
     out.push({
+      kind: 'renewal',
       key: `renewal:${id}:${c.nextMgmt}`,
       customerId: id,
+      dealId: null,
       company: c.company,
       grade: c.grade,
       dueDate: c.nextMgmt,
@@ -353,7 +372,70 @@ export function renewalTodos(customers: CustomerFact[], deals: DealFact[]): Rene
       lastWorkDate: c.lastWork,
       lastService: last ? serviceName(last.service, c.company, last.dealId != null ? dealById.get(last.dealId) : null) : '',
       lastQuantity: last?.quantity ?? 0,
+      quotedAmount: 0,
       openDeal: openCompanies.has(normalizeCompanyName(c.company)),
+    });
+  }
+  return out.sort(compareTodos);
+}
+
+/** 재문의 연락 — 작년 문의일이 1년 되는 날 기준 이 일수 전부터 이 일수 후까지 보인다 */
+export const WINBACK_WINDOW_DAYS = 14;
+/** 재문의 연락 — 견적 금액(VAT 포함)이 이 금액 이상인 실패 딜만 (2026-11-05 사용자 결정) */
+export const WINBACK_MIN_AMOUNT = 3_000_000;
+
+/**
+ * 재문의 연락 — 작년 이맘때 문의했다가 계약 실패한 고객에게 다시 연락할 때.
+ * 1년 되는 날 ±14일만 보이고 지나면 저절로 사라진다(시기를 놓친 건이 쌓이지 않게).
+ * 그 뒤 같은 회사가 다시 문의했거나(딜) 작업했으면(작업이력) 이미 돌아온 고객이라 뺀다.
+ */
+export function winbackTodos(ds: AiDatasets, deals: DealFact[], today: string): HomeTodo[] {
+  const latestInquiry = new Map<string, string>();
+  for (const f of deals) {
+    const key = normalizeCompanyName(f.d?.company);
+    if (key && f.date && f.date > (latestInquiry.get(key) ?? '')) latestInquiry.set(key, f.date);
+  }
+  const latestWork = new Map<string, string>();
+  for (const c of ds.customers) {
+    const key = normalizeCompanyName(c?.company);
+    if (!key) continue;
+    for (const w of workHistoryOf(c)) {
+      const date = ymd(w?.workDate);
+      if (date && date > (latestWork.get(key) ?? '')) latestWork.set(key, date);
+    }
+  }
+  const openCompanies = new Set(deals.filter(isOpenDeal).map((d) => normalizeCompanyName(d.d?.company)).filter(Boolean));
+
+  const out: HomeTodo[] = [];
+  for (const f of deals) {
+    if (f.result !== 'failed' || f.id == null || !f.date) continue;
+    if (f.amount < WINBACK_MIN_AMOUNT) continue;
+    const anniversary = addMonths(f.date, 12);
+    const days = daysBetween(today, anniversary);
+    if (!Number.isFinite(days) || days < -WINBACK_WINDOW_DAYS || days > WINBACK_WINDOW_DAYS) continue;
+    const company = String(f.d?.company || '').trim() || '-';
+    const key = normalizeCompanyName(company);
+    if (key && ((latestInquiry.get(key) ?? '') > f.date || (latestWork.get(key) ?? '') > f.date)) continue;
+    const contact = toContact(f.d);
+    out.push({
+      kind: 'winback',
+      key: `winback:${f.id}:${anniversary}`,
+      customerId: null,
+      dealId: f.id,
+      company,
+      grade: '',
+      dueDate: anniversary,
+      daysToDue: days,
+      contactName: contact.name,
+      contactPosition: contact.position,
+      phone: contact.phone,
+      email: contact.email,
+      manager: f.manager === '미지정' ? '' : f.manager,
+      lastWorkDate: f.date,
+      lastService: serviceName('', company, f.d),
+      lastQuantity: f.quantity,
+      quotedAmount: f.amount,
+      openDeal: openCompanies.has(key),
     });
   }
   return out.sort(compareTodos);
@@ -537,7 +619,7 @@ export function computeHome(ds: AiDatasets, today: string): HomeData {
     revenue: revenueKpi(ds.customers, states, today),
     sales: salesKpi(deals, today),
     renewal: renewalKpi(customers, today),
-    todos: renewalTodos(customers, deals),
+    todos: [...renewalTodos(customers, deals), ...winbackTodos(ds, deals, today)].sort(compareTodos),
     events: scheduleEvents(ds, deals, states),
     peak: peakSeason(ds.customers, states, today),
   };

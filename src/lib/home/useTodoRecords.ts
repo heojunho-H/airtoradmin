@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toAiRequestError } from '../ai/api';
-import type { RenewalTodo } from './metrics';
+import type { HomeTodo } from './metrics';
 import { completeTodo, fetchTodoRecords, undoTodo, type TodoRecord } from './todosApi';
 
 export type TodoRecordsStatus = 'loading' | 'ok' | 'unavailable';
@@ -14,7 +14,7 @@ export interface TodoRecordsState {
   status: TodoRecordsStatus;
   /** unavailable 일 때 이유 */
   error: string;
-  complete: (todo: RenewalTodo) => Promise<boolean>;
+  complete: (todo: HomeTodo) => Promise<boolean>;
   undo: (key: string) => Promise<boolean>;
 }
 
@@ -60,10 +60,10 @@ export function useTodoRecords(userName: string, onError: (message: string) => v
   }, [load]);
 
   const complete = useCallback(
-    async (todo: RenewalTodo) => {
+    async (todo: HomeTodo) => {
       const optimistic: TodoRecord = {
         key: todo.key,
-        kind: 'renewal',
+        kind: todo.kind,
         customerId: todo.customerId,
         company: todo.company,
         dueDate: todo.dueDate,

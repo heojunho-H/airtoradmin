@@ -2,12 +2,13 @@
 // getJson/postJson 이 302→HTML·WAF 차단·서버 오류를 한국어 메시지(AiRequestError)로 바꿔 준다.
 
 import { getJson, postJson } from '../ai/api';
-import type { RenewalTodo } from './metrics';
+import type { HomeTodo } from './metrics';
 
 export const TODOS_ENDPOINT = '/api/todos';
 
 export interface TodoRecord {
   key: string;
+  /** 'renewal' 재계약 연락 · 'winback' 재문의 연락 */
   kind: string;
   customerId: number | null;
   company: string;
@@ -22,7 +23,7 @@ export async function fetchTodoRecords(): Promise<TodoRecord[]> {
   return Array.isArray(res.items) ? res.items : [];
 }
 
-export async function completeTodo(todo: RenewalTodo, userName: string): Promise<TodoRecord> {
+export async function completeTodo(todo: HomeTodo, userName: string): Promise<TodoRecord> {
   const res = await postJson<{ ok: true; item: TodoRecord }>(
     { action: 'done', key: todo.key, customerId: todo.customerId, company: todo.company, dueDate: todo.dueDate, userName },
     { endpoint: TODOS_ENDPOINT },
