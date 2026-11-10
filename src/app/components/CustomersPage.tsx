@@ -46,6 +46,7 @@ import {
   fetchFollowupConfig,
   runFollowupsDryRun,
   followupDueDate,
+  followupStageDays,
   jobKeyOf,
   NEWSLETTER_STATUS_LABEL,
   FOLLOWUP_SKIP_LABEL,
@@ -928,11 +929,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   }, []);
   const [isCheckingFollowups, setIsCheckingFollowups] = useState(false);
 
-  // 리마인드 N차 예정일 라벨: 설정된 단계면 작업일 + days, 아니면 '-'
+  // 리마인드 N차 예정일 라벨: 설정된 단계면 작업일 + days(7~10월 작업 등 예외면 altDays), 아니면 '-'
   const reminderDueLabel = (workDate: string | undefined, stage: 1 | 2 | 3): string => {
     const s = followupConfig?.stages.find(x => x.stage === stage);
     if (!s) return '-';
-    return followupDueDate(workDate, s.days);
+    return followupDueDate(workDate, followupStageDays(s, workDate));
   };
 
   // 해당 작업·단계의 자동 발송 장부 항목 (있으면 "자동발송 날짜" 캡션)
@@ -957,7 +958,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       }
       const lines: string[] = [];
       lines.push(`기준일 ${r.today} · 고객 ${r.evaluated}곳 검사`);
-      lines.push(`단계: ${r.config.stages.map(s => `${s.stage}차 +${s.days}일`).join(', ')} · 유예 ${r.config.grace}일`);
+      lines.push(`단계: ${r.config.stages.map(s => `${s.stage}차 +${s.days}일${s.altDays ? `(예외 +${s.altDays}일)` : ''}`).join(', ')} · 유예 ${r.config.grace}일`);
       lines.push('');
       if (r.due.length === 0) {
         lines.push('오늘 발송 대상 없음');
@@ -1220,14 +1221,16 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     if (summary.syncedCustomerIds.length === 0) return;
     const syncedAt = nowAsMysqlDatetime();
     const ids = new Set(summary.syncedCustomerIds);
+    // 수신거부·반송 고객은 동기화 결과로 '구독중'으로 되돌리지 않는다 (반송 주소에 다시 보내지 않게)
+    const keep = (s: string | undefined) => s === 'unsubscribed' || s === 'bounced';
     setCustomers(prev => prev.map(c =>
-      ids.has(c.id) && c.newsletterStatus !== 'unsubscribed'
+      ids.has(c.id) && !keep(c.newsletterStatus)
         ? { ...c, newsletterStatus: 'subscribed' as NewsletterStatus, stibeeSyncedAt: syncedAt }
         : c
     ));
     summary.syncedCustomerIds.forEach(id => {
       const current = customers.find(c => c.id === id);
-      if (current?.newsletterStatus === 'unsubscribed') return;
+      if (keep(current?.newsletterStatus)) return;
       updateCustomerFields(id, { newsletterStatus: 'subscribed', stibeeSyncedAt: syncedAt })
         .catch(err => console.error('뉴스레터 상태 저장 API 실패:', err));
     });

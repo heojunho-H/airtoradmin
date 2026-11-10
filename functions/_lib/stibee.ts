@@ -15,6 +15,8 @@ export const BATCH_MAX = 1000;
 // 고객 데이터 원본 (cafe24 PHP). Functions는 /api/customers 프록시가 아니라 원본을 직접 호출한다.
 // v2 — 작업이력·메일 기록은 _v + 패치로만 고친다 (functions/api/newsletter.ts 실행기 참고)
 export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api_v2.php';
+// 딜 원본 — 팔로업 러너가 '진행 중 딜이 있는 회사'를 건너뛸 때 읽는다 (읽기 전용 GET)
+export const DEALS_API = 'https://airtor.co.kr/api/deals_api_v2.php';
 
 export interface StibeeEnv {
   STIBEE_API_KEY: string;
@@ -30,10 +32,10 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// marketingAllowed(광고 동의)는 일부러 두지 않는다 — 스티비에서 받은 동의를 덮어쓰지 않게 (2026-11-10)
 export interface StibeeSubscriberInput {
   email: string;
   status: 'subscribed' | 'unsubscribed';
-  marketingAllowed?: boolean;
   fields?: Record<string, string | number>;
 }
 

@@ -4,10 +4,18 @@
 #
 # 필요한 설정:
 #   - GitHub Secrets: NEWSLETTER_CRON_SECRET (Cloudflare Pages env의 같은 값)
-#   - Cloudflare Pages env: NEWSLETTER_FOLLOWUPS, NEWSLETTER_CRON_SECRET (docs/newsletter-stibee.md 참조)
+#   - GitHub Variables: NEWSLETTER_LIVE = 'true' 일 때만 정기 실행이 돈다 (사용자 최종 승인 뒤에 켠다)
+#   - Cloudflare Pages env: NEWSLETTER_FOLLOWUPS, NEWSLETTER_CRON_SECRET (docs/stibee-emails/README.md 참조)
+#
+# 수동 실행(workflow_dispatch):
+#   - 기본은 dry-run — 발송 예정 대상만 세고 아무 것도 보내지 않는다
+#   - dryRun=false + limit=N : 담당자 N명까지만 실제 발송 (첫 실전 점검용)
+#   - testEmail + testStage  : 그 단계 메일을 견본 값으로 testEmail 한 곳에만 보낸다 (고객 장부와 무관)
+#
+# 로그에는 건수만 남긴다 — 공개 저장소의 Actions 로그는 누구나 볼 수 있어 고객 이메일·회사명을 찍지 않는다.
+# 발송 상세는 관리 앱의 고객별 메일 기록(emailHistory)에서 본다.
 #
 # 주의: GitHub는 60일간 저장소 활동이 없으면 schedule 워크플로우를 비활성화한다 (Actions 탭에서 재활성화).
-#       수동 실행(workflow_dispatch)은 기본 dry-run — 발송 예정 목록만 확인하고 아무 것도 보내지 않는다.
 name: newsletter-followups
 
 on:
@@ -16,23 +24,67 @@ on:
   workflow_dispatch:
     inputs:
       dryRun:
-        description: 'dry-run (true면 발송하지 않고 대상만 출력)'
+        description: 'dry-run (true면 발송하지 않고 대상만 센다)'
         type: boolean
         default: true
+      limit:
+        description: '실제 발송 상한(담당자 수). 비우면 기본 15'
+        type: string
+        default: ''
+      testEmail:
+        description: '테스트 메일 받을 주소 (입력하면 고객 발송 대신 이 주소로 테스트만)'
+        type: string
+        default: ''
+      testStage:
+        description: '테스트할 단계 번호 (1 A2 · 2 A3 · 3 B1 · 4 B2 · 5 B3)'
+        type: string
+        default: '1'
+
+# 크론과 수동 실행이 겹쳐 같은 대상에게 두 번 보내지 않게 한 번에 하나만
+concurrency:
+  group: newsletter-followups
+  cancel-in-progress: false
 
 jobs:
   run:
+    # 정기 실행은 NEWSLETTER_LIVE 가 켜져 있을 때만 — 비밀값을 먼저 등록해도 실제 발송은 시작되지 않는다
+    if: github.event_name != 'schedule' || vars.NEWSLETTER_LIVE == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Run follow-ups
         env:
           CRON_TOKEN: ${{ secrets.NEWSLETTER_CRON_SECRET }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun || 'false' }}
+          LIMIT: ${{ inputs.limit }}
+          TEST_EMAIL: ${{ inputs.testEmail }}
+          TEST_STAGE: ${{ inputs.testStage }}
         run: |
           if [ -z "$CRON_TOKEN" ]; then echo "NEWSLETTER_CRON_SECRET secret is not set"; exit 1; fi
-          curl -sS --fail-with-body --max-time 180 -X POST "https://airtoradmin.pages.dev/api/newsletter" \
+          BODY=$(node -e '
+            const e = process.env;
+            if (e.TEST_EMAIL) {
+              console.log(JSON.stringify({ action: "test-trigger", email: e.TEST_EMAIL.trim(), stage: Number(e.TEST_STAGE || 1) }));
+            } else {
+              const body = { action: "run-followups", dryRun: e.DRY_RUN === "true" };
+              const n = parseInt(e.LIMIT || "", 10);
+              if (Number.isInteger(n) && n > 0) body.limit = n;
+              console.log(JSON.stringify(body));
+            }')
+          HTTP=$(curl -sS --max-time 180 -o report.json -w '%{http_code}' -X POST "https://airtoradmin.pages.dev/api/newsletter" \
             -H "Content-Type: application/json" \
             -H "X-Newsletter-Cron-Token: $CRON_TOKEN" \
-            -d "{\"action\":\"run-followups\",\"dryRun\":$DRY_RUN}" | tee report.json
-          echo
-          node -e "const r=require('./report.json'); console.log(JSON.stringify(r,null,1)); if(!r.ok) process.exit(1)"
+            -d "$BODY")
+          echo "HTTP $HTTP"
+          node -e '
+            const r = require("./report.json");
+            const n = (a) => (Array.isArray(a) ? a.length : 0);
+            if (r.stage !== undefined && r.label !== undefined) {
+              console.log(JSON.stringify({ test: true, ok: r.ok, stage: r.stage, label: r.label, workDate: r.workDate, error: r.error }));
+            } else {
+              console.log(JSON.stringify({
+                ok: r.ok, dryRun: r.dryRun, disabled: r.disabled, today: r.today, evaluated: r.evaluated,
+                due: n(r.due), sent: n(r.sent), failed: n(r.failed), deferred: n(r.deferred),
+                skipped: r.skippedSummary, errors: n(r.errors), warnings: n(r.warnings), error: r.error,
+              }, null, 1));
+            }
+            if (!r.ok) process.exit(1);'

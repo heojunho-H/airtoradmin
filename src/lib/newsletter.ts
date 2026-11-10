@@ -8,8 +8,9 @@
 // → STIBEE_FIELD_KEYS와 반드시 일치해야 한다. 주소록에 없는 키를 보내면
 //   스티비가 해당 구독자를 failInvalidFields로 거부한다.
 //
-// 수신동의(marketingAllowed)는 항상 false로 보낸다 (사용자 결정 2026-09-29):
-//   동의 수집·관리는 스티비 UI(구독 폼/수동 편집)에서만 한다.
+// 수신동의(marketingAllowed)는 보내지 않는다 (2026-11-10): 리마인드 메일은 모두 정보성이고,
+//   스티비에서 받은 광고 동의를 덮어쓰지 않도록 키를 뺀다. 동의 관리는 스티비 UI에서만 한다.
+// 팔로업 트리거가 쓰는 개인화 키(work_date_kr 등)는 서버가 보낸다 — docs/stibee-emails/README.md
 
 export type NewsletterStatus = 'none' | 'subscribed' | 'unsubscribed' | 'bounced';
 
@@ -33,7 +34,6 @@ export const STIBEE_FIELD_KEYS = [
 export interface StibeeSubscriberPayload {
   email: string;
   status: 'subscribed' | 'unsubscribed';
-  marketingAllowed: boolean;
   fields: Record<string, string>;
 }
 
@@ -101,9 +101,9 @@ function contactsOf(customer: CustomerLike): ContactLike[] {
 }
 
 // 고객 1명 → 담당자별 구독자 N명. 이메일 없는 담당자는 건너뛴다.
-// 이미 수신거부(unsubscribed)로 캐시된 고객은 스티비의 수신거부를 덮어쓰지 않도록 제외한다.
+// 수신거부(unsubscribed)·반송(bounced)으로 캐시된 고객은 보내지 않는다 — 반송 주소를 다시 넣으면 발신 평판이 떨어진다.
 export function toSubscribers(customer: CustomerLike): StibeeSubscriberPayload[] {
-  if (customer.newsletterStatus === 'unsubscribed') return [];
+  if (customer.newsletterStatus === 'unsubscribed' || customer.newsletterStatus === 'bounced') return [];
   const out: StibeeSubscriberPayload[] = [];
   const seen = new Set<string>();
   for (const c of contactsOf(customer)) {
@@ -112,8 +112,7 @@ export function toSubscribers(customer: CustomerLike): StibeeSubscriberPayload[]
     seen.add(email);
     out.push({
       email,
-      status: 'subscribed',
-      marketingAllowed: false,
+      status: 'subscribed', // 새 구독자에만 적용 — 기존 구독자의 상태는 스티비가 바꾸지 않는다
       fields: {
         name: c.name || '',
         position: c.position || '',
@@ -204,9 +203,11 @@ async function postNewsletter<T extends { ok: boolean; error?: string; result?: 
 // ── 팔로업 자동 발송 (functions/_lib/followups.ts 와 규칙 공유) ─────────────────────
 
 export interface FollowupStage {
-  stage: 1 | 2 | 3; // 리마인드 1/2/3차에 대응
+  stage: 1 | 2 | 3 | 4 | 5; // 1~3은 리마인드 1/2/3차 칸, 4·5는 칸 없이 장부만
   days: number;
   label?: string;
+  altDays?: number; // 작업월이 altWorkMonths면 days 대신 (B1: 7~10월 작업은 D+240)
+  altWorkMonths?: number[];
 }
 
 export interface FollowupConfig {
@@ -245,6 +246,8 @@ export const FOLLOWUP_SKIP_LABEL: Record<string, string> = {
   'no-email': '이메일 없음',
   'no-work-entry': '작업 이력 없음',
   'future-work-date': '작업일 미도래',
+  'open-deal': '진행 중 딜',
+  'pending-job': '작업일 미정 수주',
   'not-due': '예정일 전',
   'out-of-grace': '유예 기간 경과',
   'flag-set': '이미 체크됨',
@@ -275,6 +278,14 @@ export function followupDueDate(workDate: string | undefined, days: number): str
   if (!workDate || !YMD_RE.test(workDate)) return '-';
   const [y, m, d] = workDate.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
+}
+
+// 백엔드 stageDays와 동일 — 작업월이 altWorkMonths면 altDays
+export function followupStageDays(stage: FollowupStage, workDate: string | undefined): number {
+  if (stage.altDays && stage.altWorkMonths && workDate && YMD_RE.test(workDate)) {
+    if (stage.altWorkMonths.includes(Number(workDate.slice(5, 7)))) return stage.altDays;
+  }
+  return stage.days;
 }
 
 // 작업 항목 식별 키 — 백엔드 jobKeyOf와 반드시 동일

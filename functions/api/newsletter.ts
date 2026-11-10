@@ -14,23 +14,28 @@
 //   ALLOWED_ORIGIN            CORS 허용 오리진 (기본 https://airtoradmin.pages.dev)
 //
 // 요청 (POST, JSON):
-//   { action: 'sync', subscribers: [{ email, status, marketingAllowed, fields }] }
+//   { action: 'sync', subscribers: [{ email, status, fields }] }
 //     → 1,000명 단위로 POST /lists/{id}/subscribers/batch (updateEnabled: true)
-//   { action: 'unsubscribe', email }
+//   { action: 'unsubscribe', email }                         ← 크론 토큰 필수 (화면에서 쓰지 않음)
 //     → POST /lists/{id}/subscribers/{email}/unsubscribe
 //   { action: 'run-followups', dryRun?: boolean, limit?: number }
 //     → 최근 작업일 기준 단계별 팔로업 발송 (스티비 자동 이메일 "API 직접 요청" 트리거)
-//     → dryRun:true 는 토큰 없이 허용(읽기 전용). 실제 실행은 헤더 X-Newsletter-Cron-Token 필수.
+//     → dryRun:true 는 토큰 없이 허용(읽기 전용, 수신자 이메일은 가려서 보낸다). 실제 실행은 헤더 X-Newsletter-Cron-Token 필수.
+//   { action: 'test-trigger', email, stage }                 ← 크론 토큰 필수
+//     → 지정한 단계의 자동 이메일을 지정한 주소로 견본 개인화 값과 함께 보낸다 (고객 장부는 건드리지 않음)
 // 요청 (GET):
 //   ?action=status  → /auth-check + /lists/{id}/subscribers/count 로 연결 상태 확인
 //   ?action=config  → 팔로업 단계 설정(autoEmailId 제외) — 프론트 예정일 표시용
 //
-// 수신동의(marketingAllowed)는 우리 DB에서 관리하지 않는다 (사용자 결정 2026-09-29).
-// 프론트가 항상 false로 보내고, 동의 관리는 스티비 UI에서 한다.
+// 수신동의(marketingAllowed)는 보내지 않는다 (2026-11-10). 리마인드 메일은 모두 정보성이고,
+// 스티비에서 받은 광고 동의를 덮어쓰지 않도록 키 자체를 뺀다. 클라이언트가 보내도 무시한다.
+// 기존 구독자의 구독 상태(status)는 스티비가 갱신하지 않으므로 수신거부자가 다시 구독되지 않는다.
 
+import { normalizeCompanyName } from '../../src/lib/company';
 import {
   BATCH_MAX,
   CUSTOMERS_API,
+  DEALS_API,
   STIBEE_AUTO_URL,
   STIBEE_BASE_URL,
   chunk,
@@ -44,14 +49,16 @@ import {
   type StibeeSubscriberInput,
 } from '../_lib/stibee';
 import {
+  DEFAULT_MANAGER,
+  addDays,
   applyResult,
   computeDue,
+  mergeFieldsFor,
   parseFollowupConfig,
   todayKst,
   type CustomerRow,
   type DueItem,
   type RecipientResult,
-  type SkipItem,
 } from '../_lib/followups';
 
 type Env = StibeeEnv;
@@ -100,14 +107,39 @@ function sanitizeSubscribers(raw: unknown): { valid: StibeeSubscriberInput[]; dr
         else if (v !== null && v !== undefined) fields[k] = String(v);
       }
     }
-    valid.push({
-      email,
-      status,
-      marketingAllowed: (item as { marketingAllowed?: unknown }).marketingAllowed === true,
-      fields,
-    });
+    // marketingAllowed는 받지도 보내지도 않는다 — 로그인 없는 엔드포인트로 남의 광고 동의를 켜거나 지우지 못하게
+    valid.push({ email, status, fields });
   }
   return { valid, dropped };
+}
+
+// 미리보기 응답용 이메일 가림: gjgurtb@airtor.co.kr → g***@airtor.co.kr
+function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return '***';
+  return `${email[0]}***${email.slice(at)}`;
+}
+
+// 진행 중 딜(성공여부 '진행중' + 신규~일정조율)이 있는 회사 — 그 회사에는 팔로업을 보내지 않는다
+const OPEN_DEAL_STATUSES = new Set(['new', 'call', 'quote-sent', 'quote-call', 'price-negotiation', 'schedule']);
+
+async function fetchOpenDealCompanies(): Promise<Set<string>> {
+  const res = await fetch(DEALS_API, { headers: { Accept: 'application/json' } });
+  const text = await res.text();
+  let json: { data?: { company?: string; status?: string; successStatus?: string }[] };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`deals_api 응답이 JSON이 아닙니다 (HTTP ${res.status})`);
+  }
+  if (!res.ok || !Array.isArray(json.data)) throw new Error(`deals_api 조회 실패 (HTTP ${res.status})`);
+  const out = new Set<string>();
+  for (const d of json.data) {
+    if (d?.successStatus !== 'in-progress' || !OPEN_DEAL_STATUSES.has(String(d.status))) continue;
+    const key = normalizeCompanyName(d.company);
+    if (key) out.add(key);
+  }
+  return out;
 }
 
 // 구독자 대량 추가/갱신 — 수동 동기화(sync)와 팔로업 러너가 공용으로 사용
@@ -197,7 +229,7 @@ function handleConfig(env: Env): Response {
   return jsonResponse(
     {
       ok: true,
-      stages: parsed.config.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label })),
+      stages: parsed.config.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label, altDays: s.altDays, altWorkMonths: s.altWorkMonths })),
       grace: parsed.config.grace,
     },
     200,
@@ -219,19 +251,27 @@ async function fetchCustomers(): Promise<CustomerRow[]> {
 }
 
 // 트리거 API 호출 1건. 200 OK가 실제 발송을 보장하지는 않는다 (수신거부·주소록 미포함이면 조용히 무시됨).
-async function triggerAutoEmail(env: Env, item: DueItem, email: string, name: string): Promise<RecipientResult> {
+// 본문 키는 스티비 주소록 사용자 정의 필드와 같아야 한다 (docs/stibee-emails/README.md).
+async function triggerAutoEmail(
+  env: Env,
+  item: Pick<DueItem, 'autoEmailId' | 'company' | 'projectName' | 'workDate' | 'totalQuantity' | 'quotationAmount' | 'equipment' | 'manager'>,
+  email: string,
+  name: string,
+  today: string,
+): Promise<RecipientResult> {
   try {
     const res = await fetch(`${STIBEE_AUTO_URL}/${encodeURIComponent(item.autoEmailId)}`, {
       method: 'POST',
       headers: stibeeHeaders(env.STIBEE_API_KEY),
       body: JSON.stringify({
         subscriber: email,
-        name,
+        name: name || '담당자',
         company: item.company,
-        project_name: item.projectName,
+        project_name: item.projectName || '에어컨 세척',
         last_work_date: item.workDate,
         total_quantity: String(item.totalQuantity),
         quotation_amount: String(item.quotationAmount),
+        ...mergeFieldsFor(item, today),
       }),
     });
     if (res.ok) return { email, ok: true };
@@ -259,7 +299,17 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   const configOut = { stages: cfg.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label })), grace: cfg.grace };
 
   const customers = await fetchCustomers();
-  const { due, skipped } = computeDue(customers, cfg, today);
+  // 진행 중 딜 목록 — 실제 실행에서 못 읽으면 보내지 않는다(상담 중인 회사에 엉뚱한 메일이 가지 않게)
+  let openDealCompanies = new Set<string>();
+  const warnings: string[] = [];
+  try {
+    openDealCompanies = await fetchOpenDealCompanies();
+  } catch (err) {
+    const msg = `진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`;
+    if (!opts.dryRun) return jsonResponse({ ok: false, error: `${msg} — 발송하지 않음` }, 502, origin);
+    warnings.push(msg);
+  }
+  const { due, skipped } = computeDue(customers, cfg, today, { openDealCompanies });
 
   // 트리거 수(담당자 단위) 기준으로 절단
   const cap = Math.max(1, Math.min(opts.limit ?? MAX_TRIGGERS_PER_RUN, MAX_TRIGGERS_PER_RUN));
@@ -276,14 +326,14 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   const skippedSummary: Record<string, number> = {};
   for (const s of skipped) skippedSummary[s.reason] = (skippedSummary[s.reason] || 0) + 1;
 
-  const dueOut = selected.map((d) => ({
-    customerId: d.customerId, company: d.company, stage: d.stage, label: d.label, workDate: d.workDate, dueDate: d.dueDate,
-    projectName: d.projectName, recipients: d.recipients.map((r) => r.email), supersededStages: d.supersededStages,
-  }));
-
   if (opts.dryRun) {
+    // 로그인 없이 열리는 미리보기라 수신자 이메일은 가리고, 고객별 건너뜀 목록은 요약만 보낸다
+    const dueOut = selected.map((d) => ({
+      customerId: d.customerId, company: d.company, stage: d.stage, label: d.label, workDate: d.workDate, dueDate: d.dueDate,
+      projectName: d.projectName, recipients: d.recipients.map((r) => maskEmail(r.email)), supersededStages: d.supersededStages,
+    }));
     return jsonResponse(
-      { ok: true, dryRun: true, today, config: configOut, evaluated: customers.length, due: dueOut, deferred, skippedSummary, skipped: skipped as SkipItem[] },
+      { ok: true, dryRun: true, today, config: configOut, evaluated: customers.length, due: dueOut, deferred, skippedSummary, warnings },
       200,
       origin,
     );
@@ -306,8 +356,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
         seen.add(r.email);
         upsertPayload.push({
           email: r.email,
-          status: 'subscribed',
-          marketingAllowed: false,
+          status: 'subscribed', // 새 구독자에만 적용 — 기존 구독자의 상태는 스티비가 바꾸지 않는다
           fields: {
             name: r.name, position: r.position, company: item.company,
             grade: c?.grade || '', customer_status: c?.customerStatus || '',
@@ -332,7 +381,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
           results.push({ email: rcpt.email, ok: false, error: '주소록 upsert 거부' });
           continue;
         }
-        results.push(await triggerAutoEmail(env, item, rcpt.email, rcpt.name));
+        results.push(await triggerAutoEmail(env, item, rcpt.email, rcpt.name, today));
         await sleep(TRIGGER_INTERVAL_MS);
       }
       for (const res of results) {
@@ -369,31 +418,76 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   );
 }
 
+// 테스트 발송 — 지정 단계의 자동 이메일을 지정 주소로 견본 개인화 값과 함께 보낸다. 고객 장부는 건드리지 않는다.
+// 스티비의 '테스트 발송'과 달리 실제 트리거·필터·개인화 경로를 그대로 거친다.
+async function handleTestTrigger(env: Env, emailRaw: unknown, stageRaw: unknown): Promise<Response> {
+  const origin = getOrigin(env);
+  const parsed = parseFollowupConfig(env.NEWSLETTER_FOLLOWUPS);
+  if (!parsed.ok) {
+    return jsonResponse({ ok: false, error: 'disabled' in parsed ? 'NEWSLETTER_FOLLOWUPS 미설정' : parsed.error }, 400, origin);
+  }
+  const email = String(emailRaw || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return jsonResponse({ ok: false, error: '이메일 형식이 올바르지 않습니다' }, 400, origin);
+  const stageNo = Number(stageRaw);
+  const stage = parsed.config.stages.find((s) => s.stage === stageNo);
+  if (!stage) return jsonResponse({ ok: false, error: `설정에 없는 단계: ${String(stageRaw)}` }, 400, origin);
+
+  const today = todayKst();
+  const workDate = addDays(today, -stage.days);
+  // 트리거는 주소록에 있는 구독자에게만 동작한다 — 테스트 주소를 먼저 등록
+  const upsert = await batchUpsert(env, [{ email, status: 'subscribed', fields: { name: '테스트', company: '테스트 고객사' } }]);
+  if (upsert.errors.length > 0) return jsonResponse({ ok: false, error: '테스트 주소 등록 실패', detail: upsert.errors }, 502, origin);
+  const result = await triggerAutoEmail(
+    env,
+    {
+      autoEmailId: stage.autoEmailId, company: '테스트 고객사', projectName: '에어컨 전문세척(견본)', workDate,
+      totalQuantity: 12, quotationAmount: 0, equipment: '1way 천정형 10대, 4way 천정형 2대', manager: DEFAULT_MANAGER,
+    },
+    email,
+    '테스트',
+    today,
+  );
+  return jsonResponse(
+    { ok: result.ok, stage: stage.stage, label: stage.label, email, workDate, error: result.error },
+    result.ok ? 200 : 502,
+    origin,
+  );
+}
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const env = context.env;
   const origin = getOrigin(env);
   const cfgError = missingConfig(env);
   if (cfgError) return jsonResponse({ ok: false, error: cfgError }, 500, origin);
 
-  let payload: { action?: string; subscribers?: unknown; email?: unknown; dryRun?: unknown; limit?: unknown; token?: unknown };
+  let payload: { action?: string; subscribers?: unknown; email?: unknown; stage?: unknown; dryRun?: unknown; limit?: unknown; token?: unknown };
   try {
     payload = await context.request.json();
   } catch {
     return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400, origin);
   }
 
+  // 발송·수신거부처럼 되돌리기 어려운 동작은 크론 토큰(GitHub Secrets와 같은 값)이 있어야 한다
+  const cronAuthError = (): Response | null => {
+    const token = context.request.headers.get('X-Newsletter-Cron-Token') || (typeof payload.token === 'string' ? payload.token : '');
+    if (!env.NEWSLETTER_CRON_SECRET) return jsonResponse({ ok: false, error: 'NEWSLETTER_CRON_SECRET not configured' }, 500, origin);
+    if (!token || token !== env.NEWSLETTER_CRON_SECRET) return jsonResponse({ ok: false, error: 'unauthorized' }, 401, origin);
+    return null;
+  };
+
   try {
     switch (payload.action) {
       case 'sync':
         return await handleSync(env, payload.subscribers);
       case 'unsubscribe':
-        return await handleUnsubscribe(env, payload.email);
+        return cronAuthError() ?? (await handleUnsubscribe(env, payload.email));
+      case 'test-trigger':
+        return cronAuthError() ?? (await handleTestTrigger(env, payload.email, payload.stage));
       case 'run-followups': {
         const dryRun = payload.dryRun === true;
         if (!dryRun) {
-          const token = context.request.headers.get('X-Newsletter-Cron-Token') || (typeof payload.token === 'string' ? payload.token : '');
-          if (!env.NEWSLETTER_CRON_SECRET) return jsonResponse({ ok: false, error: 'NEWSLETTER_CRON_SECRET not configured' }, 500, origin);
-          if (!token || token !== env.NEWSLETTER_CRON_SECRET) return jsonResponse({ ok: false, error: 'unauthorized' }, 401, origin);
+          const authError = cronAuthError();
+          if (authError) return authError;
         }
         const limit = typeof payload.limit === 'number' && Number.isInteger(payload.limit) && payload.limit > 0 ? payload.limit : undefined;
         return await handleRunFollowups(env, { dryRun, limit });
