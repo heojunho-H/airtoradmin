@@ -430,7 +430,7 @@ export function applyResult(fresh: CustomerRow, item: DueItem, results: Recipien
 
 // ── 메일 개인화 값 (스티비 주소록 사용자 정의 필드와 키가 같아야 한다 — docs/stibee-emails/README.md) ──
 
-export const DEFAULT_MANAGER = '에어터 고객관리';
+export const DEFAULT_MANAGER = '에어터';
 
 // 설비 내역 한 줄. 작업 항목의 detailedQuantity(JSON 문자열 또는 [{item, quantity}])를 쓰고,
 // 없으면 총 대수, 그것도 없으면 일반 문구.
