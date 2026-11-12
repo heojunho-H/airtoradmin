@@ -41,6 +41,31 @@ import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
 import { btn, ICON_BTN_DANGER, KPI, TABLE, TILE, BADGE, TONE, STAGE_COLORS, INPUT, MODAL_CLOSE, type Tone } from './ui-kit';
 import { diffDeal, isValidYmd, isWonDeal, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
+import { inflowText, parseInflow, stripInflow } from '../../lib/inflow';
+
+// 문의 유입 경로 배지 — 요청사항 끝 '[유입: …]'(홈페이지가 붙임, 2026-11-12 이후 문의). 뜻 없는 정보라 중립색.
+function InflowBadge({ requirements, className = '' }: { requirements?: string; className?: string }) {
+  const inflow = parseInflow(requirements);
+  if (!inflow) return null;
+  return (
+    <span className={`${BADGE} ${TONE.slate} ${className}`} title={`유입 경로: ${inflowText(inflow)}`}>
+      {inflow.label}
+    </span>
+  );
+}
+
+// 상세 '문의 등록일' 타일 아래 — 배지 + 검색어 + 들어온 날
+function InflowDetail({ requirements }: { requirements?: string }) {
+  const inflow = parseInflow(requirements);
+  if (!inflow) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5" title="유입 경로">
+      <span className={`${BADGE} ${TONE.slate}`}>{inflow.label}</span>
+      {inflow.keyword && <span className="text-[13px] text-slate-600">{inflow.keyword}</span>}
+      {inflow.date && <span className="text-[12px] text-slate-400">{inflow.date} 방문</span>}
+    </div>
+  );
+}
 
 interface Deal {
   id: number;
@@ -487,13 +512,14 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
       '견적금액': deal.quotationAmount,
       '고객책임자': deal.salesManager,
       '성공여부': successMap[deal.successStatus] || deal.successStatus,
+      '유입 경로': inflowText(parseInflow(deal.requirements)),
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const colWidths = [
       { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 10 },
       { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
-      { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 32 },
     ];
     ws['!cols'] = colWidths;
 
@@ -1403,6 +1429,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                     <MobileCardBadge tone={getStageTone(deal.status)}>
                       {getStatusLabel(deal.status)}
                     </MobileCardBadge>
+                    <InflowBadge requirements={deal.requirements} />
                     {!deal.isChecked && (
                       <span className="flex-1 text-right">
                         <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-semibold">
@@ -1709,6 +1736,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                         <Calendar className="w-4 h-4 text-slate-400" />
                         {deal.registrationDate}
                       </div>
+                      <InflowBadge requirements={deal.requirements} className="mt-1.5" />
                     </td>
                     <td className="px-4 py-4">
                       <div className="relative">
@@ -2195,9 +2223,12 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                         className={`w-full px-3 py-2 text-lg md:text-xl font-bold tabular-nums mt-2 ${INPUT}`}
                       />
                     ) : (
-                      <p className={TILE.value}>
-                        {selectedDeal.registrationDate}
-                      </p>
+                      <>
+                        <p className={TILE.value}>
+                          {selectedDeal.registrationDate}
+                        </p>
+                        <InflowDetail requirements={selectedDeal.requirements} />
+                      </>
                     )}
                   </div>
                   <div className={TILE.box}>
@@ -2353,7 +2384,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
                       className="w-full px-3 py-2 text-base text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                   ) : (
-                    <p className="text-[15px] text-slate-700">{selectedDeal.requirements}</p>
+                    <p className="text-[15px] text-slate-700">{stripInflow(selectedDeal.requirements)}</p>
                   )}
                 </div>
                 <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
