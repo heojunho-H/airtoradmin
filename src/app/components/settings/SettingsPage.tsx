@@ -1,9 +1,10 @@
-// 설정 페이지 — AI 모델 설정(관리자 PIN) · AI 사용량 · 연결 상태.
+// 설정 페이지 — AI 모델 설정(관리자 PIN) · AI 사용량 · 연결 상태 · 구글 광고 계약 업로드(관리자 PIN).
 
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { getStatus, toAiRequestError } from '../../../lib/ai/api';
 import type { AiStatus } from '../../../lib/ai/types';
+import { AdsUploadCard } from './AdsUploadCard';
 import { AiModelSettingsCard } from './AiModelSettingsCard';
 import { AiUsageCard } from './AiUsageCard';
 
@@ -12,11 +13,12 @@ export default function SettingsPage({ userName, onNotification }: { userName: s
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">설정</h1>
-        <p className="mt-1 text-[15px] text-slate-500">AI 모델 · 사용량 · 연결 상태</p>
+        <p className="mt-1 text-[15px] text-slate-500">AI 모델 · 사용량 · 연결 상태 · 구글 광고 계약 업로드</p>
       </div>
       <AiModelSettingsCard userName={userName} onNotification={onNotification} />
       <AiUsageCard />
       <ConnectionStatusCard />
+      <AdsUploadCard userName={userName} onNotification={onNotification} />
     </div>
   );
 }
