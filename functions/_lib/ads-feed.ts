@@ -1,17 +1,18 @@
 // 구글 광고 '계약 성공(CRM)' 업로드 — 리드용 향상된 전환 (2026-11-12)
 //
 // 흐름
-//  1) 홈페이지 문의 폼에서 '광고 성과 측정 동의(선택)'에 체크한 문의만 요청사항 끝에 [광고측정동의] 가 붙는다
-//     (airtor-homepage site/inc/ads_lib.php). 같은 문의의 이메일·전화는 구글 태그가 해시해 문의 전환과 함께 보낸다.
+//  1) 홈페이지 문의 폼이 제출 때 이메일·전화를 구글 태그 user_data 로 넘긴다(태그가 해시해 문의 전환과 함께 보냄,
+//     airtor-homepage site/inc/ads_lib.php). 2026-11-12 사용자 결정으로 동의 체크박스 없이 모든 문의에 적용한다.
 //  2) CRM 에서 딜이 '계약 성공'으로 바뀌는 순간 /api/deals 프록시가 PHP 응답의 transition:'won' 을 보고
 //     D1 ads_deal_won 에 계약 시각을 남긴다 (PHP·DB 구조 변경 없음 — 프로젝트 created_at 은 운영 DB 에서 비어 있다).
-//  3) /api/ads_conversions 가 [광고측정동의] 딜 중 최근 90일 안에 계약된 건을 CSV 로 만든다.
+//  3) /api/ads_conversions 가 최근 90일 안에 계약된 딜을 CSV 로 만든다. 요청사항에 [광고측정제외] 가 있는 딜은 뺀다
+//     (개인정보 처리방침 제7조의 거부 요청 처리 — 직원이 딜 요청사항에 붙인다).
 //     구글 데이터 관리 도구(HTTPS, Basic 인증)가 매일 가져가고, CRM 설정 화면에서 같은 파일을 받을 수도 있다.
 //
 // 이메일·전화는 SHA-256 해시로만 내보낸다(구글 정규화 규칙: 이메일 소문자·공백 제거, 전화 E.164).
 // 금액은 공급가액(부가세 제외) — 프로젝트 netRevenue, 없으면 딜 견적에서 서버와 같은 식(q − round(q×10/110))으로 계산.
 
-export const CONSENT_MARK = '[광고측정동의]';
+export const EXCLUDE_MARK = '[광고측정제외]';
 export const CONVERSION_NAME = '계약 성공(CRM)';
 export const DEALS_API_URL = 'https://airtor.co.kr/api/deals_api_v2.php';
 export const PROJECTS_API_URL = 'https://airtor.co.kr/api/projects_api_v2.php';
@@ -46,8 +47,8 @@ export interface FeedSummary {
   won: number; // 지금 계약 성공 상태인 딜
   wonRecorded: number; // 그중 계약 시각 기록이 있는 딜 (기록은 2026-11-12 배포 뒤 계약부터)
   wonInWindow: number; // 그중 최근 N일 안에 계약된 딜
-  consented: number; // 그중 [광고측정동의] 딜
-  withContact: number; // 그중 이메일·전화가 있는 딜 = 업로드 행
+  excluded: number; // 그중 [광고측정제외] 딜 (업로드에서 뺌)
+  withContact: number; // 나머지 중 이메일·전화가 있는 딜 = 업로드 행
   rows: number;
 }
 
@@ -167,7 +168,7 @@ export async function buildConversionRows(
     if (Number.isInteger(id) && id > 0 && Number.isFinite(net) && net > 0 && !netByDeal.has(id)) netByDeal.set(id, Math.round(net));
   }
 
-  const summary: FeedSummary = { days: span, won: 0, wonRecorded: 0, wonInWindow: 0, consented: 0, withContact: 0, rows: 0 };
+  const summary: FeedSummary = { days: span, won: 0, wonRecorded: 0, wonInWindow: 0, excluded: 0, withContact: 0, rows: 0 };
   const rows: FeedRow[] = [];
   for (const d of deals) {
     if (d.successStatus !== 'success') continue;
@@ -179,8 +180,10 @@ export async function buildConversionRows(
     const t = Date.parse(wonAt);
     if (!Number.isFinite(t) || t < since || t > now.getTime()) continue;
     summary.wonInWindow++;
-    if (typeof d.requirements !== 'string' || !d.requirements.includes(CONSENT_MARK)) continue;
-    summary.consented++;
+    if (typeof d.requirements === 'string' && d.requirements.includes(EXCLUDE_MARK)) {
+      summary.excluded++;
+      continue;
+    }
     const email = normalizeEmail(d.email);
     const phone = toE164(d.phone);
     if (!email && !phone) continue;

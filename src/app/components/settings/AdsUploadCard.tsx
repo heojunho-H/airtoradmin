@@ -1,6 +1,6 @@
 // 설정 > 구글 광고 계약 업로드 — 리드용 향상된 전환(functions/api/ads_conversions.ts).
-// 홈페이지 문의 때 '광고 성과 측정 동의(선택)'에 체크한 고객이 계약 성공이 되면, 계약 시각·공급가액을
-// 해시한 이메일·전화와 함께 구글 광고로 보낸다. 구글 데이터 관리 도구(HTTPS)가 매일 가져가고,
+// 홈페이지 문의 고객이 계약 성공이 되면, 계약 시각·공급가액을 해시한 이메일·전화와 함께 구글 광고로 보낸다.
+// 요청사항에 [광고측정제외] 가 있는 딜은 뺀다(거부 요청). 구글 데이터 관리 도구(HTTPS)가 매일 가져가고,
 // 여기서는 같은 파일을 받아 '파일 업로드'로 직접 올릴 수 있다(수동 백업). 확인은 관리자 PIN.
 
 import { useState } from 'react';
@@ -16,7 +16,7 @@ interface Summary {
   won: number;
   wonRecorded: number;
   wonInWindow: number;
-  consented: number;
+  excluded: number;
   withContact: number;
   rows: number;
 }
@@ -101,7 +101,8 @@ export function AdsUploadCard({ userName, onNotification }: { userName: string; 
         <div>
           <h2 className="text-[18px] font-semibold text-slate-900">구글 광고 계약 업로드</h2>
           <p className="mt-0.5 max-w-2xl text-[14px] text-slate-500">
-            홈페이지 문의 때 광고 성과 측정에 동의한 고객이 계약 성공이 되면, 계약 시각과 공급가액을 구글 광고로 보냅니다. 이메일·전화는 해시로만 나갑니다.
+            홈페이지 문의 고객이 계약 성공이 되면, 계약 시각과 공급가액을 구글 광고로 보냅니다. 이메일·전화는 해시로만 나갑니다.
+            고객이 거부를 요청하면 딜 요청사항에 [광고측정제외]를 붙여 주세요. 그 딜은 빠집니다.
             구글 데이터 관리 도구가 매일 가져가며, 여기서 같은 파일을 받아 직접 올릴 수도 있습니다.
           </p>
         </div>
@@ -122,7 +123,7 @@ export function AdsUploadCard({ userName, onNotification }: { userName: string; 
           <Stat label="계약 성공 딜" value={summary.won} />
           <Stat label="계약 시각 기록" value={summary.wonRecorded} help="2026-11-12 배포 뒤 계약부터" />
           <Stat label={`최근 ${summary.days}일 계약`} value={summary.wonInWindow} />
-          <Stat label="그중 측정 동의" value={summary.consented} />
+          <Stat label="그중 제외 요청" value={summary.excluded} help="[광고측정제외]" />
           <Stat label="업로드 행" value={summary.rows} help="이메일·전화가 있는 건" strong />
         </ul>
       )}
