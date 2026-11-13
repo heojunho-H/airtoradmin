@@ -46,13 +46,14 @@
   - 카테고리 '전환 고객', 값은 업로드 값(비면 ₩1,800,000 — 계약 공급가 중앙값), 횟수 1회, 클릭 기간 90일, 데이터 기반 기여
   - **보조 액션**이라 입찰에는 아직 쓰지 않는다. 새로 만들면 구글이 기본 목표에 넣어 기본 액션으로 잡으니, 만든 직후 설정에서 보조로 바꾼다.
 - 데이터 관리 도구 > HTTPS > 전환수 > 오프라인 전환
-  - URL `https://airtoradmin.co.kr/api/ads_conversions`
+  - URL `https://airtoradmin.co.kr/api/ads_conversions.csv`
+    - 구글 HTTPS 연결은 주소가 `.csv`·`.tsv` 로 끝나야 받는다("파일 형식을 읽을 수 없습니다"). `.csv` 주소는 `functions/api/ads_conversions.csv.ts` 가 같은 GET 을 그대로 연다(2026-11-13).
   - 사용자 이름·비밀번호는 위 환경변수와 같은 값
   - 매일 실행한다.
 
 ## 확인
 
-- 인증 없이 `GET /api/ads_conversions` 를 부르면 401 이 나야 한다.
+- 인증 없이 `GET /api/ads_conversions` 와 `GET /api/ads_conversions.csv` 를 부르면 둘 다 401 이 나야 한다(503 이면 환경변수가 없거나 재배포 전).
 - 설정 카드 '현황 보기'에서 볼 숫자
   - 계약 성공 딜
   - 계약 시각 기록(배포 뒤 계약부터)
