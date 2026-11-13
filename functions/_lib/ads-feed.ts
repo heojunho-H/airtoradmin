@@ -7,7 +7,9 @@
 //     D1 ads_deal_won 에 계약 시각을 남긴다 (PHP·DB 구조 변경 없음 — 프로젝트 created_at 은 운영 DB 에서 비어 있다).
 //     계약 시각 기록이 없는 계약 성공 딜(기록을 시작한 2026-11-12 배포 전 계약 등)은 문의 등록일 23:59:59(한국 시각)를
 //     전환 시각으로 쓴다 — 2026-11-13 사용자 결정. 구글 HTTPS 연결은 데이터 행이 1개 이상 있어야 만들어진다.
-//  3) /api/ads_conversions 가 최근 90일 안에 계약된 딜을 CSV 로 만든다. 요청사항에 [광고측정제외] 가 있는 딜은 뺀다
+//  3) /api/ads_conversions 가 최근 63일 안에 계약된 딜을 CSV 로 만든다. 요청사항에 [광고측정제외] 가 있는 딜은 뺀다
+//     (63일 = 리드용 향상된 전환 한도: 이메일·전화로 맞추는 전환은 마지막 광고 클릭 뒤 63일이 지나 올리면 구글이 받지 않는다.
+//      클릭 ID(GCLID) 방식만 90일. 어차피 버려질 고객 해시를 보내지 않으려고 맞춘다 — 2026-11-13)
 //     (개인정보 처리방침 제7조의 거부 요청 처리 — 직원이 딜 요청사항에 붙인다).
 //     구글 데이터 관리 도구(HTTPS, Basic 인증)가 매일 가져가고, CRM 설정 화면에서 같은 파일을 받을 수도 있다.
 //
@@ -18,7 +20,7 @@ export const EXCLUDE_MARK = '[광고측정제외]';
 export const CONVERSION_NAME = '계약 성공(CRM)';
 export const DEALS_API_URL = 'https://airtor.co.kr/api/deals_api_v2.php';
 export const PROJECTS_API_URL = 'https://airtor.co.kr/api/projects_api_v2.php';
-export const MAX_DAYS = 90;
+export const MAX_DAYS = 63; // 리드용 향상된 전환 업로드 한도(마지막 클릭 뒤 63일). 위 3) 참고
 
 export const CSV_HEADER = ['Email', 'Phone Number', 'Conversion Name', 'Conversion Time', 'Conversion Value', 'Conversion Currency', 'Order ID'];
 

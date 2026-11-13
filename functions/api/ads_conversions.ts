@@ -1,6 +1,6 @@
 // 구글 광고 '계약 성공(CRM)' 업로드 피드 — 리드용 향상된 전환 (functions/_lib/ads-feed.ts 참고)
 //
-//  GET  /api/ads_conversions[?days=90][&format=summary]
+//  GET  /api/ads_conversions[?days=63][&format=summary]   (63일이 최대 — functions/_lib/ads-feed.ts MAX_DAYS)
 //       Basic 인증(ADS_FEED_USER · ADS_FEED_PASS) — 구글 데이터 관리 도구 HTTPS 연결이 매일 가져간다. CSV.
 //  POST /api/ads_conversions  { pin, userName, format: 'csv' | 'summary', days? }
 //       관리자 PIN(AI_ADMIN_PIN) — CRM 설정 화면 '구글 광고 계약 업로드' 카드. 수동 백업 파일·요약 숫자.
