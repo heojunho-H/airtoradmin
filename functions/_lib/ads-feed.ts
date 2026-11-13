@@ -5,6 +5,8 @@
 //     airtor-homepage site/inc/ads_lib.php). 2026-11-12 사용자 결정으로 동의 체크박스 없이 모든 문의에 적용한다.
 //  2) CRM 에서 딜이 '계약 성공'으로 바뀌는 순간 /api/deals 프록시가 PHP 응답의 transition:'won' 을 보고
 //     D1 ads_deal_won 에 계약 시각을 남긴다 (PHP·DB 구조 변경 없음 — 프로젝트 created_at 은 운영 DB 에서 비어 있다).
+//     계약 시각 기록이 없는 계약 성공 딜(기록을 시작한 2026-11-12 배포 전 계약 등)은 문의 등록일 23:59:59(한국 시각)를
+//     전환 시각으로 쓴다 — 2026-11-13 사용자 결정. 구글 HTTPS 연결은 데이터 행이 1개 이상 있어야 만들어진다.
 //  3) /api/ads_conversions 가 최근 90일 안에 계약된 딜을 CSV 로 만든다. 요청사항에 [광고측정제외] 가 있는 딜은 뺀다
 //     (개인정보 처리방침 제7조의 거부 요청 처리 — 직원이 딜 요청사항에 붙인다).
 //     구글 데이터 관리 도구(HTTPS, Basic 인증)가 매일 가져가고, CRM 설정 화면에서 같은 파일을 받을 수도 있다.
@@ -27,6 +29,7 @@ export interface FeedDeal {
   email?: string;
   phone?: string;
   quotationAmount?: string | number;
+  registrationDate?: string; // 문의 등록일 yyyy-MM-dd — 계약 시각 기록이 없을 때 전환 시각으로 쓴다
 }
 
 export interface FeedProject {
@@ -46,7 +49,8 @@ export interface FeedSummary {
   days: number;
   won: number; // 지금 계약 성공 상태인 딜
   wonRecorded: number; // 그중 계약 시각 기록이 있는 딜 (기록은 2026-11-12 배포 뒤 계약부터)
-  wonInWindow: number; // 그중 최근 N일 안에 계약된 딜
+  wonInWindow: number; // 그중 최근 N일 안에 계약된 딜 (기록이 없으면 문의 등록일 기준)
+  wonByInquiryDate: number; // 그중 계약 시각 기록이 없어 문의 등록일을 전환 시각으로 쓴 딜
   excluded: number; // 그중 [광고측정제외] 딜 (업로드에서 뺌)
   withContact: number; // 나머지 중 이메일·전화가 있는 딜 = 업로드 행
   rows: number;
@@ -110,6 +114,12 @@ export function kstTime(iso: string): string {
   return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())} ${p(k.getUTCHours())}:${p(k.getUTCMinutes())}:${p(k.getUTCSeconds())}+0900`;
 }
 
+/** 문의 등록일(yyyy-MM-dd) → 그날 23:59:59 한국 시각(ISO). 광고 클릭은 문의보다 앞서므로 그날 끝으로 잡는다 */
+export function inquiryDayEndIso(v: unknown): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? '').trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}T23:59:59+09:00` : '';
+}
+
 // ─── 계약 시각 기록 (D1) ───────────────────────────────────────────────
 
 const WON_TABLE_SQL = 'CREATE TABLE IF NOT EXISTS ads_deal_won (deal_id INTEGER PRIMARY KEY, won_at TEXT NOT NULL)';
@@ -168,18 +178,20 @@ export async function buildConversionRows(
     if (Number.isInteger(id) && id > 0 && Number.isFinite(net) && net > 0 && !netByDeal.has(id)) netByDeal.set(id, Math.round(net));
   }
 
-  const summary: FeedSummary = { days: span, won: 0, wonRecorded: 0, wonInWindow: 0, excluded: 0, withContact: 0, rows: 0 };
+  const summary: FeedSummary = { days: span, won: 0, wonRecorded: 0, wonInWindow: 0, wonByInquiryDate: 0, excluded: 0, withContact: 0, rows: 0 };
   const rows: FeedRow[] = [];
   for (const d of deals) {
     if (d.successStatus !== 'success') continue;
     summary.won++;
     const id = Number(d.id);
-    const wonAt = won.get(id);
+    const recorded = won.get(id);
+    if (recorded) summary.wonRecorded++;
+    const wonAt = recorded || inquiryDayEndIso(d.registrationDate);
     if (!wonAt) continue;
-    summary.wonRecorded++;
     const t = Date.parse(wonAt);
     if (!Number.isFinite(t) || t < since || t > now.getTime()) continue;
     summary.wonInWindow++;
+    if (!recorded) summary.wonByInquiryDate++;
     if (typeof d.requirements === 'string' && d.requirements.includes(EXCLUDE_MARK)) {
       summary.excluded++;
       continue;

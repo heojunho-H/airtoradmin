@@ -16,6 +16,7 @@ interface Summary {
   won: number;
   wonRecorded: number;
   wonInWindow: number;
+  wonByInquiryDate?: number;
   excluded: number;
   withContact: number;
   rows: number;
@@ -122,7 +123,11 @@ export function AdsUploadCard({ userName, onNotification }: { userName: string; 
         <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <Stat label="계약 성공 딜" value={summary.won} />
           <Stat label="계약 시각 기록" value={summary.wonRecorded} help="2026-11-12 배포 뒤 계약부터" />
-          <Stat label={`최근 ${summary.days}일 계약`} value={summary.wonInWindow} />
+          <Stat
+            label={`최근 ${summary.days}일 계약`}
+            value={summary.wonInWindow}
+            help={summary.wonByInquiryDate ? `그중 ${summary.wonByInquiryDate}건은 기록이 없어 문의일 기준` : undefined}
+          />
           <Stat label="그중 제외 요청" value={summary.excluded} help="[광고측정제외]" />
           <Stat label="업로드 행" value={summary.rows} help="이메일·전화가 있는 건" strong />
         </ul>
