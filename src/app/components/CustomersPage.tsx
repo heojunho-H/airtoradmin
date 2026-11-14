@@ -1624,6 +1624,17 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     if (lock) return `수동 고정 (${[lock.setBy, lock.setAt.slice(0, 10)].filter(Boolean).join(' · ')}) — ${basis}, 금액 기준은 ${gradeLabel(auto)}. 눌러서 '자동'을 고르면 금액 기준으로 돌아갑니다`;
     return `${basis} → ${gradeLabel(auto)} (자동). 눌러서 등급을 바꾸면 수동으로 고정됩니다`;
   };
+  // 책임자 열 머리글 툴팁 — 등급별 책임자 이름은 D1 에서 온다(gradeLocks.gradeManagers). 같은 사람이 맡는 등급은 묶어서 'S·A 이름'
+  const managerRuleTitle = (() => {
+    const byName = new Map<string, string[]>();
+    for (const g of ['S', 'A', 'B'] as const) {
+      const name = gradeLocks?.gradeManagers[g];
+      if (name) byName.set(name, [...(byName.get(name) ?? []), g]);
+    }
+    if (!byName.size) return undefined;
+    const who = [...byName].map(([name, grades]) => `${grades.join('·')} ${name}`).join(' · ');
+    return `책임자가 비어 있는 S·A·B 고객은 등급에 따라 자동 지정됩니다 (${who}). 이미 책임자가 있으면 등급이 바뀌어도 바꾸지 않습니다`;
+  })();
   // 배지 옆 '수동' — 금액 기준과 다르게 손으로 고정한 고객
   const manualMark = (customer: Pick<Customer, 'id'>) =>
     gradeLockOf(customer) ? <span className="text-xs font-medium text-slate-500">수동</span> : null;
@@ -2111,7 +2122,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   뉴스레터
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600" title={managerRuleTitle}>
                   고객 책임자
                 </th>
                 <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600">

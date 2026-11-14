@@ -2,7 +2,9 @@
 // 등급은 화면이 누적 거래 금액으로 자동 분류한다(src/lib/customerGrade.ts). 담당자가 손으로 바꾼 고객만
 // D1 customer_grade_locks 에 둔다(d1/migrations/0005_customer_grade_locks.sql). 팀 전체가 같은 고정을 본다.
 //
-// GET                                                              → { ok, items:[{customerId, grade, company, setBy, setAt}] }
+// GET                                                              → { ok, items:[{customerId, grade, company, setBy, setAt}], managers:{S?,A?,B?} }
+//   managers = 등급별 고객책임자(D1 customer_grade_managers, 0006). 책임자가 비어 있는 S·A·B 고객에게 화면이 자동으로 지정한다.
+//   직원 이름은 코드에 두지 않고 이 표에만 둔다. 표가 없거나 비어 있으면 {} — 그때는 화면이 자동 지정을 하지 않는다.
 // POST { action:'lock', customerId, grade, company, userName }     → { ok, item } — 이미 있으면 새 등급으로 바꾼다
 // POST { action:'unlock', customerId, userName }                   → { ok }
 
@@ -41,6 +43,21 @@ async function lockDb(env: AiEnv): Promise<D1Database> {
   return db;
 }
 
+/** 등급별 고객책임자 — 표가 아직 없으면 빈 값 (자동 지정만 멈추고 등급 기능은 그대로 쓴다) */
+async function gradeManagers(db: D1Database): Promise<Record<string, string>> {
+  try {
+    const { results } = await db.prepare('SELECT grade, manager FROM customer_grade_managers').all<{ grade: string; manager: string }>();
+    const out: Record<string, string> = {};
+    for (const r of results ?? []) {
+      const name = typeof r.manager === 'string' ? r.manager.trim() : '';
+      if ((r.grade === 'S' || r.grade === 'A' || r.grade === 'B') && name) out[r.grade] = name;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 function requireCustomerId(v: unknown): number {
   const id = Number(v);
   // 화면이 등록 직후에 쓰는 임시 번호(Date.now())는 받지 않는다
@@ -54,7 +71,7 @@ export const onRequestGet: PagesFunction<AiEnv> = async ({ request, env }) => {
     if (originError) throw originError;
     const db = await lockDb(env);
     const { results } = await db.prepare('SELECT * FROM customer_grade_locks ORDER BY set_at DESC LIMIT ?').bind(MAX_ITEMS).all<LockRow>();
-    return jsonFor(request, env, { ok: true, items: (results ?? []).map(toItem) });
+    return jsonFor(request, env, { ok: true, items: (results ?? []).map(toItem), managers: await gradeManagers(db) });
   } catch (err) {
     return errorResponse(request, env, toAiError(err));
   }

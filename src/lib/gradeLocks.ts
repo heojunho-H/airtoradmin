@@ -40,9 +40,13 @@ export interface GradeLock {
 
 export type GradeLocksStatus = 'loading' | 'ok' | 'unavailable';
 
+/** 등급별 고객책임자 (D1 customer_grade_managers) — 책임자가 비어 있는 S·A·B 고객에게 자동으로 지정할 이름. 없는 등급은 지정하지 않는다 */
+export type GradeManagers = Partial<Record<'S' | 'A' | 'B', string>>;
+
 export interface GradeLocksState {
   /** 고객 번호 → 고정 */
   locks: Map<number, GradeLock>;
+  gradeManagers: GradeManagers;
   status: GradeLocksStatus;
   /** unavailable 일 때 이유 */
   error: string;
@@ -67,6 +71,7 @@ const STALE_MS = 60_000;
 
 export function useGradeLocks(userName: string, onError: (message: string) => void): GradeLocksState {
   const [locks, setLocks] = useState<Map<number, GradeLock>>(() => new Map());
+  const [gradeManagers, setGradeManagers] = useState<GradeManagers>({});
   const [status, setStatus] = useState<GradeLocksStatus>('loading');
   const [error, setError] = useState('');
   const loadedAtRef = useRef(0);
@@ -78,10 +83,17 @@ export function useGradeLocks(userName: string, onError: (message: string) => vo
   const load = useCallback(async () => {
     const seq = writeSeqRef.current;
     try {
-      const res = await getJson<{ ok: true; items: RawLock[] }>({}, GRADE_LOCKS_ENDPOINT);
+      const res = await getJson<{ ok: true; items: RawLock[]; managers?: Record<string, unknown> }>({}, GRADE_LOCKS_ENDPOINT);
       if (seq !== writeSeqRef.current) return;
       const items = Array.isArray(res.items) ? res.items : [];
       setLocks(new Map(items.map((r) => [Number(r.customerId), toLock(r)])));
+      const next: GradeManagers = {};
+      for (const g of ['S', 'A', 'B'] as const) {
+        const name = res.managers?.[g];
+        if (typeof name === 'string' && name.trim()) next[g] = name.trim();
+      }
+      // 값이 같으면 같은 객체를 유지한다 (등급 자동 반영 effect 가 쓸데없이 다시 돌지 않게)
+      setGradeManagers((prev) => (prev.S === next.S && prev.A === next.A && prev.B === next.B ? prev : next));
       setStatus('ok');
       setError('');
       loadedAtRef.current = Date.now();
@@ -138,5 +150,5 @@ export function useGradeLocks(userName: string, onError: (message: string) => vo
     [userName],
   );
 
-  return { locks, status, error, lock, unlock };
+  return { locks, gradeManagers, status, error, lock, unlock };
 }

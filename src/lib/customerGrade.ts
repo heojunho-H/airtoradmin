@@ -42,6 +42,24 @@ export function effectiveGrade(c: { workHistory?: unknown; totalAmount?: unknown
   return lockedGrade != null ? gradeClass(lockedGrade) : autoGrade(customerTotalAmount(c));
 }
 
+/**
+ * 고객책임자 자동 지정 (2026-11-14 사용자 결정) — 책임자가 비어 있고 등급이 S·A·B 인 고객에게만 등급별 책임자를 지정한다.
+ * 이미 책임자가 있으면 등급이 바뀌어도 바꾸지 않는다(B → A 승급, '그 외' → B 포함). '그 외' 고객은 지정하지 않는다.
+ * byGrade = 등급별 책임자 이름(D1 customer_grade_managers — 직원 이름은 코드에 두지 않는다),
+ * validNames = 지금 지정할 수 있는 고객책임자 이름. 지정할 것이 없으면 null.
+ */
+export function managerToAssign(
+  currentManager: unknown,
+  grade: GradeClass,
+  byGrade: Partial<Record<'S' | 'A' | 'B', string>>,
+  validNames: ReadonlySet<string>,
+): string | null {
+  if (String(currentManager ?? '').trim()) return null;
+  if (grade === GRADE_NONE) return null;
+  const name = byGrade[grade];
+  return name && validNames.has(name) ? name : null;
+}
+
 /** 'S등급' · '그 외' */
 export function gradeLabel(v: unknown): string {
   const g = gradeClass(v);
