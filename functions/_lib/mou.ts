@@ -14,7 +14,7 @@ import { LOGO_COLOR_PNG, MOU_BAR_JPG, MOU_BULLET_PNG, MOU_HANDSHAKE_PNG, MOU_LOG
 
 export const DEFAULT_MOU_BASE_URL = 'https://docs.airtor.co.kr';
 /** 서식을 바꾸면 올린다 — R2 의 PDF 캐시 키가 바뀌어 새 서식으로 다시 만든다 */
-export const MOU_VERSION = 'v4';
+export const MOU_VERSION = 'v5';
 export const SEAL_R2_KEY = 'brand/mou-seal.png';
 /** 대표이사 손글씨 서명·작업자 사진 (원래 협약서 그림) — 공개 저장소에 두지 않는다 */
 export const SIGN_R2_KEY = 'brand/mou-sign.png';
@@ -453,8 +453,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',
 .art p.cl{padding-left:1.3em;text-indent:-1.3em}
 .bottom{position:relative;flex:0 0 auto;margin-top:auto;padding:0 0 20.8mm}
 .bottom .rule{margin-top:7mm;position:relative;z-index:1}
-.photo{position:absolute;left:120.7mm;top:7.3mm;width:94.5mm;height:auto;filter:brightness(0);opacity:.1;z-index:0;pointer-events:none}
-.cap-logo{position:absolute;left:197.4mm;top:23.6mm;width:6.8mm;height:auto;opacity:.4;transform:rotate(50deg);z-index:0}
+/* 작업자 사진: 오른쪽 아래 모서리 — 맺음·발행일·서명·직인과 겹치지 않게. 모자 로고는 원본 비율 위치를 따라간다 */
+.person{position:absolute;right:0;bottom:0;width:66mm;z-index:0;pointer-events:none}
+.person .photo{display:block;width:100%;height:auto;opacity:.3}
+.person .cap-logo{position:absolute;left:84.7%;top:18.9%;width:7.2%;height:auto;opacity:.4;transform:translate(-50%,-50%) rotate(50deg)}
 .closing{position:relative;z-index:1;margin:9.5mm 16mm 0;text-align:center;word-break:keep-all}
 .issued{position:relative;z-index:1;margin:7.8mm 0 0;text-align:center;font-size:12pt}
 .sig{position:relative;z-index:1;width:52.9mm;margin:6mm auto 0}
@@ -484,6 +486,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',
 .compact .issued{margin-top:5mm}
 .compact .bottom{padding-bottom:15mm}
 .compact .mou{top:46mm}
+.compact .person{width:58mm}
 @media screen and (max-width:860px){
   .sheet-wrap{padding:0 0 24px}
   .sheet{width:auto;min-height:0;font-size:14px;letter-spacing:-.04em}
@@ -506,7 +509,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',
   .art .body{margin:8px 0 0 22px}
   .bottom{margin-top:0;padding:0 0 28px}
   .bottom .rule{margin-top:26px}
-  .photo,.cap-logo,.mou{display:none}
+  .person,.mou{display:none}
   .closing{margin:26px 16px 0}
   .issued{margin-top:20px;font-size:16px}
   .sig{margin-top:18px}
@@ -571,7 +574,9 @@ ${art(3, '기간과 효력', cl('①', '본 협약은 보장 기간 동안 유�
 function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
   // 표가 길면 조항 간격을 줄인다 — A4 한 장에 품목 10줄까지 (그보다 많으면 두 장)
   const weight = doc.rows.reduce((s, r) => s + rowWeight(r.name), 0);
-  const tableRows = doc.mode === 'items' ? weight + 1 : Math.max(weight, 1) + 2;
+  // 기관명이 길면 서문이 한 줄 늘어난다 — 표 한 줄만큼 더 센다
+  const introExtra = Array.from(doc.company).length > 12 ? 1 : 0;
+  const tableRows = (doc.mode === 'items' ? weight + 1 : Math.max(weight, 1) + 2) + introExtra;
   const compact = tableRows > COMPACT_FROM;
   const a = opts.assets;
   const sign = a.sign
@@ -590,7 +595,7 @@ function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
 <div class="tbl">${tableHtml(doc, opts.sample)}</div>
 ${articlesHtml(doc)}
 <div class="bottom">
-${a.photo ? `<img class="photo" src="${a.photo}" alt="">` : ''}<img class="cap-logo" src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="">
+${a.photo ? `<div class="person"><img class="photo" src="${a.photo}" alt=""><img class="cap-logo" src="data:image/png;base64,${LOGO_COLOR_PNG}" alt=""></div>` : ''}
 <div class="rule"></div>
 <p class="closing">회사는 위 내용을 성실히 이행할 것을 확인하며 본 협약서를 발행한다.</p>
 <p class="issued">${longDate(doc.issuedAt)} 발행</p>

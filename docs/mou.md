@@ -14,7 +14,7 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
 2. 고객이 `/mou/<id>`를 열면 `functions/mou/[id].ts`가 얼려 둔 내용으로 화면을 그린다. 직인은 R2에서 읽는다.
    - 나중에 관리 앱 값을 고쳐도 이미 보낸 협약서는 바뀌지 않는다.
 3. `/mou/<id>.pdf`
-   - R2 `FILES`에 `mou/v4/<id>.pdf`가 있으면 그것을 준다(v4 = 서식 버전 MOU_VERSION).
+   - R2 `FILES`에 `mou/v5/<id>.pdf`가 있으면 그것을 준다(v5 = 서식 버전 MOU_VERSION).
    - 없으면 같은 서식(인쇄용 HTML)을 Cloudflare Browser Run REST `/pdf`로 만들어 R2에 저장한 뒤 준다. 한글 글꼴(Noto CJK)은 Browser Run에 기본으로 있다.
    - 실패하면 화면(`?pdf=fail`)으로 돌려보내고 '인쇄 → PDF로 저장'을 안내한다.
 
@@ -45,19 +45,19 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
   - 그라데이션 선, 맺음, 'YYYY년 M월 D일 발행'
   - 대표이사 손글씨 서명과 '( 인 )' 위 직인, '(주)에어터 대표이사', '담당자 {고객별 매니저}'
   - 왼쪽 아래 악수 아이콘 + MOU + 협약번호
-  - 오른쪽 아래 작업자 실루엣(검정 10%, 원본과 같은 밝기)과 기울인 작은 로고
+  - 오른쪽 아래 작업자 사진(불투명도 0.3)과 모자 위 기울인 작은 로고. 원본은 맺음·직인 위에 겹쳤지만, 사용자 요청("아래 사람 이미지 적절히 넣어라")으로 겹치지 않게 모서리에 둔다. 폭 66mm, compact는 58mm.
 - **글꼴**: 보낸 PDF와 같은 맑은 고딕, 자간 −1pt. 맑은 고딕이 없으면 Noto Sans KR(화면), Browser Run에서는 Noto Sans CJK KR로 그린다. 원본 pptx가 지정한 글꼴도 Noto Sans다.
 - **그림**
   - 코드(`functions/_lib/mou-assets.ts`): 띠·흰 로고·조항 아이콘·악수 아이콘·컬러 로고
-  - R2: `brand/mou-seal.png`(직인), `brand/mou-sign.png`(대표이사 서명), `brand/mou-photo.png`(작업자 실루엣 — 얼굴이 드러나는 사진 대신 모양만 남긴 그림)
-  - R2 그림은 공개 저장소에 두지 않는다. 공개 견본(`/mou/sample`)에는 실루엣만 싣고, 직인·서명은 점선 자리만 둔다.
+  - R2: `brand/mou-seal.png`(직인), `brand/mou-sign.png`(대표이사 서명), `brand/mou-photo.png`(작업자 사진)
+  - R2 그림은 공개 저장소에 두지 않는다. 공개 견본(`/mou/sample`)에는 작업자 사진만 싣고(사용자 허락), 직인·서명은 점선 자리만 둔다.
 - **문구**는 원래 협약서의 뜻을 그대로 두고 계약서 문체로 다듬은 것이다(사용자 승인).
   - 서문: '㈜에어터(이하 "회사")는 {기관명}(이하 "고객")의 … / **다음과 같이 에어컨 전문세척 단가를 보장한다.**'
   - 조항은 ①②로 나눈다.
   - 맺음: '회사는 위 내용을 성실히 이행할 것을 확인하며 본 협약서를 발행한다.'
 - **협약번호**는 `MOU-발행일-고객번호4자리`다. MOU 표시 아래에 작게 적는다. 발행 때 `doc_json.no`에 남는다.
 - **분량**
-  - 표 줄(머리 + 품목, 대수 표는 + 금액 줄)이 8줄을 넘으면 조항 간격을 줄인다(`compact`). 품명이 14자를 넘어 두 줄로 접히는 품목은 두 줄로 센다.
+  - 표 줄(머리 + 품목, 대수 표는 + 금액 줄)이 8줄을 넘으면 조항 간격을 줄인다(`compact`). 품명이 14자를 넘어 두 줄로 접히는 품목은 두 줄로 세고, 기관명이 12자를 넘으면(서문이 한 줄 늘어남) 한 줄 더 센다.
   - 기관명·품목명이 길어도 A4 한 장에 품목 11줄까지 들어간다.
 
 ## 설정
@@ -65,7 +65,7 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
 | 이름 | 종류 | 값 |
 |---|---|---|
 | `AI_DB` | D1 바인딩 | 이미 있음 (airtoradmin-ai) |
-| `FILES` | R2 바인딩 | 이미 있음 (airtoradmin-files). 직인 `brand/mou-seal.png`, 대표이사 서명 `brand/mou-sign.png`, 작업자 실루엣 `brand/mou-photo.png`, PDF `mou/v4/*.pdf` |
+| `FILES` | R2 바인딩 | 이미 있음 (airtoradmin-files). 직인 `brand/mou-seal.png`, 대표이사 서명 `brand/mou-sign.png`, 작업자 사진 `brand/mou-photo.png`, PDF `mou/v5/*.pdf` |
 | `BROWSER_RUN_TOKEN` | Secret | Cloudflare API 토큰. 권한 Account · Browser Run · Edit |
 | `CF_ACCOUNT_ID` | Text | Cloudflare 계정 ID |
 | `MOU_BASE_URL` | Text (선택) | 기본 `https://docs.airtor.co.kr` |
