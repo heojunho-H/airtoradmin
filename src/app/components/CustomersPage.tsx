@@ -70,6 +70,8 @@ import {
   type DealStateMap,
   type SyncResult,
 } from '../../lib/dealSync';
+import { autoGrade, customerTotalAmount, GRADE_NONE, GRADE_RULE_TEXT, gradeClass, gradeLabel, type GradeClass } from '../../lib/customerGrade';
+import type { GradeLocksState } from '../../lib/gradeLocks';
 
 interface WorkHistory {
   dealId?: number; // 영업관리 딜 ID — syncDealToCustomer가 채움 (legacy 엔트리는 없을 수 있음)
@@ -116,7 +118,8 @@ interface Contact {
 interface Customer {
   id: number;
   company: string; // 기업명
-  grade: 'S' | 'A' | 'B'; // 고객 등급
+  // 고객 등급 — 누적 거래 금액으로 자동 분류(src/lib/customerGrade.ts), 손으로 바꾸면 수동 고정. '미설정'·빈 값은 예전 저장값('그 외'와 같게 다룬다)
+  grade: GradeClass | '미설정' | '';
   customerStatus: '신규' | '재구매' | '충성고객'; // 고객 상태
   contactName: string; // 담당자명 (첫 번째 담당자, 하위 호환)
   contactPosition: string; // 담당자 직책 (첫 번째 담당자, 하위 호환)
@@ -229,6 +232,11 @@ export async function deleteCustomer(id: number): Promise<void> {
     body: JSON.stringify({ id }),
   });
   if (!response.ok) throw new Error('고객 삭제 실패');
+}
+
+/** 고객 추가 직후 서버 번호를 받기 전까지 쓰는 임시 번호(Date.now())인지 — 등급 자동 반영·수동 고정은 실제 번호를 받은 뒤에 한다 */
+export function isTempCustomerId(id: number): boolean {
+  return id >= 100_000_000_000;
 }
 
 export const initialCustomers: Customer[] = [
@@ -827,6 +835,8 @@ interface CustomersPageProps {
   /** 홈 '고객 정보 보기'로 들어올 때 바로 열 고객 — 열고 나면 onCustomerOpened 로 알린다 */
   openCustomerId?: number | null;
   onCustomerOpened?: () => void;
+  /** 등급 수동 고정(D1) — App 이 들고 있다. 없으면 등급 칸은 보기만 */
+  gradeLocks?: GradeLocksState;
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -902,7 +912,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null, openCustomerId = null, onCustomerOpened }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null, openCustomerId = null, onCustomerOpened, gradeLocks }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -1044,9 +1054,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       return null;
     }
   };
+  // 고객 추가 창의 등급 — 'auto' 면 금액 기준(새 고객은 작업이 없어 '그 외'), 직접 고르면 등록 뒤 수동 고정
+  const [newGradeChoice, setNewGradeChoice] = useState<'auto' | GradeClass>('auto');
   const [newCustomer, setNewCustomer] = useState<Partial<Customer>>({
     company: '',
-    grade: 'B',
+    grade: GRADE_NONE,
     status: '신규',
     industry: '',
     region: '',
@@ -1195,8 +1207,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
         bValue = b.workHistory && b.workHistory.length > 0 ? b.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : b.totalQuantity;
         break;
       case 'totalAmount':
-        aValue = a.workHistory && a.workHistory.length > 0 ? a.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : a.totalAmount;
-        bValue = b.workHistory && b.workHistory.length > 0 ? b.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : b.totalAmount;
+        aValue = customerTotalAmount(a);
+        bValue = customerTotalAmount(b);
         break;
       case 'nextManagementDate':
         aValue = new Date(a.nextManagementDate).getTime();
@@ -1289,14 +1301,14 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
 
     const exportData = sortedCustomers.map((c) => ({
       '기업명': c.company,
-      '등급': c.grade,
+      '등급': gradeClass(c.grade),
       '고객상태': c.customerStatus,
       '담당자명': c.contactName,
       '직책': c.contactPosition,
       '작업횟수': c.deals,
       '최근작업일': c.lastWorkDate,
       '총수량': c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.totalQuantity, 0) : c.totalQuantity,
-      '총금액': formatAmount(c.workHistory && c.workHistory.length > 0 ? c.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : c.totalAmount),
+      '총금액': formatAmount(customerTotalAmount(c)),
       '관리주기': getCycleLabel(c.managementCycle),
       '다음관리예정일': c.nextManagementDate,
       '리마인드상태': c.reminderStatus,
@@ -1364,6 +1376,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       : '';
     if (confirm(`${customerName} 고객을 삭제하시겠습니까?${note}`)) {
       setCustomers(customers.filter(customer => customer.id !== customerId));
+      if (gradeLocks?.locks.has(Number(customerId))) void gradeLocks.unlock(Number(customerId), { silent: true });
       onNotification?.(`[${customerName}] 고객이 삭제되었습니다`);
       deleteCustomer(Number(customerId))
         .then(() => { if (linked) onSynced?.(null); })
@@ -1512,10 +1525,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
 
     const today = new Date().toISOString().split('T')[0];
     const nextManagementDate = calculateNextManagementDate(today, newCustomer.managementCycle || 365);
+    const pickedGrade = newGradeChoice !== 'auto' && newGradeChoice !== autoGrade(0) ? newGradeChoice : null;
 
     const customerData: any = {
       company: newCustomer.company,
-      grade: newCustomer.grade || 'B',
+      // 새 고객은 작업이 없어 금액 기준 '그 외'. 등급을 직접 골랐으면 등록 뒤 수동 고정한다
+      grade: pickedGrade ?? GRADE_NONE,
       customerStatus: newCustomer.status || '신규',
       contactName: newCustomer.contactName || '',
       contactPosition: newCustomer.contactPosition || '',
@@ -1549,14 +1564,17 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     setCustomers([customer, ...customers]);
     setShowAddCustomerModal(false);
     onNotification?.(`[${customer.company}] 새 고객이 등록되었습니다`);
-    createCustomer(customerData).then(newId => {
+    createCustomer(customerData).then(async newId => {
+      // 고정을 먼저 저장한 뒤 실제 번호로 바꾼다 — 순서가 반대면 자동 반영(App.tsx)이 잠깐 금액 기준으로 되돌린다
+      if (pickedGrade && gradeLocks) await gradeLocks.lock({ id: newId, company: customerData.company }, pickedGrade);
       setCustomers(prev => prev.map(c => c.id === tempId ? { ...c, id: newId } : c));
       // 실제 id 확보 후 스티비 주소록 자동 push (실패 무시)
       syncOneQuietly({ ...customerData, id: newId }, applyNewsletterSyncResult);
     }).catch(err => console.error('고객 추가 API 실패:', err));
+    setNewGradeChoice('auto');
     setNewCustomer({
       company: '',
-      grade: 'B',
+      grade: GRADE_NONE,
       status: '신규',
       industry: '',
       region: '',
@@ -1582,9 +1600,44 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const getGradeBadge = (grade: string) => {
     return (
       <span className={`${BADGE.replace('font-medium', 'font-bold')} ${TONE[gradeTone(grade)]}`}>
-        {grade}
+        {gradeClass(grade)}
       </span>
     );
+  };
+
+  // 등급 자동 분류 + 수동 고정 — 규칙은 src/lib/customerGrade.ts, 고정은 D1(gradeLocks). 저장된 등급을 맞추는 일은 App.tsx 가 한다
+  const gradeLockOf = (customer: Pick<Customer, 'id'>) => gradeLocks?.locks.get(Number(customer.id));
+  const gradeEditable = gradeLocks?.status === 'ok';
+  const gradeBlockedReason = !gradeLocks
+    ? ''
+    : gradeLocks.status === 'unavailable'
+      ? `등급 고정 저장소에 연결하지 못해 지금은 등급을 바꿀 수 없습니다 — ${gradeLocks.error}`
+      : gradeLocks.status === 'loading'
+        ? '등급 정보를 불러오는 중입니다'
+        : '';
+  const gradeTitle = (customer: Customer): string => {
+    if (gradeBlockedReason) return gradeBlockedReason;
+    const amount = customerTotalAmount(customer);
+    const auto = autoGrade(amount);
+    const lock = gradeLockOf(customer);
+    const basis = `누적 거래 ${Math.round(amount).toLocaleString('ko-KR')}원`;
+    if (lock) return `수동 고정 (${[lock.setBy, lock.setAt.slice(0, 10)].filter(Boolean).join(' · ')}) — ${basis}, 금액 기준은 ${gradeLabel(auto)}. 눌러서 '자동'을 고르면 금액 기준으로 돌아갑니다`;
+    return `${basis} → ${gradeLabel(auto)} (자동). 눌러서 등급을 바꾸면 수동으로 고정됩니다`;
+  };
+  // 배지 옆 '수동' — 금액 기준과 다르게 손으로 고정한 고객
+  const manualMark = (customer: Pick<Customer, 'id'>) =>
+    gradeLockOf(customer) ? <span className="text-xs font-medium text-slate-500">수동</span> : null;
+  // 등급 선택 — '자동'이나 금액 기준과 같은 값을 고르면 고정을 풀고, 다른 값을 고르면 수동 고정
+  const changeGrade = (customer: Customer, value: string) => {
+    setEditingCell(null);
+    const id = Number(customer.id);
+    if (!gradeLocks || gradeLocks.status !== 'ok' || isTempCustomerId(id)) return;
+    const auto = autoGrade(customerTotalAmount(customer));
+    if (value === 'auto' || value === auto) {
+      if (gradeLocks.locks.has(id)) void gradeLocks.unlock(id);
+      return;
+    }
+    void gradeLocks.lock({ id, company: customer.company }, gradeClass(value));
   };
 
   const getCustomerStatusBadge = (status: string) => {
@@ -1691,7 +1744,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     let gradeAmount = 0;
     let allAmount = 0;
     for (const c of customers) {
-      const amount = Number(c.totalAmount) || 0;
+      const amount = customerTotalAmount(c);
       allAmount += amount;
       if (c.grade === gradeFilter) gradeAmount += amount;
     }
@@ -1929,7 +1982,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
             <MobileCard key={customer.id} onClick={() => setSelectedCustomer(customer)}>
               <MobileCardRow className="mb-2">
                 <MobileCardBadge tone={gradeTone(customer.grade)}>
-                  {['S', 'A', 'B'].includes(customer.grade) ? `${customer.grade}등급` : '그 외'}
+                  {gradeLabel(customer.grade)}
+                  {gradeLockOf(customer) ? ' · 수동' : ''}
                 </MobileCardBadge>
                 <MobileCardBadge tone={customerStatusTone(customer.customerStatus)}>
                   {customer.customerStatus}
@@ -1964,7 +2018,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 />
                 <MobileCardField
                   label="총 금액"
-                  value={<span className="font-semibold text-slate-900 tabular-nums">{formatAmount(customer.workHistory && customer.workHistory.length > 0 ? customer.workHistory.reduce((sum, w) => sum + w.quotationAmount, 0) : customer.totalAmount)}</span>}
+                  value={<span className="font-semibold text-slate-900 tabular-nums">{formatAmount(customerTotalAmount(customer))}</span>}
                 />
               </div>
               
@@ -1995,7 +2049,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
                   기업명
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600" title={`${GRADE_RULE_TEXT}. 등급을 손으로 바꾸면 '수동'으로 고정됩니다`}>
                   고객 등급
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
@@ -2082,18 +2136,19 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     className="px-4 py-4 relative"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditingCell({ customerId: customer.id, field: 'grade' });
+                      if (gradeEditable) setEditingCell({ customerId: customer.id, field: 'grade' });
                     }}
                   >
                     {editingCell?.customerId === customer.id && editingCell?.field === 'grade' ? (
                       <div className="relative">
                         <select
                           className={`${BADGE.replace('font-medium', 'font-bold')} ${TONE[gradeTone(customer.grade)]} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                          value={customer.grade}
-                          onChange={(e) => updateCustomerField(customer.id, 'grade', e.target.value)}
+                          value={gradeLockOf(customer) ? gradeClass(customer.grade) : 'auto'}
+                          onChange={(e) => changeGrade(customer, e.target.value)}
                           onBlur={() => setEditingCell(null)}
                           autoFocus
                         >
+                          <option value="auto">자동 ({autoGrade(customerTotalAmount(customer))})</option>
                           <option value="S">S</option>
                           <option value="A">A</option>
                           <option value="B">B</option>
@@ -2101,8 +2156,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                         </select>
                       </div>
                     ) : (
-                      <div className="cursor-pointer hover:opacity-70 transition-opacity">
+                      <div
+                        className={`inline-flex items-center gap-1.5 ${gradeEditable ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+                        title={gradeTitle(customer)}
+                      >
                         {getGradeBadge(customer.grade)}
+                        {manualMark(customer)}
                       </div>
                     )}
                   </td>
@@ -2159,11 +2218,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-sm font-semibold text-slate-900 tabular-nums">
-                      {formatAmount(
-                        customer.workHistory && customer.workHistory.length > 0
-                          ? customer.workHistory.reduce((sum, work) => sum + work.quotationAmount, 0)
-                          : customer.totalAmount
-                      )}
+                      {formatAmount(customerTotalAmount(customer))}
                     </span>
                   </td>
                   <td className="px-4 py-4">
@@ -2272,7 +2327,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 <h2 className="text-xl font-semibold text-slate-900">
                   고객 상세 정보 {isEditing && <span className="text-blue-600 text-sm">(편집 중)</span>}
                 </h2>
-                {getGradeBadge(selectedCustomer.grade)}
+                {/* 등급은 목록 상태가 최신이다(자동 반영·수동 고정이 목록을 바꾼다) */}
+                {getGradeBadge(customers.find((c) => c.id === selectedCustomer.id)?.grade ?? selectedCustomer.grade)}
+                {manualMark(selectedCustomer)}
               </div>
               <button
                 onClick={() => {
@@ -3200,10 +3257,12 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">고객 등급</label>
                       <select
-                        value={newCustomer.grade || 'B'}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, grade: e.target.value })}
+                        value={newGradeChoice}
+                        onChange={(e) => setNewGradeChoice(e.target.value === 'auto' ? 'auto' : gradeClass(e.target.value))}
+                        title={`${GRADE_RULE_TEXT}. 등급을 직접 고르면 수동으로 고정됩니다`}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="auto">자동 (금액 기준)</option>
                         <option value="S">S등급</option>
                         <option value="A">A등급</option>
                         <option value="B">B등급</option>

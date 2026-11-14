@@ -382,7 +382,7 @@ function ItemDetail({ view, group, groupViews, data, userName, disabled, runnabl
             <span className="mt-1 block text-[13px] text-slate-500">
               {customer ? (
                 <>
-                  기존 고객 · {/^[SAB]$/.test(customer.grade) ? `${customer.grade}등급` : '등급 미설정'}
+                  기존 고객 · {/^[SAB]$/.test(customer.grade) ? `${customer.grade}등급` : '그 외'}
                   {customer.accountManager ? ` · 책임자 ${customer.accountManager}` : ''}
                 </>
               ) : (

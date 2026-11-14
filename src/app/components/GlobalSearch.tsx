@@ -71,7 +71,7 @@ export function GlobalSearch({ customers, deals, projects, onOpenCustomer, onOpe
         kind: 'customer' as const,
         id: Number(c.id),
         title: String(c.company || '-'),
-        sub: [c.grade && c.grade !== '미설정' ? `${c.grade}등급` : '', c.contactName, c.accountManager ? `담당 ${c.accountManager}` : '']
+        sub: [/^[SAB]$/.test(String(c.grade)) ? `${c.grade}등급` : '', c.contactName, c.accountManager ? `담당 ${c.accountManager}` : '']
           .filter(Boolean)
           .join(' · '),
       }));

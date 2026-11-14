@@ -12,6 +12,8 @@
 //   스티비에서 받은 광고 동의를 덮어쓰지 않도록 키를 뺀다. 동의 관리는 스티비 UI에서만 한다.
 // 팔로업 트리거가 쓰는 개인화 키(work_date_kr 등)는 서버가 보낸다 — docs/stibee-emails/README.md
 
+import { gradeClass } from './customerGrade';
+
 export type NewsletterStatus = 'none' | 'subscribed' | 'unsubscribed' | 'bounced';
 
 export const NEWSLETTER_STATUS_LABEL: Record<NewsletterStatus, string> = {
@@ -117,7 +119,7 @@ export function toSubscribers(customer: CustomerLike): StibeeSubscriberPayload[]
         name: c.name || '',
         position: c.position || '',
         company: customer.company || '',
-        grade: customer.grade || '',
+        grade: gradeClass(customer.grade),
         customer_status: customer.customerStatus || '',
         account_manager: customer.accountManager || '',
         last_work_date: customer.lastWorkDate || '',

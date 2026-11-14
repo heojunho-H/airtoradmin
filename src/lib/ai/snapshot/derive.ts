@@ -4,6 +4,7 @@
 // 고객 nextManagementDate(생성 때만 계산), 프로젝트 aiApplied(더 이상 켜지지 않음).
 
 import { normalizeCompanyName } from '../../company';
+import { customerTotalAmount, gradeClass } from '../../customerGrade';
 import { ROLE_ORDER, type RoleCode } from '../../roles';
 import { daysBetween } from '../format';
 import type { AiDatasets } from '../types';
@@ -41,8 +42,9 @@ export interface Ctx {
   jobByDealId: Map<number, Job>;
 }
 
+/** 고객 등급 — 누적 거래 금액으로 자동 분류된 값(src/lib/customerGrade.ts). S/A/B 가 아니면 '그 외'(100만원 미만 또는 담당자가 수동으로 뺀 고객) */
 export function gradeOf(v: unknown): string {
-  return v === 'S' || v === 'A' || v === 'B' ? v : '미설정';
+  return gradeClass(v);
 }
 
 export function buildCtx(ds: AiDatasets, today: string): Ctx {
@@ -253,13 +255,14 @@ export function customerFacts(ctx: Ctx): CustomerFact[] {
     if (list) list.push(j);
     else jobsByCustomer.set(j.customer, [j]);
   }
-  const amounts = ctx.ds.customers.map((c) => num(c.totalAmount)).filter((a) => a > 0).sort((a, b) => b - a);
+  // 누적 거래 = 작업이력 견적 합계 (저장된 totalAmount 는 작업이력과 어긋난 고객이 있다 — 고객관리 표·등급과 같은 기준)
+  const amounts = ctx.ds.customers.map((c) => customerTotalAmount(c)).filter((a) => a > 0).sort((a, b) => b - a);
   const topCut = amounts.length ? amounts[Math.max(0, Math.ceil(amounts.length * 0.2) - 1)] : Infinity;
 
   return ctx.ds.customers.map((c) => {
     const jobs = (jobsByCustomer.get(c) ?? []).slice().sort((a, b) => b.workDate.localeCompare(a.workDate));
     const jobCount = jobs.length || num(c.deals);
-    const amount = num(c.totalAmount);
+    const amount = customerTotalAmount(c);
     const lastWork = ymd(c.lastWorkDate) || jobs.find((j) => j.workDate)?.workDate || '';
     const cycle = num(c.managementCycle) || 365;
     const nextMgmt = nextManagementDate(lastWork, cycle);

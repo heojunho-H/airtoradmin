@@ -32,6 +32,7 @@
 // 기존 구독자의 구독 상태(status)는 스티비가 갱신하지 않으므로 수신거부자가 다시 구독되지 않는다.
 
 import { normalizeCompanyName } from '../../src/lib/company';
+import { gradeClass } from '../../src/lib/customerGrade';
 import {
   BATCH_MAX,
   CUSTOMERS_API,
@@ -359,7 +360,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
           status: 'subscribed', // 새 구독자에만 적용 — 기존 구독자의 상태는 스티비가 바꾸지 않는다
           fields: {
             name: r.name, position: r.position, company: item.company,
-            grade: c?.grade || '', customer_status: c?.customerStatus || '',
+            grade: gradeClass(c?.grade), customer_status: c?.customerStatus || '',
             account_manager: c?.accountManager || '', last_work_date: c?.lastWorkDate || item.workDate,
           },
         });

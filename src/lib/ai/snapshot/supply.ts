@@ -35,7 +35,7 @@ export function supplySections(ctx: Ctx, managers: ManagerFact[], subs: SubFact[
       manwon(m.wonAmount),
       `${m.urgent}건`,
       `${m.customers}곳`,
-      ['S', 'A', 'B', '미설정'].map((g) => `${g} ${m.byGrade[g] ?? 0}`).join('/'),
+      ['S', 'A', 'B', '그 외'].map((g) => `${g} ${m.byGrade[g] ?? 0}`).join('/'),
       `${m.overdue}곳`,
       pct(ratio(m.repeatCustomers, m.customers)),
       `${m.jobs90}건`,
@@ -130,7 +130,7 @@ export function supplySections(ctx: Ctx, managers: ManagerFact[], subs: SubFact[
       '- 실적은 딜(담당 고객책임자)·고객(담당)·작업 이력에서 다시 계산했다. 수주율 = 결정 딜 수주율(성공 ÷ (성공+실패)).',
     ], [
       table('고객책임자 실적', '성공 금액 큰 순',
-        ['이름', '상태', '권역', '담당 딜', '성공', '실패', '진행중', '수주율', '성공 금액', 'D-3 이내 딜', '담당 고객', '등급(S/A/B/미설정)', '기한 초과 고객', '재구매 고객 비중', '최근 90일 작업', '예정 작업'],
+        ['이름', '상태', '권역', '담당 딜', '성공', '실패', '진행중', '수주율', '성공 금액', 'D-3 이내 딜', '담당 고객', '등급(S/A/B/그 외)', '기한 초과 고객', '재구매 고객 비중', '최근 90일 작업', '예정 작업'],
         managerRows, 30),
     ]),
     section(`작업팀장 (${subs.length}명)`, [

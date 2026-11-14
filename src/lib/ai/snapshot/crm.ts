@@ -1,11 +1,12 @@
 // 고객관리(CRM) 전문가 스냅샷 — 다시 계산한 관리일, RFM 세그먼트, 재구매 간격, 교차판매 후보, 사후 관리.
 
+import { GRADE_RULE_TEXT } from '../../customerGrade';
 import { daysBetween } from '../format';
 import { addDays, cell, eok, manwon, pct, ratio, section, table, type Section } from './common';
 import { isLowUsage, SEGMENT_RULES, usageOf, type Ctx, type CustomerFact } from './derive';
 
 const SEGMENT_ORDER = ['VIP', '충성', '재구매', '신규', '이탈 위험', '관리 지연', '휴면', '작업 이력 없음'];
-const GRADE_ORDER = ['S', 'A', 'B', '미설정'];
+const GRADE_ORDER = ['S', 'A', 'B', '그 외'];
 
 function gradeRank(g: string) {
   const i = GRADE_ORDER.indexOf(g);
@@ -28,7 +29,7 @@ export function crmSections(ctx: Ctx, customers: CustomerFact[]): Section[] {
   }
   const gradeLine = GRADE_ORDER.map((g) => {
     const list = customers.filter((c) => c.grade === g);
-    return `${g === '미설정' ? '등급 미설정' : `${g}등급`} ${list.length}곳(매출 ${pct(ratio(list.reduce((s, c) => s + c.amount, 0), total))})`;
+    return `${g === '그 외' ? '그 외' : `${g}등급`} ${list.length}곳(매출 ${pct(ratio(list.reduce((s, c) => s + c.amount, 0), total))})`;
   }).join(', ');
   const statuses = new Map<string, number>();
   for (const c of customers) statuses.set(c.status, (statuses.get(c.status) ?? 0) + 1);
@@ -68,7 +69,7 @@ export function crmSections(ctx: Ctx, customers: CustomerFact[]): Section[] {
     .map(([m, list]) => [
       cell(m, 10),
       `${list.length}곳`,
-      GRADE_ORDER.map((g) => `${g === '미설정' ? '미설정' : g} ${list.filter((c) => c.grade === g).length}`).join('/'),
+      GRADE_ORDER.map((g) => `${g} ${list.filter((c) => c.grade === g).length}`).join('/'),
       `${list.filter((c) => c.daysToMgmt != null && c.daysToMgmt < 0).length}곳`,
       pct(ratio(list.filter((c) => c.jobCount >= 2).length, list.length)),
       manwon(list.reduce((s, c) => s + c.amount, 0)),
@@ -114,7 +115,7 @@ export function crmSections(ctx: Ctx, customers: CustomerFact[]): Section[] {
             table('리포트 미발송 작업', '작업일 최근순', ['작업일', '경과', '기업명', '서비스', '금액', '담당', '리마인드 발송'],
               noReport.map((j) => [j.workDate, `${daysBetween(j.workDate, ctx.today)}일`, cell(j.company), cell(j.service, 14), manwon(j.amount), cell(j.manager, 10), `${j.remindersSent}회`]), 40),
           ]),
-      table('담당 책임자별 고객', '고객 많은 순', ['담당', '고객 수', '등급(S/A/B/미설정)', '기한 초과', '재구매 고객 비중', '누적 거래'], managerRows, 30),
+      table('담당 책임자별 고객', '고객 많은 순', ['담당', '고객 수', '등급(S/A/B/그 외)', '기한 초과', '재구매 고객 비중', '누적 거래'], managerRows, 30),
     ]),
     section('고객 목록', [], [
       table('고객 목록', '누적 거래 큰 순', ['기업명', '등급', '상태', '세그먼트', '작업 횟수', '누적 거래', '최근 작업일', '관리 주기', '다음 관리일', '이용 서비스', '담당', '지역'],
@@ -126,7 +127,7 @@ export function crmSections(ctx: Ctx, customers: CustomerFact[]): Section[] {
     section('데이터 주의사항', [
       `- RFM 세그먼트 규칙: ${SEGMENT_RULES.join(' / ')}. 금액 상위 20% = 누적 거래 기준.`,
       '- 저장된 "다음 관리 예정일"은 고객 생성 때만 계산되고 갱신되지 않아 쓰지 않았다. 위의 다음 관리일은 다시 계산한 값이다.',
-      '- 등급은 사람이 직접 지정한다. 수주로 자동 생성된 고객은 "미설정"이다. 고객 업종 정보는 없다.',
+      `- 등급은 ${GRADE_RULE_TEXT}. 담당자가 손으로 고정한 고객은 금액과 등급이 다를 수 있다. 고객 업종 정보는 없다.`,
       '- 누적 거래·작업 금액은 VAT 포함 견적 기준이다. 연락처는 넣지 않았다.',
     ]),
   ];

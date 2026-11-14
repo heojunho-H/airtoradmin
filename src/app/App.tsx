@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, TrendingUp, Settings, Menu, X, Bell, Package, Calculator, LogOut, CheckCheck, AlertCircle, UserPlus, CalendarClock, FileEdit, Sparkles, House, ListChecks, Wind, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { CustomersPage, fetchCustomers } from './components/CustomersPage';
+import { CustomersPage, fetchCustomers, isTempCustomerId, updateCustomerFields } from './components/CustomersPage';
 import { SalesPage, fetchDeals, type SalesViewState } from './components/SalesPage';
 import { SupplyChainPage, fetchManagers, fetchSubcontractors, updateManager, updateSubcontractor } from './components/SupplyChainPage';
 import { ProfitPage, fetchProjects, fetchLaborRates, type Project, type LaborRate } from './components/ProfitPage';
@@ -15,6 +15,8 @@ import { useTodoRecords } from '../lib/home/useTodoRecords';
 import type { IntakeDataChange } from './components/ai/QuoteIntakePanel';
 import { buildDealStateMap, currentWriteEpoch, hasSynced, linkedDealId, type SyncResult } from '../lib/dealSync';
 import { managerActivities, sameActivities, subcontractorActivities } from '../lib/activitySync';
+import { customerTotalAmount, effectiveGrade, gradeClass } from '../lib/customerGrade';
+import { canPersistGrades, useGradeLocks } from '../lib/gradeLocks';
 
 // AI 어시스턴트·설정은 첫 방문 때 내려받는다 (마크다운 렌더러 포함 별도 청크)
 const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
@@ -232,6 +234,8 @@ export default function App() {
     () => (homeData ? homeData.todos.filter((t) => !todoState.records.has(t.key)) : []),
     [homeData, todoState.records],
   );
+  // 고객 등급 수동 고정(D1) — 아래 등급 자동 반영과 고객관리 화면이 함께 쓴다
+  const gradeLocks = useGradeLocks(userName, (message) => addNotification('admin_action', message));
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -360,6 +364,48 @@ export default function App() {
       updateSubcontractor(sub).catch(err => console.error('작업팀장 활동내역 동기화 API 실패:', err));
     });
   }, [customers, subcontractorsReady]);
+
+  // 고객 등급 자동 분류 — 누적 거래 금액 기준(src/lib/customerGrade.ts), 수동 고정한 고객은 고정한 등급.
+  // 저장된 등급과 구분(S/A/B/그 외)이 다른 고객만 화면 상태를 바꾸고 그 고객만 저장한다 (위 활동내역과 같은 '바뀐 것만 PUT').
+  // 수주로 새 고객이 생기거나 작업 금액이 바뀌면 고객 목록을 다시 불러올 때 여기서 등급이 맞춰진다.
+  // 고정 목록을 정상으로 불러온 뒤에만 돈다 — 못 불러왔는데 돌면 수동 고정한 고객을 금액 기준으로 덮어쓴다.
+  // 저장은 운영 주소에서만 한다(canPersistGrades) — 프리뷰·로컬은 고정 저장소가 운영과 달라 화면 표시만 맞춘다.
+  const gradeSavingRef = useRef(new Set<string>()); // 저장 중인 "고객:등급"
+  const gradeFailedRef = useRef(new Set<string>()); // 이 세션에서 저장에 실패한 것 — 다시 시도하지 않는다 (화면 표시는 계속 맞춘다)
+  useEffect(() => {
+    if (gradeLocks.status !== 'ok' || !customers.length) return;
+    const changes = new Map<any, { grade: string; from: string; company: string; amount: number; locked: boolean }>();
+    for (const c of customers) {
+      const id = Number(c.id);
+      if (!Number.isInteger(id) || id <= 0 || isTempCustomerId(id)) continue;
+      const lock = gradeLocks.locks.get(id);
+      const want = effectiveGrade(c, lock?.grade);
+      if (gradeClass(c.grade) !== want) {
+        changes.set(c.id, { grade: want, from: gradeClass(c.grade), company: String(c.company || '-'), amount: customerTotalAmount(c), locked: !!lock });
+      }
+    }
+    if (!changes.size) return;
+    setCustomers((prev) => prev.map((c) => (changes.has(c.id) ? { ...c, grade: changes.get(c.id)!.grade } : c)));
+    if (!canPersistGrades()) return;
+    changes.forEach((ch, rawId) => {
+      const id = Number(rawId);
+      const key = `${id}:${ch.grade}`;
+      if (gradeSavingRef.current.has(key) || gradeFailedRef.current.has(key)) return;
+      gradeSavingRef.current.add(key);
+      updateCustomerFields(id, { grade: ch.grade } as any)
+        .then(() => {
+          // 손으로 고정한 변경은 본인이 방금 한 일이라 알리지 않는다
+          if (!ch.locked) {
+            addNotification('admin_action', `[${ch.company}] 등급 ${ch.from} → ${ch.grade} 자동 분류 (누적 거래 ${Math.round(ch.amount / 10_000).toLocaleString('ko-KR')}만원)`);
+          }
+        })
+        .catch((err) => {
+          gradeFailedRef.current.add(key);
+          console.error('고객 등급 자동 반영 API 실패:', err);
+        })
+        .finally(() => gradeSavingRef.current.delete(key));
+    });
+  }, [customers, gradeLocks.locks, gradeLocks.status]);
 
   // 모바일 화면 감지
   useEffect(() => {
@@ -628,7 +674,7 @@ export default function App() {
             />
           )}
           {currentPage === 'todos' && <TodoPage todos={homeData?.todos ?? []} todoState={todoState} loading={!homeData} onOpenCustomer={openCustomer} onOpenDeal={openDeal} />}
-          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} openCustomerId={customerFocusId} onCustomerOpened={() => setCustomerFocusId(null)} />}
+          {currentPage === 'customers' && <CustomersPage externalCustomersState={[customers, setCustomers]} subcontractorNames={subcontractors.map(s => s.name)} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} onNavigateToProfit={() => setCurrentPage('profit')} onSynced={handleSynced} dealStates={dealStates} openCustomerId={customerFocusId} onCustomerOpened={() => setCustomerFocusId(null)} gradeLocks={gradeLocks} />}
           {currentPage === 'sales' && <SalesPage onDealSuccess={handleDealSuccess} onSynced={handleSynced} linkedDealIds={linkedDealIds} dealCustomerIds={dealCustomerIds} externalDealsState={[deals, setDeals]} externalDateFilterState={[salesDateFilter, setSalesDateFilter]} externalViewState={[salesViewState, setSalesViewState]} customerManagerNames={managers.map(m => m.name)} onNotification={handleAdminNotification} openDealId={dealFocusId} onDealOpened={() => setDealFocusId(null)} />}
           {currentPage === 'supplychain' && <SupplyChainPage externalManagersState={[managers, setManagers]} externalSubcontractorsState={[subcontractors, setSubcontractors]} onNotification={handleAdminNotification} />}
           {currentPage === 'profit' && <ProfitPage externalProjectsState={[projects, setProjects]} externalLaborRatesState={[laborRates, setLaborRates]} customers={customers} subcontractors={subcontractors} onNotification={handleAdminNotification} dealStates={dealStates} openProjectId={projectFocusId} onProjectOpened={() => setProjectFocusId(null)} />}

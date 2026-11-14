@@ -78,6 +78,11 @@ export default defineConfig({
         target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
         changeOrigin: true,
       },
+      // 고객 등급 '수동 고정' (D1 customer_grade_locks) — 위와 같은 Function
+      '/api/customer-grades': {
+        target: process.env.AI_FUNCTIONS_TARGET || 'https://airtoradmin.pages.dev',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://airtor.co.kr',
         changeOrigin: true,
