@@ -14,7 +14,7 @@ import { LOGO_COLOR_PNG } from './mou-assets';
 
 export const DEFAULT_MOU_BASE_URL = 'https://docs.airtor.co.kr';
 /** 서식을 바꾸면 올린다 — R2 의 PDF 캐시 키가 바뀌어 새 서식으로 다시 만든다 */
-export const MOU_VERSION = 'v2';
+export const MOU_VERSION = 'v3';
 export const SEAL_R2_KEY = 'brand/mou-seal.png';
 /** 적용 기간이 끝난 뒤에도 링크를 여는 날 수 */
 export const MOU_GRACE_DAYS = 30;
@@ -401,184 +401,181 @@ const COMPANY = {
 };
 
 const STYLE = `
-:root{--ink:#1f2329;--sub:#3a4250;--muted:#6b7480;--hair:#dde2e8;--rule:#1f2329;--blue:#1a4c9c;--bg:#eef1f5}
+:root{--ink:#111;--line:#3a3a3a;--head:#dce6f2;--bg:#eef1f5;--blue:#1a4c9c}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR','Noto Sans CJK KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif}
-.serif{font-family:'Noto Serif KR','Noto Serif CJK KR','AppleMyungjo','Batang',serif}
-.title,.pre,.art p,.closing,.terms dd,.top-title,.top-meta,.doc-foot{word-break:keep-all;overflow-wrap:anywhere}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic','맑은 고딕','Noto Sans KR','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif}
 .top{max-width:826px;margin:0 auto;padding:24px 16px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
 .top-text{flex:1 1 260px;min-width:0}
-.top-title{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px}
-.top-meta{margin:4px 0 0;font-size:14px;color:var(--sub)}
+.top-title{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px;word-break:keep-all}
+.top-meta{margin:4px 0 0;font-size:14px;color:#3a4250;word-break:keep-all}
 .top-actions{display:flex;gap:8px}
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #c4ccd6;background:#fff;color:var(--ink);font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
 .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
 .btn:focus-visible{outline:3px solid #8fb3e8;outline-offset:2px}
 .notice{flex-basis:100%;margin:0;font-size:14px;line-height:1.6;color:#8a3b12}
-.sheet-wrap{padding:0 16px 24px}
-.sheet{position:relative;max-width:794px;min-height:1123px;margin:0 auto;padding:52px 64px 104px;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.12)}
-.lh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding-bottom:14px;border-bottom:1.5px solid var(--blue)}
-.lh-brand{display:flex;align-items:center;gap:12px}
-.lh-brand img{display:block;height:26px;width:auto}
-.lh-div{width:1px;height:18px;background:#c8ced6}
-.lh-tag{font-size:13px;font-weight:500;color:var(--sub);letter-spacing:.02em;white-space:nowrap}
-.lh-meta{margin:0;display:grid;grid-template-columns:auto auto;gap:2px 10px;font-size:12px;line-height:1.5;text-align:right}
-.lh-meta dt{color:var(--muted)}
-.lh-meta dd{margin:0;color:var(--ink);font-variant-numeric:tabular-nums}
-.stamp{display:inline-block;margin:0 0 6px;border:1.5px solid #e5484d;color:#e5484d;font-size:12px;font-weight:700;letter-spacing:.3em;padding:1px 4px 1px 8px}
-.lh-right{text-align:right}
-.title{margin:44px 0 0;text-align:center;font-weight:600;font-size:28px;letter-spacing:.06em}
-.subtitle{margin:8px 0 0;text-align:center;font-size:11px;letter-spacing:.28em;color:var(--muted)}
-.pre{margin:34px 0 0;font-size:15px;line-height:1.85}
-.terms{margin:22px 0 0;display:grid;grid-template-columns:auto 1fr auto 1fr;border-top:1.2px solid var(--rule)}
-.terms dt,.terms dd{margin:0;padding:10px 0;border-bottom:1px solid var(--hair)}
-.terms dt{padding-right:18px;font-size:13px;font-weight:700;color:var(--sub);white-space:nowrap}
-.terms dd{padding-right:22px;font-size:14px}
-.terms small{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
-.sec-h{display:flex;justify-content:space-between;align-items:baseline;margin:32px 0 8px}
-.sec-h h3{margin:0;font-size:14.5px;font-weight:700}
-.sec-h span{font-size:12px;color:var(--muted)}
-.tbl{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;border-top:1.6px solid var(--rule);border-bottom:1.6px solid var(--rule)}
-th{padding:9px 8px;border-bottom:1px solid var(--rule);font-size:12px;font-weight:700;color:var(--sub);text-align:right;white-space:nowrap}
-td{padding:10px 8px;border-bottom:1px solid var(--hair);text-align:right;white-space:nowrap}
-th.l,td.l{text-align:left;padding-left:2px}
-td.l{font-weight:500;white-space:normal;word-break:keep-all}
-tr.adj td{color:var(--muted)}
-tr.sum td{font-weight:700;border-top:1px solid var(--rule);border-bottom:0}
-tr.sum + tr.sum td{border-top:1px solid var(--hair)}
-.src{margin:7px 0 0;font-size:11.5px;color:var(--muted);text-align:right}
-.arts{margin:32px 0 0}
-.art + .art{margin-top:18px}
-.art h3{margin:0;font-size:14.5px;font-weight:700}
-.art h3 .no{color:var(--blue);margin-right:6px}
-.art p{margin:7px 0 0;font-size:14.5px;line-height:1.8}
-.art p.cl{margin-top:4px;padding-left:1.4em;text-indent:-1.4em}
-.closing{margin:34px 0 0;text-align:center;font-size:14.5px;line-height:1.8}
-.issuer{margin:26px 0 0;text-align:center}
-.issuer .date{font-size:16px;letter-spacing:.04em}
-.issuer .ceo{margin-top:26px;font-size:18px;letter-spacing:.04em}
-.issuer .ceo b{font-weight:600;letter-spacing:.06em;margin-right:10px}
-.issuer .mgr{margin-top:24px;font-size:13px;color:var(--sub)}
-.seal{position:relative;display:inline-block;margin-left:14px;color:#8a929c;font-size:15px;letter-spacing:0}
-.seal img{position:absolute;left:50%;top:50%;width:64px;height:64px;transform:translate(-35%,-50%) rotate(-4deg)}
-.seal.ph::after{content:'';position:absolute;left:50%;top:50%;width:54px;height:54px;border:1.5px dashed #c0c6ce;border-radius:50%;transform:translate(-50%,-50%)}
-.doc-foot{position:absolute;left:64px;right:64px;bottom:34px;margin:0;padding-top:10px;border-top:1px solid var(--hair);font-size:11px;line-height:1.6;color:var(--muted);text-align:center;word-break:keep-all}
-.foot{max-width:826px;margin:0 auto;padding:0 16px 40px;font-size:13px;color:var(--muted);line-height:1.7}
+.foot{max-width:826px;margin:0 auto;padding:0 16px 40px;font-size:13px;color:#6b7480;line-height:1.7}
 .foot p{margin:0}
 .foot a{color:inherit}
+.sheet-wrap{padding:0 16px 24px}
+.sheet{position:relative;max-width:794px;min-height:1123px;margin:0 auto;padding:48px 56px 56px;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.12);font-size:13px;line-height:1.5}
+.doc-head{position:relative;display:flex;align-items:center;justify-content:center;min-height:48px}
+.doc-head img{position:absolute;left:0;top:50%;transform:translateY(-50%);display:block;height:30px;width:auto}
+.doc-title{margin:0;font-size:27px;font-weight:700;letter-spacing:.55em;padding-left:.55em;white-space:nowrap}
+.stamp{position:absolute;right:0;top:50%;transform:translateY(-50%);border:2px solid #d92d20;color:#d92d20;font-size:13px;font-weight:700;letter-spacing:.4em;padding:2px 4px 2px 9px}
+.parties{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:26px 0 0}
+.to{flex:1 1 0;min-width:0;margin:0}
+.to div{display:flex;gap:10px;padding:2px 0}
+.to dt{flex:0 0 auto}
+.to dd{margin:0;word-break:keep-all;overflow-wrap:anywhere}
+.to .rcpt{font-size:15px;font-weight:700;padding-bottom:8px}
+.to .rcpt dt{margin-right:8px}
+.sup{flex:0 0 52%;border-collapse:collapse;font-size:12px}
+.sup th,.sup td{border:1px solid var(--line);padding:6px 8px;height:30px}
+.sup th.v{width:30px;padding:0;text-align:center;font-weight:400;line-height:2}
+.sup th.k{width:76px;font-weight:400;text-align:center}
+.sup td{word-break:keep-all;overflow-wrap:anywhere}
+.sup td.b{font-weight:700}
+.lb{display:inline-block;width:3.9em;text-align:justify;text-align-last:justify;white-space:nowrap}
+.pre{margin:22px 0 0;word-break:keep-all;overflow-wrap:anywhere}
+.hl{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin:8px 0 0;padding:11px 16px;border:1px solid var(--line)}
+.hl-k{text-align:justify;text-align-last:justify;min-width:92px}
+.hl b{font-size:17px}
+.hl span.n{font-size:12px}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 5px;font-size:12.5px;font-weight:700}
+.sec span{font-weight:400;font-size:11.5px}
+.tbl{overflow-x:auto}
+.price{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.price th,.price td{border:1px solid var(--line);padding:9px 8px;text-align:center;white-space:nowrap}
+.price th{background:var(--head);font-size:12px;font-weight:700;padding:7px 6px}
+.price td.l{font-weight:700;white-space:normal;word-break:keep-all}
+.price td.t{text-align:right;font-weight:700}
+.price tr.sum td{background:var(--head);font-weight:700}
+.price tr.adj td{font-weight:400}
+.src{margin:4px 0 0;font-size:11.5px;text-align:right}
+.arts{margin:0;padding:12px 16px;border:1px solid var(--line)}
+.art + .art{margin-top:8px}
+.art h3{margin:0;font-size:13px;font-weight:700}
+.art p{margin:3px 0 0;line-height:1.65;word-break:keep-all;overflow-wrap:anywhere}
+.art p.cl{padding-left:1.35em;text-indent:-1.35em}
+.closing{margin:20px 0 0;text-align:center;word-break:keep-all}
+.date{margin:16px 0 0;text-align:center;font-size:14px;letter-spacing:.08em}
+.party{width:340px;max-width:100%;margin:18px 0 0 auto}
+.party div{display:flex;align-items:center;gap:10px;padding:3px 0}
+.party dt{flex:0 0 auto}
+.party dd{margin:0;flex:1 1 auto;word-break:keep-all}
+.party .gap{display:inline-block;width:110px}
+.party .r-ceo{margin-top:12px}
+.seal{position:relative;display:inline-block;color:#8a929c;font-size:13px}
+.seal img{position:absolute;left:50%;top:50%;width:62px;height:62px;transform:translate(-50%,-40%) rotate(-4deg)}
+.seal.ph::after{content:'';position:absolute;left:50%;top:50%;width:54px;height:54px;border:1.5px dashed #c0c6ce;border-radius:50%;transform:translate(-50%,-50%)}
 @media screen and (max-width:640px){
   .top-actions{width:100%}
   .top-actions .btn{flex:1}
-  .sheet{min-height:0;padding:26px 20px 24px}
-  .lh{flex-direction:column;align-items:flex-start;gap:12px}
-  .lh-brand img{height:22px}
-  .lh-right,.lh-meta{text-align:left}
-  .title{margin-top:30px;font-size:21px;letter-spacing:.03em}
-  .subtitle{font-size:9.5px;letter-spacing:.2em}
-  .pre{margin-top:24px;font-size:14px}
-  .terms{grid-template-columns:auto 1fr}
-  .terms dd{padding-right:0}
-  table{font-size:13px}
-  th.opt,td.opt{display:none}
-  .art p{font-size:14px}
-  .closing{font-size:14px}
-  .doc-foot{position:static;margin-top:32px}
+  .sheet{min-height:0;padding:22px 16px 30px}
+  .doc-head{flex-direction:column;gap:14px;min-height:0}
+  .doc-head img{position:static;transform:none;height:24px;align-self:flex-start}
+  .doc-title{font-size:21px;letter-spacing:.35em;padding-left:.35em}
+  .stamp{top:0;transform:none}
+  .parties{flex-direction:column;gap:14px}
+  .sup{width:100%;flex-basis:auto}
+  .hl{padding:10px 12px}
+  .price{font-size:12.5px}
+  .price .opt{display:none}
+  .arts{padding:10px 12px}
+  .party{margin-left:0}
 }
-@page{size:A4;margin:14mm 0 16mm}
+@page{size:A4;margin:14mm 0 14mm}
 @page :first{margin:0}
 @media print{
   body{background:#fff}
   .top,.foot{display:none!important}
   .sheet-wrap{padding:0}
-  .sheet{width:210mm;max-width:none;min-height:297mm;margin:0;padding:11mm 20mm 19mm;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .lh{padding-bottom:3.4mm;border-bottom-width:.9pt;gap:6mm}
-  .lh-brand{gap:3mm}
-  .lh-brand img{height:7mm}
-  .lh-div{height:4.6mm}
-  .lh-tag{font-size:8.6pt}
-  .lh-meta{font-size:7.6pt;gap:.4mm 2.6mm}
-  .stamp{font-size:8pt;padding:.3mm 1mm .3mm 2mm;margin-bottom:1.6mm}
-  .title{margin-top:7mm;font-size:20pt}
-  .subtitle{margin-top:1.6mm;font-size:6.8pt}
-  .pre{margin-top:5.5mm;font-size:10pt;line-height:1.7}
-  .terms{margin-top:5mm;border-top-width:.9pt}
-  .terms dt,.terms dd{padding:1.7mm 0;border-bottom-width:.5pt}
-  .terms dt{padding-right:4mm;font-size:8pt}
-  .terms dd{padding-right:5mm;font-size:9pt}
-  .terms small{margin-top:.4mm;font-size:7.4pt}
-  .sec-h{margin:5.5mm 0 1.8mm}
-  .sec-h h3{font-size:9.6pt}
-  .sec-h span{font-size:7.4pt}
+  .sheet{width:210mm;max-width:none;min-height:297mm;margin:0;padding:12mm 16mm 10mm;box-shadow:none;font-size:9pt;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .doc-head{min-height:12mm}
+  .doc-head img{height:8.4mm}
+  .doc-title{font-size:20pt}
+  .stamp{font-size:9pt;border-width:1.4pt;padding:.4mm 1mm .4mm 2.6mm}
+  .parties{margin-top:5mm;gap:6mm}
+  .to div{padding:.5mm 0;gap:2.6mm}
+  .to .rcpt{font-size:10.5pt;padding-bottom:2mm}
+  .sup{font-size:8pt}
+  .sup th,.sup td{border-width:.6pt;padding:1mm 2mm;height:6mm}
+  .sup th.v{width:7.5mm}
+  .sup th.k{width:17mm}
+  .pre{margin-top:4.2mm}
+  .hl{margin-top:2mm;padding:2.2mm 4mm;border-width:.8pt}
+  .hl-k{min-width:21mm}
+  .hl b{font-size:11.5pt}
+  .hl span.n{font-size:8pt}
+  .sec{margin:4.6mm 0 1.4mm;font-size:9pt}
+  .sec span{font-size:8pt}
   .tbl{overflow:visible}
-  table{font-size:8.8pt;border-top-width:1.1pt;border-bottom-width:1.1pt}
-  th{padding:1.9mm 1.8mm;font-size:7.8pt;border-bottom-width:.6pt}
-  td{padding:1.9mm 1.8mm;border-bottom-width:.5pt}
-  tr.sum td{border-top-width:.6pt}
-  .src{margin-top:1.5mm;font-size:7.2pt}
-  .arts{margin-top:5.5mm}
-  .art + .art{margin-top:3.2mm}
-  .art h3{font-size:9.6pt}
-  .art p{margin-top:1.1mm;font-size:9.8pt;line-height:1.6}
-  .art p.cl{margin-top:.8mm}
-  .closing{margin-top:5mm;font-size:9.8pt}
-  .issuer{margin-top:4.5mm}
-  .issuer .date{font-size:10.5pt}
-  .issuer .ceo{margin-top:4.6mm;font-size:11.5pt}
-  .issuer .ceo b{margin-right:2.6mm}
-  .issuer .mgr{margin-top:3.6mm;font-size:8.6pt}
-  .seal{margin-left:3.4mm;font-size:10pt}
-  .seal img{width:16.5mm;height:16.5mm}
-  .seal.ph::after{width:13.5mm;height:13.5mm}
-  .doc-foot{left:20mm;right:20mm;bottom:9mm;padding-top:2mm;border-top-width:.5pt;font-size:7pt}
-  .compact .title{margin-top:5mm;font-size:18pt}
-  .compact .subtitle{margin-top:1.2mm}
-  .compact .pre{margin-top:4mm;line-height:1.6}
-  .compact .terms{margin-top:3.6mm}
-  .compact .terms dt,.compact .terms dd{padding:1.3mm 0}
-  .compact .terms small{display:none}
-  .compact .sec-h{margin:4mm 0 1.4mm}
-  .compact th{padding:1.2mm 1.8mm}
-  .compact td{padding:1.1mm 1.8mm}
-  .compact .src{margin-top:1.2mm}
-  .compact .arts{margin-top:4mm}
-  .compact .art + .art{margin-top:2.4mm}
-  .compact .art p{margin-top:.8mm;font-size:9.4pt;line-height:1.5}
-  .compact .art p.cl{margin-top:.4mm}
-  .compact .closing{margin-top:4mm;font-size:9.4pt}
-  .compact .issuer{margin-top:3mm}
-  .compact .issuer .ceo{margin-top:3.6mm}
-  .compact .issuer .mgr{margin-top:3mm}
+  .price{font-size:9pt}
+  .price{line-height:1.3}
+  .price th,.price td{border-width:.6pt;padding:2mm 1.8mm}
+  .price th{font-size:8.2pt;padding:1.7mm 1.5mm}
+  .src{margin-top:1.2mm;font-size:7.6pt}
+  .arts{padding:2.6mm 4mm;border-width:.6pt}
+  .art + .art{margin-top:1.6mm}
+  .art h3{font-size:9pt}
+  .art p{margin-top:.5mm;line-height:1.55}
+  .closing{margin-top:4.2mm}
+  .date{margin-top:3.4mm;font-size:10pt}
+  .party{width:86mm;margin-top:3mm}
+  .party div{padding:.8mm 0;gap:2.6mm}
+  .party .gap{width:26mm}
+  .party .r-ceo{margin-top:3.4mm}
+  .seal{font-size:9pt}
+  .seal img{width:16mm;height:16mm}
+  .seal.ph::after{width:14mm;height:14mm}
+  .compact .parties{margin-top:3.6mm}
+  .compact .to div{padding:.2mm 0}
+  .compact .sup th,.compact .sup td{height:5.2mm;padding:.6mm 2mm}
+  .compact .pre{margin-top:3mm;line-height:1.35}
+  .compact .hl{padding:1.6mm 4mm}
+  .compact .sec{margin-top:3.4mm}
+  .compact .price th,.compact .price td{padding:1.05mm 1.8mm}
+  .compact .src{margin-top:.8mm}
+  .compact .arts{padding:2mm 4mm}
+  .compact .art + .art{margin-top:1mm}
+  .compact .art h3{font-size:8.6pt}
+  .compact .art p{font-size:8.6pt;line-height:1.42}
+  .compact .closing{margin-top:3mm}
+  .compact .date{margin-top:2.4mm}
+  .compact .party{margin-top:2mm}
+  .compact .party div{padding:.4mm 0}
+  .compact .party .r-ceo{margin-top:2.6mm}
 }`;
 
+// 회사 견적서와 같은 표: 머리 칸·합계 줄은 연한 파랑, 품명은 굵게 가운데, 합계 칸은 굵게 오른쪽
 function tableHtml(doc: MouDoc, sample: boolean): string {
   if (doc.mode === 'items') {
-    const head = '<tr><th class="l" style="width:26%">품명</th><th>1대 단가</th><th style="width:10%">수량</th><th class="opt">공급가액</th><th class="opt">세액</th><th>합계</th></tr>';
+    const head = '<tr><th style="width:30%">품 명</th><th>1대 단가</th><th style="width:10%">수량(EA)</th><th class="opt">공급가액</th><th class="opt">세액</th><th>합계</th></tr>';
     const body = doc.rows
       .map(
         (r) =>
           `<tr><td class="l">${escapeHtml(r.name)}</td><td>${money(r.unitPrice, sample)}</td><td>${r.quantity}</td>` +
-          `<td class="opt">${money(r.supply, sample)}</td><td class="opt">${money(r.tax, sample)}</td><td>${money(r.total, sample)}</td></tr>`,
+          `<td class="opt">${money(r.supply, sample)}</td><td class="opt">${money(r.tax, sample)}</td><td class="t">${money(r.total, sample)}</td></tr>`,
       )
       .join('');
     const qty = doc.rows.reduce((s, r) => s + r.quantity, 0);
     const supply = doc.rows.reduce((s, r) => s + (r.supply || 0), 0);
     const tax = doc.rows.reduce((s, r) => s + (r.tax || 0), 0);
     const adj = doc.rounding > 0
-      ? `<tr class="adj"><td class="l">단수 정리</td><td></td><td></td><td class="opt"></td><td class="opt"></td><td>−${money(doc.rounding, sample)}</td></tr>`
+      ? `<tr class="adj"><td class="l">단수 정리</td><td>-</td><td>-</td><td class="opt">-</td><td class="opt">-</td><td class="t">−${money(doc.rounding, sample)}</td></tr>`
       : '';
-    const sum = `<tr class="sum"><td class="l">합계</td><td></td><td>${qty}</td><td class="opt">${money(supply, sample)}</td><td class="opt">${money(tax, sample)}</td><td>${money(doc.amount, sample)}</td></tr>`;
-    return `<table><thead>${head}</thead><tbody>${body}${adj}${sum}</tbody></table>`;
+    const sum = `<tr class="sum"><td>합 계</td><td></td><td>${qty}</td><td class="opt">${money(supply, sample)}</td><td class="opt">${money(tax, sample)}</td><td class="t">${money(doc.amount, sample)}</td></tr>`;
+    return `<table class="price"><thead>${head}</thead><tbody>${body}${adj}${sum}</tbody></table>`;
   }
   const rows = doc.rows.length > 0 ? doc.rows : [{ name: '에어컨 전문세척', quantity: 0 }];
   const body = rows.map((r) => `<tr><td class="l">${escapeHtml(r.name)}</td><td>${r.quantity > 0 ? r.quantity : '-'}</td></tr>`).join('');
   const qty = rows.reduce((s, r) => s + r.quantity, 0);
-  const sum = qty > 0 ? `<tr class="sum"><td class="l">합계</td><td>${qty}</td></tr>` : '';
+  const sum = qty > 0 ? `<tr class="sum"><td>합 계</td><td>${qty}</td></tr>` : '';
   const last = doc.mode === 'total'
-    ? `<tr class="sum"><td class="l">지난 작업 금액 (VAT 포함)</td><td>${money(doc.amount, sample)}원</td></tr>`
-    : '<tr class="sum"><td class="l">보장 단가</td><td>지난 작업 견적과 같은 단가</td></tr>';
-  return `<table><thead><tr><th class="l">품명</th><th style="width:30%">수량</th></tr></thead><tbody>${body}${sum}${last}</tbody></table>`;
+    ? `<tr class="sum"><td>지난 작업 금액 (VAT 포함)</td><td class="t">${money(doc.amount, sample)}원</td></tr>`
+    : '<tr class="sum"><td>보장 단가</td><td>지난 작업 견적과 같은 단가</td></tr>';
+  return `<table class="price"><thead><tr><th>품 명</th><th style="width:34%">수량(EA)</th></tr></thead><tbody>${body}${sum}${last}</tbody></table>`;
 }
 
 function sourceText(doc: MouDoc, sample: boolean): string {
@@ -596,15 +593,19 @@ function articlesHtml(doc: MouDoc): string {
       : doc.mode === 'total'
         ? '보장 단가는 위 표의 설비·수량 기준 지난 작업 금액과 같으며, 작업일부터 1년간 적용한다.'
         : '보장 단가는 지난 작업의 견적 단가와 같으며, 작업일부터 1년간 적용한다.';
-  const art = (no: number, title: string, body: string) =>
-    `<section class="art"><h3><span class="no">제${no}조</span>(${title})</h3>${body}</section>`;
-  const cl = (mark: string, text: string) => `<p class="cl serif">${mark} ${text}</p>`;
+  const art = (no: number, title: string, body: string) => `<section class="art"><h3>제${no}조(${title})</h3>${body}</section>`;
+  const cl = (mark: string, text: string) => `<p class="cl">${mark} ${text}</p>`;
   return `<div class="arts">
-${art(1, '목적', '<p class="serif">본 협약은 회사와 고객 간 에어컨 전문세척 서비스의 단가를 일정 기간 유지함으로써 상호 신뢰를 높이고 안정적인 시설 관리를 돕는 것을 목적으로 한다.</p>')}
+${art(1, '목적', '<p>본 협약은 회사와 고객 간 에어컨 전문세척 서비스의 단가를 일정 기간 유지함으로써 상호 신뢰를 높이고 안정적인 시설 관리를 돕는 것을 목적으로 한다.</p>')}
 ${art(2, '보장 단가와 적용 범위', cl('①', first) + cl('②', '에어컨 수량이 15% 이상 달라지면 별도로 견적한다.'))}
 ${art(3, '기간과 효력', cl('①', '본 협약은 보장 기간 동안 유효하며, 끝나기 1개월 전에 협의하여 연장할 수 있다.') + cl('②', '본 협약은 상호 신뢰에 기초한 양해각서로, 법적 구속력은 없다.'))}
 </div>`;
 }
+
+// 라벨 — 견적서처럼 두세 글자는 같은 폭에 벌리고(상    호·사 업 장) 네 글자는 붙여 쓴다(등록번호)
+const label = (s: string) => `<span class="lb">${Array.from(s).length < 4 ? Array.from(s).join(' ') : s}</span>`;
+// 강조 상자 라벨은 견적서 '총 견 적 금 액' 처럼 모두 띄운다
+const spaced = (s: string) => Array.from(s).join(' ');
 
 function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
   // 표 줄이 많으면 간격을 줄인다 — A4 한 장에 품목 10줄까지 (그보다 많으면 두 장)
@@ -616,38 +617,46 @@ function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
     ? `<span class="seal">(인)<img src="${opts.sealUri}" alt=""></span>`
     : `<span class="seal${opts.sample ? ' ph' : ''}">(인)</span>`;
   const mgr = doc.manager && doc.manager.name
-    ? `담당 ${escapeHtml(doc.manager.name)}${doc.manager.position ? ` ${escapeHtml(doc.manager.position)}` : ''}`
-    : `대표전화 ${COMPANY.phone}`;
-  const meta = [
-    doc.no ? `<dt>협약번호</dt><dd>${escapeHtml(doc.no)}</dd>` : '',
-    `<dt>발행일</dt><dd>${dotDate(doc.issuedAt)}</dd>`,
+    ? `${escapeHtml(doc.manager.name)}${doc.manager.position ? ` ${escapeHtml(doc.manager.position)}` : ''}`
+    : '';
+  const toRows = [
+    `<div class="rcpt"><dt>수 신</dt><dd>${escapeHtml(doc.company)} 귀중</dd></div>`,
+    `<div><dt>${label('협약명')}</dt><dd>: 에어컨 전문세척 단가보장</dd></div>`,
+    doc.no ? `<div><dt>${label('협약번호')}</dt><dd>: ${escapeHtml(doc.no)}</dd></div>` : '',
+    `<div><dt>${label('작업일')}</dt><dd>: ${dotDate(doc.workDate)}</dd></div>`,
   ].join('');
-  const unit = doc.mode === 'items' ? '단위: 원 · VAT 포함' : '수량 단위: 대';
+  const supRows: [string, string, string?][] = [
+    [label('상호'), COMPANY.short, 'b'],
+    [label('등록번호'), COMPANY.bizNo],
+    [label('사업장'), COMPANY.address],
+    [label('전화번호'), COMPANY.phone],
+  ];
+  if (mgr) supRows.push([label('담당자'), mgr]);
+  const sup = supRows
+    .map(([k, v, cls], i) =>
+      `<tr>${i === 0 ? `<th class="v" rowspan="${supRows.length}">공<br>급<br>자</th>` : ''}<th class="k">${k}</th><td${cls ? ` class="${cls}"` : ''}>${v}</td></tr>`)
+    .join('');
+  const unit = doc.mode === 'items' ? '(단위 : 원, VAT 포함)' : '(수량 단위 : 대)';
   return `<article class="sheet${compact ? ' compact' : ''}">
-<header class="lh">
-<div class="lh-brand"><img src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="AIRTOR 에어터"><span class="lh-div"></span><span class="lh-tag">에어컨 위생파트너</span></div>
-<div class="lh-right">${opts.sample ? '<span class="stamp">견본</span>' : ''}<dl class="lh-meta">${meta}</dl></div>
-</header>
-<h2 class="title serif">에어컨 전문세척 단가보장 협약서</h2>
-<p class="subtitle">PRICE GUARANTEE AGREEMENT · MOU</p>
-<p class="pre serif">${COMPANY.short}(이하 “회사”)는 ${escapeHtml(doc.company)}(이하 “고객”)의 쾌적한 업무환경과 비용 안정을 위하여 다음과 같이 에어컨 전문세척 단가를 보장한다.</p>
-<dl class="terms">
-<dt>공급자</dt><dd>${COMPANY.name}<small>사업자등록번호 ${COMPANY.bizNo}</small></dd>
-<dt>고객</dt><dd>${escapeHtml(doc.company)}</dd>
-<dt>작업일</dt><dd>${dotDate(doc.workDate)}</dd>
-<dt>보장 기간</dt><dd>${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)}<small>작업일부터 1년</small></dd>
-</dl>
-<div class="sec-h"><h3>보장 단가표</h3><span>${unit}</span></div>
+<header class="doc-head"><img src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="AIRTOR 에어터"><h2 class="doc-title">단가보장협약서</h2>${opts.sample ? '<span class="stamp">견본</span>' : ''}</header>
+<div class="parties">
+<dl class="to">${toRows}</dl>
+<table class="sup"><tbody>${sup}</tbody></table>
+</div>
+<p class="pre">${COMPANY.short}(이하 &quot;회사&quot;)는 ${escapeHtml(doc.company)}(이하 &quot;고객&quot;)의 쾌적한 업무환경과 비용 안정을 위하여 다음과 같이 에어컨 전문세척 단가를 보장한다.</p>
+<div class="hl"><span class="hl-k">${spaced('보장기간')} :</span><b>${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)}</b><span class="n">(작업일부터 1년, 아래 단가 적용)</span></div>
+<div class="sec">보장 단가<span>${unit}</span></div>
 <div class="tbl">${tableHtml(doc, opts.sample)}</div>
 <p class="src">${escapeHtml(sourceText(doc, opts.sample))}</p>
+<div class="sec">협약 내용</div>
 ${articlesHtml(doc)}
-<p class="closing serif">회사는 위 내용을 성실히 이행할 것을 확인하며 본 협약서를 발행한다.</p>
-<div class="issuer serif">
-<div class="date">${longDate(doc.issuedAt)}</div>
-<div class="ceo"><b>${COMPANY.name}</b>대표이사${seal}</div>
-<div class="mgr">${mgr}</div>
-</div>
-<p class="doc-foot">${COMPANY.name} · ${COMPANY.address} · 사업자등록번호 ${COMPANY.bizNo} · 대표전화 ${COMPANY.phone} · ${COMPANY.web}</p>
+<p class="closing">회사는 위 내용을 성실히 이행할 것을 확인하며 본 협약서를 발행한다.</p>
+<p class="date">${longDate(doc.issuedAt)}</p>
+<dl class="party">
+<div><dt>${label('회사')}</dt><dd>: ${COMPANY.name}</dd></div>
+<div><dt>${label('주소')}</dt><dd>: ${COMPANY.address}</dd></div>
+<div class="r-ceo"><dt>${label('대표이사')}</dt><dd>: <span class="gap"></span>${seal}</dd></div>
+</dl>
 </article>`;
 }
 
@@ -661,7 +670,7 @@ export function renderMouHtml(doc: MouDoc, opts: RenderOptions): string {
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>${title}</title>
-${opts.mode === 'screen' ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;600&display=swap">' : ''}
+${opts.mode === 'screen' ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap">' : ''}
 <style>${STYLE}</style>
 </head>`;
   if (opts.mode === 'pdf') return `${head}\n<body>\n${sheetHtml(doc, opts)}\n</body>\n</html>`;
