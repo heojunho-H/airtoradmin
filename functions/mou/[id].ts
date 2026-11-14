@@ -8,7 +8,7 @@ import {
   getMou,
   htmlHeaders,
   isMouId,
-  loadSealUri,
+  loadBrandAssets,
   newNonce,
   parseMouDoc,
   pdfHeaders,
@@ -17,6 +17,7 @@ import {
   renderMouHtml,
   renderPdf,
   setMouPdfKey,
+  type BrandAssets,
   type MouDoc,
   type MouEnv,
   type MouErrorKind,
@@ -37,12 +38,17 @@ interface Target {
   pdfKey?: string | null;
 }
 
+// 견본에는 직인·서명을 싣지 않는다 (공개 주소) — 작업자 사진만 원래처럼 흐리게
+async function assetsFor(env: Env, t: Target): Promise<BrandAssets> {
+  const a = await loadBrandAssets(env);
+  return t.sample ? { seal: null, sign: null, photo: a.photo } : a;
+}
+
 async function serveHtml(env: Env, t: Target, url: URL, head: boolean): Promise<Response> {
   const nonce = newNonce();
   if (head) return new Response(null, { status: 200, headers: htmlHeaders(nonce) });
-  const sealUri = t.sample ? null : await loadSealUri(env);
   const html = renderMouHtml(t.doc, {
-    mode: 'screen', id: t.id, sample: t.sample, sealUri, nonce, pdfFailed: url.searchParams.get('pdf') === 'fail', expiresOn: t.expiresOn,
+    mode: 'screen', id: t.id, sample: t.sample, assets: await assetsFor(env, t), nonce, pdfFailed: url.searchParams.get('pdf') === 'fail', expiresOn: t.expiresOn,
   });
   return new Response(html, { status: 200, headers: htmlHeaders(nonce) });
 }
@@ -56,8 +62,7 @@ async function servePdf(env: Env, t: Target, head: boolean): Promise<Response> {
     if (cached) return new Response(cached.body, { status: 200, headers: pdfHeaders(t.doc, cached.size) });
   }
   try {
-    const sealUri = t.sample ? null : await loadSealUri(env);
-    const pdf = await renderPdf(env, renderMouHtml(t.doc, { mode: 'pdf', id: t.id, sample: t.sample, sealUri }));
+    const pdf = await renderPdf(env, renderMouHtml(t.doc, { mode: 'pdf', id: t.id, sample: t.sample, assets: await assetsFor(env, t) }));
     if (!t.sample && env.FILES) {
       await env.FILES.put(key, pdf, { httpMetadata: { contentType: 'application/pdf' } });
       if (env.AI_DB) await setMouPdfKey(env.AI_DB, t.id, key);

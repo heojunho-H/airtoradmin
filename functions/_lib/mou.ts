@@ -10,12 +10,15 @@
 // 직인: R2 brand/mou-seal.png 에만 둔다(공개 저장소에 두지 않는다). 없으면 (인) 만 찍는다.
 
 import { addDays, isYmd } from './followups';
-import { LOGO_COLOR_PNG } from './mou-assets';
+import { LOGO_COLOR_PNG, MOU_BAR_JPG, MOU_BULLET_PNG, MOU_HANDSHAKE_PNG, MOU_LOGO_WHITE_PNG } from './mou-assets';
 
 export const DEFAULT_MOU_BASE_URL = 'https://docs.airtor.co.kr';
 /** 서식을 바꾸면 올린다 — R2 의 PDF 캐시 키가 바뀌어 새 서식으로 다시 만든다 */
-export const MOU_VERSION = 'v3';
+export const MOU_VERSION = 'v4';
 export const SEAL_R2_KEY = 'brand/mou-seal.png';
+/** 대표이사 손글씨 서명·작업자 사진 (원래 협약서 그림) — 공개 저장소에 두지 않는다 */
+export const SIGN_R2_KEY = 'brand/mou-sign.png';
+export const PHOTO_R2_KEY = 'brand/mou-photo.png';
 /** 적용 기간이 끝난 뒤에도 링크를 여는 날 수 */
 export const MOU_GRACE_DAYS = 30;
 const ID_RE = /^[A-Za-z0-9_-]{22}$/;
@@ -377,8 +380,8 @@ export interface RenderOptions {
   /** 링크 ID 또는 'sample' — 화면의 PDF 버튼 주소 */
   id: string;
   sample: boolean;
-  /** data: URI. 없으면 (인) 만 */
-  sealUri: string | null;
+  /** R2 그림(data: URI). 없으면 그 자리만 비운다 — 견본은 사진만 */
+  assets: BrandAssets;
   /** screen 의 인쇄 버튼 스크립트 nonce */
   nonce?: string;
   /** PDF 만들기에 실패해 돌아왔을 때 */
@@ -387,8 +390,10 @@ export interface RenderOptions {
   expiresOn?: string;
 }
 
-// 표 줄(품목 + 단수 정리 + 합계)이 이보다 많으면 인쇄 간격을 줄인다 — 장수 점검으로 정한 값
-const COMPACT_FROM = 6;
+// 표 줄(머리 + 품목, 대수 표는 + 금액 줄)이 이보다 많으면 조항 간격을 줄인다 — 장수 점검으로 정한 값.
+// 품명이 길어 두 줄로 접히는 품목은 두 줄로 센다 (원래 간격으로 짧은 품목 7줄, 긴 품목 4줄까지 한 장)
+const COMPACT_FROM = 8;
+const rowWeight = (name: string) => (Array.from(name).length > 14 ? 2 : 1);
 
 // 협약서에 적는 회사 정보 — 홈페이지 맨 아래(foot.php)와 같은 공개 정보
 const COMPANY = {
@@ -400,8 +405,10 @@ const COMPANY = {
   web: 'www.airtor.co.kr',
 };
 
+// 원래 협약서(파워포인트 A4)를 mm 단위로 그대로 옮긴 서식 — 화면(PC)과 PDF 가 같은 A4 를 쓴다.
+// 위치·크기는 원본 슬라이드 좌표(EMU/36000)에서, 글꼴은 보낸 PDF 와 같은 맑은 고딕(없으면 Noto Sans), 자간 −1pt.
 const STYLE = `
-:root{--ink:#111;--line:#3a3a3a;--head:#dce6f2;--bg:#eef1f5;--blue:#1a4c9c}
+:root{--ink:#000;--line:#000;--head:#dce6f2;--bg:#eef1f5;--blue:#1a4c9c}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic','맑은 고딕','Noto Sans KR','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif}
@@ -410,7 +417,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',
 .top-title{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px;word-break:keep-all}
 .top-meta{margin:4px 0 0;font-size:14px;color:#3a4250;word-break:keep-all}
 .top-actions{display:flex;gap:8px}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #c4ccd6;background:#fff;color:var(--ink);font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #c4ccd6;background:#fff;color:#1f2329;font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
 .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
 .btn:focus-visible{outline:3px solid #8fb3e8;outline-offset:2px}
 .notice{flex-basis:100%;margin:0;font-size:14px;line-height:1.6;color:#8a3b12}
@@ -418,174 +425,132 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',
 .foot p{margin:0}
 .foot a{color:inherit}
 .sheet-wrap{padding:0 16px 24px}
-.sheet{position:relative;max-width:794px;min-height:1123px;margin:0 auto;padding:48px 56px 56px;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.12);font-size:13px;line-height:1.5}
-.doc-head{position:relative;display:flex;align-items:center;justify-content:center;min-height:48px}
-.doc-head img{position:absolute;left:0;top:50%;transform:translateY(-50%);display:block;height:30px;width:auto}
-.doc-title{margin:0;font-size:27px;font-weight:700;letter-spacing:.55em;padding-left:.55em;white-space:nowrap}
-.stamp{position:absolute;right:0;top:50%;transform:translateY(-50%);border:2px solid #d92d20;color:#d92d20;font-size:13px;font-weight:700;letter-spacing:.4em;padding:2px 4px 2px 9px}
-.parties{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:26px 0 0}
-.to{flex:1 1 0;min-width:0;margin:0}
-.to div{display:flex;gap:10px;padding:2px 0}
-.to dt{flex:0 0 auto}
-.to dd{margin:0;word-break:keep-all;overflow-wrap:anywhere}
-.to .rcpt{font-size:15px;font-weight:700;padding-bottom:8px}
-.to .rcpt dt{margin-right:8px}
-.sup{flex:0 0 52%;border-collapse:collapse;font-size:12px}
-.sup th,.sup td{border:1px solid var(--line);padding:6px 8px;height:30px}
-.sup th.v{width:30px;padding:0;text-align:center;font-weight:400;line-height:2}
-.sup th.k{width:76px;font-weight:400;text-align:center}
-.sup td{word-break:keep-all;overflow-wrap:anywhere}
-.sup td.b{font-weight:700}
-.lb{display:inline-block;width:3.9em;text-align:justify;text-align-last:justify;white-space:nowrap}
-.pre{margin:22px 0 0;word-break:keep-all;overflow-wrap:anywhere}
-.hl{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin:8px 0 0;padding:11px 16px;border:1px solid var(--line)}
-.hl-k{text-align:justify;text-align-last:justify;min-width:92px}
-.hl b{font-size:17px}
-.hl span.n{font-size:12px}
-.sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 5px;font-size:12.5px;font-weight:700}
-.sec span{font-weight:400;font-size:11.5px}
-.tbl{overflow-x:auto}
-.price{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
-.price th,.price td{border:1px solid var(--line);padding:9px 8px;text-align:center;white-space:nowrap}
-.price th{background:var(--head);font-size:12px;font-weight:700;padding:7px 6px}
+.sheet{position:relative;display:flex;flex-direction:column;width:210mm;min-height:297mm;margin:0 auto;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.12);font-size:11pt;line-height:1.6;letter-spacing:-1pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.bar{position:relative;flex:0 0 auto;height:22.6mm;background:#1b1f2a url("data:image/jpeg;base64,${MOU_BAR_JPG}") center/cover no-repeat}
+.bar .logo{position:absolute;left:50%;top:7.2mm;width:36.6mm;height:auto;transform:translateX(-50%)}
+.stamp{position:absolute;right:8mm;top:50%;transform:translateY(-50%);border:1.2pt solid #ff6b6b;color:#ff8a8a;font-size:9pt;font-weight:700;letter-spacing:2pt;padding:.6mm 1.6mm .6mm 2.4mm}
+.title{margin:11mm 0 0;text-align:center;font-size:20pt;font-weight:400;line-height:1.3}
+.title b{font-weight:700}
+.intro{margin:3.2mm 22.6mm 0;text-align:center;font-size:11pt;line-height:1.6}
+.intro b{display:block;letter-spacing:0}
+.rule{flex:0 0 auto;height:.7mm;margin:7.6mm 20.5mm 0 21.2mm;background:linear-gradient(90deg,#15a7a6 0%,#0e85a5 25%,#1e918a 50%,#33a754 75%,#5dd557 100%)}
+.cap{display:flex;justify-content:space-between;gap:4mm;margin:4.6mm 15.9mm 1mm 16.2mm;font-size:8pt;letter-spacing:-.3pt;line-height:1.4}
+.tbl{margin:0 15.9mm 0 16.2mm}
+.price{width:100%;border-collapse:collapse;font-size:8pt;line-height:1.3;letter-spacing:0;font-variant-numeric:tabular-nums}
+.price th,.price td{border:.6pt solid var(--line);padding:.75mm 1.6mm;white-space:nowrap}
+.price th{background:var(--head);font-size:7.4pt;font-weight:700;text-align:center}
+.price td{text-align:center}
 .price td.l{font-weight:700;white-space:normal;word-break:keep-all}
+.price td.r{text-align:right}
 .price td.t{text-align:right;font-weight:700}
 .price tr.sum td{background:var(--head);font-weight:700}
-.price tr.adj td{font-weight:400}
-.src{margin:4px 0 0;font-size:11.5px;text-align:right}
-.arts{margin:0;padding:12px 16px;border:1px solid var(--line)}
-.art + .art{margin-top:8px}
-.art h3{margin:0;font-size:13px;font-weight:700}
-.art p{margin:3px 0 0;line-height:1.65;word-break:keep-all;overflow-wrap:anywhere}
-.art p.cl{padding-left:1.35em;text-indent:-1.35em}
-.closing{margin:20px 0 0;text-align:center;word-break:keep-all}
-.date{margin:16px 0 0;text-align:center;font-size:14px;letter-spacing:.08em}
-.party{width:340px;max-width:100%;margin:18px 0 0 auto}
-.party div{display:flex;align-items:center;gap:10px;padding:3px 0}
-.party dt{flex:0 0 auto}
-.party dd{margin:0;flex:1 1 auto;word-break:keep-all}
-.party .gap{display:inline-block;width:110px}
-.party .r-ceo{margin-top:12px}
-.seal{position:relative;display:inline-block;color:#8a929c;font-size:13px}
-.seal img{position:absolute;left:50%;top:50%;width:62px;height:62px;transform:translate(-50%,-40%) rotate(-4deg)}
-.seal.ph::after{content:'';position:absolute;left:50%;top:50%;width:54px;height:54px;border:1.5px dashed #c0c6ce;border-radius:50%;transform:translate(-50%,-50%)}
-@media screen and (max-width:640px){
-  .top-actions{width:100%}
-  .top-actions .btn{flex:1}
-  .sheet{min-height:0;padding:22px 16px 30px}
-  .doc-head{flex-direction:column;gap:14px;min-height:0}
-  .doc-head img{position:static;transform:none;height:24px;align-self:flex-start}
-  .doc-title{font-size:21px;letter-spacing:.35em;padding-left:.35em}
-  .stamp{top:0;transform:none}
-  .parties{flex-direction:column;gap:14px}
-  .sup{width:100%;flex-basis:auto}
-  .hl{padding:10px 12px}
+.arts{margin:6.2mm 20mm 0 21.2mm}
+.art + .art{margin-top:6.4mm}
+.art h3{display:flex;align-items:center;gap:2.1mm;margin:0;font-size:12pt;font-weight:700;line-height:1.3}
+.art h3 img{flex:0 0 auto;width:3.9mm;height:3.9mm}
+.art .body{margin:3.4mm 0 0 6mm}
+.art p{margin:0;word-break:keep-all;overflow-wrap:anywhere}
+.art p.cl{padding-left:1.3em;text-indent:-1.3em}
+.bottom{position:relative;flex:0 0 auto;margin-top:auto;padding:0 0 20.8mm}
+.bottom .rule{margin-top:7mm;position:relative;z-index:1}
+.photo{position:absolute;left:120.7mm;top:7.3mm;width:94.5mm;height:auto;filter:brightness(0);opacity:.1;z-index:0;pointer-events:none}
+.cap-logo{position:absolute;left:197.4mm;top:23.6mm;width:6.8mm;height:auto;opacity:.4;transform:rotate(50deg);z-index:0}
+.closing{position:relative;z-index:1;margin:9.5mm 16mm 0;text-align:center;word-break:keep-all}
+.issued{position:relative;z-index:1;margin:7.8mm 0 0;text-align:center;font-size:12pt}
+.sig{position:relative;z-index:1;width:52.9mm;margin:6mm auto 0}
+.sig-area{position:relative;height:12mm;border-bottom:.75pt solid var(--ink)}
+.sign{position:absolute;left:14.1mm;top:3.6mm;width:20.5mm;height:6.5mm;object-fit:contain}
+.sign.ph{border:.6pt dashed #c0c6ce;color:#a0a7b0;font-size:8pt;letter-spacing:0;display:flex;align-items:center;justify-content:center}
+.in{position:absolute;left:42.3mm;top:5.3mm;width:13.8mm;text-align:center;font-size:11pt;line-height:1.2;letter-spacing:0;color:#000}
+.seal{position:absolute;left:41.6mm;top:1.1mm;width:15.5mm;height:15.5mm}
+.seal.ph{border:1.2pt dashed #c0c6ce;border-radius:50%}
+.ceo{margin:3.3mm 0 0;text-align:center;font-size:13pt;font-weight:700;line-height:1.3;white-space:nowrap}
+.ceo small{font-size:10pt}
+.mgr{margin:.6mm 0 0;text-align:center;font-size:11pt;line-height:1.4;white-space:nowrap}
+.mgr b{font-weight:700;margin-right:1.2mm}
+.mou{position:absolute;left:23.3mm;top:56.4mm;width:43.4mm;text-align:center;z-index:1}
+.mou img{display:block;width:15.5mm;height:auto;margin:0 auto}
+.mou span{display:block;margin-top:.4mm;font-size:8pt;line-height:1.2}
+.mou small{display:block;margin-top:.6mm;font-size:6.5pt;letter-spacing:0;color:#555}
+.compact .title{margin-top:8mm}
+.compact .rule{margin-top:5.4mm}
+.compact .cap{margin-top:3.4mm}
+.compact .arts{margin-top:4.4mm}
+.compact .art + .art{margin-top:3.6mm}
+.compact .art .body{margin-top:1.6mm}
+.compact .art p{line-height:1.45}
+.compact .bottom .rule{margin-top:5mm}
+.compact .closing{margin-top:6mm}
+.compact .issued{margin-top:5mm}
+.compact .bottom{padding-bottom:15mm}
+.compact .mou{top:46mm}
+@media screen and (max-width:860px){
+  .sheet-wrap{padding:0 0 24px}
+  .sheet{width:auto;min-height:0;font-size:14px;letter-spacing:-.04em}
+  .bar{height:64px}
+  .bar .logo{top:17px;width:112px}
+  .stamp{right:10px;font-size:11px;padding:2px 5px 2px 8px}
+  .title{margin:26px 16px 0;font-size:22px}
+  .intro{margin:10px 16px 0;font-size:14px}
+  .rule{height:2px;margin:22px 16px 0}
+  .cap{flex-direction:column;gap:2px;margin:16px 16px 6px;font-size:12px}
+  .tbl{margin:0 16px;overflow-x:auto}
   .price{font-size:12.5px}
+  .price th{font-size:11.5px}
+  .price th,.price td{padding:6px 6px}
   .price .opt{display:none}
-  .arts{padding:10px 12px}
-  .party{margin-left:0}
+  .arts{margin:22px 16px 0}
+  .art + .art{margin-top:20px}
+  .art h3{font-size:16px;gap:8px}
+  .art h3 img{width:14px;height:14px}
+  .art .body{margin:8px 0 0 22px}
+  .bottom{margin-top:0;padding:0 0 28px}
+  .bottom .rule{margin-top:26px}
+  .photo,.cap-logo,.mou{display:none}
+  .closing{margin:26px 16px 0}
+  .issued{margin-top:20px;font-size:16px}
+  .sig{margin-top:18px}
+  .ceo{font-size:17px}
+  .mgr{font-size:14px}
 }
-@page{size:A4;margin:14mm 0 14mm}
+@page{size:A4;margin:14mm 0}
 @page :first{margin:0}
 @media print{
   body{background:#fff}
   .top,.foot{display:none!important}
   .sheet-wrap{padding:0}
-  .sheet{width:210mm;max-width:none;min-height:297mm;margin:0;padding:12mm 16mm 10mm;box-shadow:none;font-size:9pt;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .doc-head{min-height:12mm}
-  .doc-head img{height:8.4mm}
-  .doc-title{font-size:20pt}
-  .stamp{font-size:9pt;border-width:1.4pt;padding:.4mm 1mm .4mm 2.6mm}
-  .parties{margin-top:5mm;gap:6mm}
-  .to div{padding:.5mm 0;gap:2.6mm}
-  .to .rcpt{font-size:10.5pt;padding-bottom:2mm}
-  .sup{font-size:8pt}
-  .sup th,.sup td{border-width:.6pt;padding:1mm 2mm;height:6mm}
-  .sup th.v{width:7.5mm}
-  .sup th.k{width:17mm}
-  .pre{margin-top:4.2mm}
-  .hl{margin-top:2mm;padding:2.2mm 4mm;border-width:.8pt}
-  .hl-k{min-width:21mm}
-  .hl b{font-size:11.5pt}
-  .hl span.n{font-size:8pt}
-  .sec{margin:4.6mm 0 1.4mm;font-size:9pt}
-  .sec span{font-size:8pt}
-  .tbl{overflow:visible}
-  .price{font-size:9pt}
-  .price{line-height:1.3}
-  .price th,.price td{border-width:.6pt;padding:2mm 1.8mm}
-  .price th{font-size:8.2pt;padding:1.7mm 1.5mm}
-  .src{margin-top:1.2mm;font-size:7.6pt}
-  .arts{padding:2.6mm 4mm;border-width:.6pt}
-  .art + .art{margin-top:1.6mm}
-  .art h3{font-size:9pt}
-  .art p{margin-top:.5mm;line-height:1.55}
-  .closing{margin-top:4.2mm}
-  .date{margin-top:3.4mm;font-size:10pt}
-  .party{width:86mm;margin-top:3mm}
-  .party div{padding:.8mm 0;gap:2.6mm}
-  .party .gap{width:26mm}
-  .party .r-ceo{margin-top:3.4mm}
-  .seal{font-size:9pt}
-  .seal img{width:16mm;height:16mm}
-  .seal.ph::after{width:14mm;height:14mm}
-  .compact .parties{margin-top:3.6mm}
-  .compact .to div{padding:.2mm 0}
-  .compact .sup th,.compact .sup td{height:5.2mm;padding:.6mm 2mm}
-  .compact .pre{margin-top:3mm;line-height:1.35}
-  .compact .hl{padding:1.6mm 4mm}
-  .compact .sec{margin-top:3.4mm}
-  .compact .price th,.compact .price td{padding:1.05mm 1.8mm}
-  .compact .src{margin-top:.8mm}
-  .compact .arts{padding:2mm 4mm}
-  .compact .art + .art{margin-top:1mm}
-  .compact .art h3{font-size:8.6pt}
-  .compact .art p{font-size:8.6pt;line-height:1.42}
-  .compact .closing{margin-top:3mm}
-  .compact .date{margin-top:2.4mm}
-  .compact .party{margin-top:2mm}
-  .compact .party div{padding:.4mm 0}
-  .compact .party .r-ceo{margin-top:2.6mm}
+  .sheet{margin:0;box-shadow:none}
 }`;
 
-// 회사 견적서와 같은 표: 머리 칸·합계 줄은 연한 파랑, 품명은 굵게 가운데, 합계 칸은 굵게 오른쪽
+// 원래 협약서에 붙여 넣던 견적서 표와 같은 모양 — 품명 굵게, 단가·수량 가운데, 공급가액·세액 오른쪽, 합계 굵게 오른쪽
 function tableHtml(doc: MouDoc, sample: boolean): string {
   if (doc.mode === 'items') {
-    const head = '<tr><th style="width:30%">품 명</th><th>1대 단가</th><th style="width:10%">수량(EA)</th><th class="opt">공급가액</th><th class="opt">세액</th><th>합계</th></tr>';
+    const head = '<tr><th style="width:24%">품 명</th><th style="width:22%">1대단가 산출 내역(원)</th><th style="width:9.5%">수량(EA)</th><th class="opt" style="width:13.5%">공급가액</th><th class="opt" style="width:11.5%">세액</th><th>합계</th></tr>';
     const body = doc.rows
       .map(
         (r) =>
           `<tr><td class="l">${escapeHtml(r.name)}</td><td>${money(r.unitPrice, sample)}</td><td>${r.quantity}</td>` +
-          `<td class="opt">${money(r.supply, sample)}</td><td class="opt">${money(r.tax, sample)}</td><td class="t">${money(r.total, sample)}</td></tr>`,
+          `<td class="opt r">${money(r.supply, sample)}</td><td class="opt r">${money(r.tax, sample)}</td><td class="t">${money(r.total, sample)}</td></tr>`,
       )
       .join('');
-    const qty = doc.rows.reduce((s, r) => s + r.quantity, 0);
-    const supply = doc.rows.reduce((s, r) => s + (r.supply || 0), 0);
-    const tax = doc.rows.reduce((s, r) => s + (r.tax || 0), 0);
-    const adj = doc.rounding > 0
-      ? `<tr class="adj"><td class="l">단수 정리</td><td>-</td><td>-</td><td class="opt">-</td><td class="opt">-</td><td class="t">−${money(doc.rounding, sample)}</td></tr>`
-      : '';
-    const sum = `<tr class="sum"><td>합 계</td><td></td><td>${qty}</td><td class="opt">${money(supply, sample)}</td><td class="opt">${money(tax, sample)}</td><td class="t">${money(doc.amount, sample)}</td></tr>`;
-    return `<table class="price"><thead>${head}</thead><tbody>${body}${adj}${sum}</tbody></table>`;
+    return `<table class="price"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
   const rows = doc.rows.length > 0 ? doc.rows : [{ name: '에어컨 전문세척', quantity: 0 }];
   const body = rows.map((r) => `<tr><td class="l">${escapeHtml(r.name)}</td><td>${r.quantity > 0 ? r.quantity : '-'}</td></tr>`).join('');
-  const qty = rows.reduce((s, r) => s + r.quantity, 0);
-  const sum = qty > 0 ? `<tr class="sum"><td>합 계</td><td>${qty}</td></tr>` : '';
   const last = doc.mode === 'total'
     ? `<tr class="sum"><td>지난 작업 금액 (VAT 포함)</td><td class="t">${money(doc.amount, sample)}원</td></tr>`
     : '<tr class="sum"><td>보장 단가</td><td>지난 작업 견적과 같은 단가</td></tr>';
-  return `<table class="price"><thead><tr><th>품 명</th><th style="width:34%">수량(EA)</th></tr></thead><tbody>${body}${sum}${last}</tbody></table>`;
+  return `<table class="price"><thead><tr><th>품 명</th><th style="width:34%">수량(EA)</th></tr></thead><tbody>${body}${last}</tbody></table>`;
 }
 
 function sourceText(doc: MouDoc, sample: boolean): string {
-  if (sample) return '견본 — 실제 협약서에는 지난 견적서의 품목별 1대 단가가 들어갑니다.';
-  if (doc.mode === 'items') return doc.quoteDate ? `${dotDate(doc.quoteDate)} 견적서 기준` : '지난 견적서 기준';
-  if (doc.mode === 'total') return '지난 작업의 설비·수량과 금액 기준';
-  return '지난 작업의 설비·수량 기준';
+  if (sample) return '견본 — 실제 협약서에는 지난 견적서의 품목별 1대 단가가 들어갑니다';
+  if (doc.mode === 'items') return `${doc.quoteDate ? `${dotDate(doc.quoteDate)} 견적서 기준 · ` : '지난 견적서 기준 · '}단위 : 원, VAT 포함`;
+  if (doc.mode === 'total') return '지난 작업의 설비·수량과 금액 기준 · 수량 단위 : 대';
+  return '지난 작업의 설비·수량 기준 · 수량 단위 : 대';
 }
 
-// 조항 — 원래 협약서의 뜻 그대로, 계약서 문체로 다듬은 문구 (11-14 사용자 승인)
+// 조항 — 원래 협약서의 뜻 그대로, 계약서 문체로 다듬은 문구 (11-14 사용자 승인). 제목 앞 회색 아이콘은 원본 그대로.
 function articlesHtml(doc: MouDoc): string {
   const first =
     doc.mode === 'items'
@@ -593,7 +558,8 @@ function articlesHtml(doc: MouDoc): string {
       : doc.mode === 'total'
         ? '보장 단가는 위 표의 설비·수량 기준 지난 작업 금액과 같으며, 작업일부터 1년간 적용한다.'
         : '보장 단가는 지난 작업의 견적 단가와 같으며, 작업일부터 1년간 적용한다.';
-  const art = (no: number, title: string, body: string) => `<section class="art"><h3>제${no}조(${title})</h3>${body}</section>`;
+  const icon = `<img src="data:image/png;base64,${MOU_BULLET_PNG}" alt="">`;
+  const art = (no: number, title: string, body: string) => `<section class="art"><h3>${icon}제${no}조 (${title})</h3><div class="body">${body}</div></section>`;
   const cl = (mark: string, text: string) => `<p class="cl">${mark} ${text}</p>`;
   return `<div class="arts">
 ${art(1, '목적', '<p>본 협약은 회사와 고객 간 에어컨 전문세척 서비스의 단가를 일정 기간 유지함으로써 상호 신뢰를 높이고 안정적인 시설 관리를 돕는 것을 목적으로 한다.</p>')}
@@ -602,61 +568,39 @@ ${art(3, '기간과 효력', cl('①', '본 협약은 보장 기간 동안 유�
 </div>`;
 }
 
-// 라벨 — 견적서처럼 두세 글자는 같은 폭에 벌리고(상    호·사 업 장) 네 글자는 붙여 쓴다(등록번호)
-const label = (s: string) => `<span class="lb">${Array.from(s).length < 4 ? Array.from(s).join(' ') : s}</span>`;
-// 강조 상자 라벨은 견적서 '총 견 적 금 액' 처럼 모두 띄운다
-const spaced = (s: string) => Array.from(s).join(' ');
-
 function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
-  // 표 줄이 많으면 간격을 줄인다 — A4 한 장에 품목 10줄까지 (그보다 많으면 두 장)
-  const tableRows = doc.mode === 'items'
-    ? doc.rows.length + (doc.rounding > 0 ? 1 : 0) + 1
-    : Math.max(doc.rows.length, 1) + (doc.rows.some((r) => r.quantity > 0) ? 1 : 0) + 1;
+  // 표가 길면 조항 간격을 줄인다 — A4 한 장에 품목 10줄까지 (그보다 많으면 두 장)
+  const weight = doc.rows.reduce((s, r) => s + rowWeight(r.name), 0);
+  const tableRows = doc.mode === 'items' ? weight + 1 : Math.max(weight, 1) + 2;
   const compact = tableRows > COMPACT_FROM;
-  const seal = opts.sealUri
-    ? `<span class="seal">(인)<img src="${opts.sealUri}" alt=""></span>`
-    : `<span class="seal${opts.sample ? ' ph' : ''}">(인)</span>`;
+  const a = opts.assets;
+  const sign = a.sign
+    ? `<img class="sign" src="${a.sign}" alt="">`
+    : opts.sample ? '<span class="sign ph">서명</span>' : '';
+  const seal = a.seal ? `<img class="seal" src="${a.seal}" alt="">` : opts.sample ? '<span class="seal ph"></span>' : '';
   const mgr = doc.manager && doc.manager.name
-    ? `${escapeHtml(doc.manager.name)}${doc.manager.position ? ` ${escapeHtml(doc.manager.position)}` : ''}`
-    : '';
-  const toRows = [
-    `<div class="rcpt"><dt>수 신</dt><dd>${escapeHtml(doc.company)} 귀중</dd></div>`,
-    `<div><dt>${label('협약명')}</dt><dd>: 에어컨 전문세척 단가보장</dd></div>`,
-    doc.no ? `<div><dt>${label('협약번호')}</dt><dd>: ${escapeHtml(doc.no)}</dd></div>` : '',
-    `<div><dt>${label('작업일')}</dt><dd>: ${dotDate(doc.workDate)}</dd></div>`,
-  ].join('');
-  const supRows: [string, string, string?][] = [
-    [label('상호'), COMPANY.short, 'b'],
-    [label('등록번호'), COMPANY.bizNo],
-    [label('사업장'), COMPANY.address],
-    [label('전화번호'), COMPANY.phone],
-  ];
-  if (mgr) supRows.push([label('담당자'), mgr]);
-  const sup = supRows
-    .map(([k, v, cls], i) =>
-      `<tr>${i === 0 ? `<th class="v" rowspan="${supRows.length}">공<br>급<br>자</th>` : ''}<th class="k">${k}</th><td${cls ? ` class="${cls}"` : ''}>${v}</td></tr>`)
-    .join('');
-  const unit = doc.mode === 'items' ? '(단위 : 원, VAT 포함)' : '(수량 단위 : 대)';
+    ? `<b>담당자</b>${escapeHtml(doc.manager.name)}${doc.manager.position ? ` ${escapeHtml(doc.manager.position)}` : ''}`
+    : `<b>대표전화</b>${COMPANY.phone}`;
   return `<article class="sheet${compact ? ' compact' : ''}">
-<header class="doc-head"><img src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="AIRTOR 에어터"><h2 class="doc-title">단가보장협약서</h2>${opts.sample ? '<span class="stamp">견본</span>' : ''}</header>
-<div class="parties">
-<dl class="to">${toRows}</dl>
-<table class="sup"><tbody>${sup}</tbody></table>
-</div>
-<p class="pre">${COMPANY.short}(이하 &quot;회사&quot;)는 ${escapeHtml(doc.company)}(이하 &quot;고객&quot;)의 쾌적한 업무환경과 비용 안정을 위하여 다음과 같이 에어컨 전문세척 단가를 보장한다.</p>
-<div class="hl"><span class="hl-k">${spaced('보장기간')} :</span><b>${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)}</b><span class="n">(작업일부터 1년, 아래 단가 적용)</span></div>
-<div class="sec">보장 단가<span>${unit}</span></div>
+<div class="bar"><img class="logo" src="data:image/png;base64,${MOU_LOGO_WHITE_PNG}" alt="AIRTOR">${opts.sample ? '<span class="stamp">견본</span>' : ''}</div>
+<h2 class="title">에어컨 전문세척 <b>단가보장 협약서</b></h2>
+<p class="intro">${COMPANY.short}(이하 &quot;회사&quot;)는 ${escapeHtml(doc.company)}(이하 &quot;고객&quot;)의 쾌적한 업무환경과 비용 안정을 위하여 <b>다음과 같이 에어컨 전문세척 단가를 보장한다.</b></p>
+<div class="rule"></div>
+<div class="cap"><span>적용 기간 ${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)} (작업일부터 1년)</span><span>${escapeHtml(sourceText(doc, opts.sample))}</span></div>
 <div class="tbl">${tableHtml(doc, opts.sample)}</div>
-<p class="src">${escapeHtml(sourceText(doc, opts.sample))}</p>
-<div class="sec">협약 내용</div>
 ${articlesHtml(doc)}
+<div class="bottom">
+${a.photo ? `<img class="photo" src="${a.photo}" alt="">` : ''}<img class="cap-logo" src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="">
+<div class="rule"></div>
 <p class="closing">회사는 위 내용을 성실히 이행할 것을 확인하며 본 협약서를 발행한다.</p>
-<p class="date">${longDate(doc.issuedAt)}</p>
-<dl class="party">
-<div><dt>${label('회사')}</dt><dd>: ${COMPANY.name}</dd></div>
-<div><dt>${label('주소')}</dt><dd>: ${COMPANY.address}</dd></div>
-<div class="r-ceo"><dt>${label('대표이사')}</dt><dd>: <span class="gap"></span>${seal}</dd></div>
-</dl>
+<p class="issued">${longDate(doc.issuedAt)} 발행</p>
+<div class="sig">
+<div class="sig-area">${sign}<span class="in">( 인 )</span>${seal}</div>
+<p class="ceo"><small>(주)</small>에어터 대표이사</p>
+<p class="mgr">${mgr}</p>
+</div>
+<div class="mou"><img src="data:image/png;base64,${MOU_HANDSHAKE_PNG}" alt=""><span>MOU</span>${doc.no ? `<small>${escapeHtml(doc.no)}</small>` : ''}</div>
+</div>
 </article>`;
 }
 
@@ -772,25 +716,36 @@ export function pdfHeaders(doc: MouDoc, size?: number): Record<string, string> {
 
 // ─── 직인·PDF ───────────────────────────────────────────────────────────
 
-let sealCache: { uri: string | null; at: number } | null = null;
+export interface BrandAssets {
+  seal: string | null;
+  sign: string | null;
+  photo: string | null;
+}
 
-/** R2 의 직인 그림 → data: URI (isolate 안에서 10분 캐시). 없거나 못 읽으면 null → (인) 만 */
-export async function loadSealUri(env: MouEnv): Promise<string | null> {
-  if (sealCache && Date.now() - sealCache.at < 600_000) return sealCache.uri;
-  let uri: string | null = null;
+export const NO_ASSETS: BrandAssets = { seal: null, sign: null, photo: null };
+
+let assetCache: { v: BrandAssets; at: number } | null = null;
+
+async function r2DataUri(env: MouEnv, key: string): Promise<string | null> {
   try {
-    const obj = env.FILES ? await env.FILES.get(SEAL_R2_KEY) : null;
-    if (obj) {
-      const bytes = new Uint8Array(await obj.arrayBuffer());
-      let bin = '';
-      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      uri = `data:image/png;base64,${btoa(bin)}`;
-    }
+    const obj = env.FILES ? await env.FILES.get(key) : null;
+    if (!obj) return null;
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `data:image/png;base64,${btoa(bin)}`;
   } catch {
-    uri = null;
+    return null;
   }
-  sealCache = { uri, at: Date.now() };
-  return uri;
+}
+
+/** R2 의 직인·대표이사 서명·작업자 사진 → data: URI (isolate 안에서 10분 캐시). 없는 것은 null → 그 자리만 비운다 */
+export async function loadBrandAssets(env: MouEnv): Promise<BrandAssets> {
+  if (assetCache && Date.now() - assetCache.at < 600_000) return assetCache.v;
+  const [seal, sign, photo] = await Promise.all([r2DataUri(env, SEAL_R2_KEY), r2DataUri(env, SIGN_R2_KEY), r2DataUri(env, PHOTO_R2_KEY)]);
+  const v = { seal, sign, photo };
+  assetCache = { v, at: Date.now() };
+  return v;
 }
 
 /** Cloudflare Browser Run REST /pdf — 인쇄용 HTML 을 A4 PDF 로. 실패하면 예외 */
