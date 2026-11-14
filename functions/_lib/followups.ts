@@ -34,6 +34,8 @@ export interface FollowupStage {
   /** 작업월이 altWorkMonths에 있으면 days 대신 이 값 */
   altDays?: number;
   altWorkMonths?: number[];
+  /** 단가보장 협약서 링크(개인화 값 mou_url)를 만들어 싣는 단계 — functions/_lib/mou.ts */
+  mou?: boolean;
 }
 
 export interface FollowupConfig {
@@ -120,6 +122,12 @@ export interface DueItem {
   manager: string;
   recipients: Recipient[]; // 아직 장부에 없는 담당자만
   supersededStages: number[]; // 동시에 due였지만 상위 단계에 밀린 낮은 단계
+  /** 작업 항목의 딜 ID (없으면 null) — 협약서 단가표가 견적서 판독을 찾을 때 쓴다 */
+  dealId: number | null;
+  /** 작업 항목의 설비 내역 원본 — 협약서 대수 표 */
+  detailedQuantity: unknown;
+  /** 이 단계가 협약서 링크를 싣는가 (FollowupStage.mou) */
+  mou: boolean;
 }
 
 export type SkipReason =
@@ -212,6 +220,7 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
       altDays = ad;
       altWorkMonths = am as number[];
     }
+    if (o.mou !== undefined && typeof o.mou !== 'boolean') return { ok: false, error: `stage ${stage}: mou must be true or false` };
     seen.add(stage);
     stages.push({
       stage,
@@ -220,6 +229,7 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
       label: typeof o.label === 'string' ? o.label : undefined,
       altDays,
       altWorkMonths,
+      mou: o.mou === true ? true : undefined,
     });
   }
   stages.sort((a, b) => a.days - b.days);
@@ -347,6 +357,9 @@ export function computeDue(
         manager: (c.accountManager || '').trim() || DEFAULT_MANAGER,
         recipients: pending,
         supersededStages: [],
+        dealId: Number.isInteger(Number(entry.dealId)) && Number(entry.dealId) > 0 ? Number(entry.dealId) : null,
+        detailedQuantity: entry.detailedQuantity,
+        mou: s.mou === true,
       });
     }
     if (candidates.length === 0) continue;

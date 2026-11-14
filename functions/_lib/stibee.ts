@@ -17,6 +17,8 @@ export const BATCH_MAX = 1000;
 export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api_v2.php';
 // 딜 원본 — 팔로업 러너가 '진행 중 딜이 있는 회사'를 건너뛸 때 읽는다 (읽기 전용 GET)
 export const DEALS_API = 'https://airtor.co.kr/api/deals_api_v2.php';
+// 고객 담당 매니저 목록 — 협약서의 '담당 {이름} {직책}' 직책을 찾을 때 읽는다 (읽기 전용 GET)
+export const MANAGERS_API = 'https://airtor.co.kr/api/managers_api.php';
 
 export interface StibeeEnv {
   STIBEE_API_KEY: string;

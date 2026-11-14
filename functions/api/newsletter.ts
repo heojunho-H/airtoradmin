@@ -12,6 +12,8 @@
 //   NEWSLETTER_FOLLOWUPS      팔로업 단계 설정 JSON — functions/_lib/followups.ts 참조
 //   NEWSLETTER_CRON_SECRET    run-followups 실제 실행 토큰 (GitHub Secrets와 동일 값)
 //   ALLOWED_ORIGIN            CORS 허용 오리진 (기본 https://airtoradmin.pages.dev)
+//   MOU_BASE_URL              단가보장 협약서 링크 앞부분 (기본 https://docs.airtor.co.kr) — docs/mou.md
+//   (바인딩 AI_DB·FILES, BROWSER_RUN_TOKEN·CF_ACCOUNT_ID 는 협약서 화면 쪽 — functions/_lib/mou.ts)
 //
 // 요청 (POST, JSON):
 //   { action: 'sync', subscribers: [{ email, status, fields }] }
@@ -21,6 +23,7 @@
 //   { action: 'run-followups', dryRun?: boolean, limit?: number }
 //     → 최근 작업일 기준 단계별 팔로업 발송 (스티비 자동 이메일 "API 직접 요청" 트리거)
 //     → dryRun:true 는 토큰 없이 허용(읽기 전용, 수신자 이메일은 가려서 보낸다). 실제 실행은 헤더 X-Newsletter-Cron-Token 필수.
+//     → "mou": true 단계는 실제 실행에서만 고객별 협약서 링크를 D1 에 만들어 mou_url 로 싣는다. 못 만들면 그 고객은 다음 날로 미룬다.
 //   { action: 'test-trigger', email, stage }                 ← 크론 토큰 필수
 //     → 지정한 단계의 자동 이메일을 지정한 주소로 견본 개인화 값과 함께 보낸다 (고객 장부는 건드리지 않음)
 // 요청 (GET):
@@ -37,6 +40,7 @@ import {
   BATCH_MAX,
   CUSTOMERS_API,
   DEALS_API,
+  MANAGERS_API,
   STIBEE_AUTO_URL,
   STIBEE_BASE_URL,
   chunk,
@@ -61,8 +65,9 @@ import {
   type DueItem,
   type RecipientResult,
 } from '../_lib/followups';
+import { issueMouLink, mouBaseUrl, type MouEnv } from '../_lib/mou';
 
-type Env = StibeeEnv;
+type Env = StibeeEnv & MouEnv;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -230,7 +235,7 @@ function handleConfig(env: Env): Response {
   return jsonResponse(
     {
       ok: true,
-      stages: parsed.config.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label, altDays: s.altDays, altWorkMonths: s.altWorkMonths })),
+      stages: parsed.config.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label, altDays: s.altDays, altWorkMonths: s.altWorkMonths, mou: s.mou })),
       grace: parsed.config.grace,
     },
     200,
@@ -251,6 +256,28 @@ async function fetchCustomers(): Promise<CustomerRow[]> {
   return json.data;
 }
 
+// 고객 담당 매니저 이름 → 직책 (협약서 '담당 {이름} {직책}'). 못 읽으면 빈 목록 — 직책 없이 이름만 쓴다.
+async function fetchManagerPositions(): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    const res = await fetch(MANAGERS_API, { headers: { Accept: 'application/json' } });
+    const json = JSON.parse(await res.text()) as { data?: { name?: string; position?: string }[] };
+    for (const m of json.data || []) {
+      const name = String(m?.name || '').trim();
+      if (name) out.set(name, String(m?.position || '').trim());
+    }
+  } catch {
+    // 직책은 꾸밈 — 실패해도 발송은 계속한다
+  }
+  return out;
+}
+
+function mouManager(manager: string, positions: Map<string, string>): { name: string; position: string } | null {
+  const name = manager.trim();
+  if (!name || name === DEFAULT_MANAGER) return null;
+  return { name, position: positions.get(name) ?? positions.get(name.split(/\s+/)[0]) ?? '' };
+}
+
 // 트리거 API 호출 1건. 200 OK가 실제 발송을 보장하지는 않는다 (수신거부·주소록 미포함이면 조용히 무시됨).
 // 본문 키는 스티비 주소록 사용자 정의 필드와 같아야 한다 (docs/stibee-emails/README.md).
 async function triggerAutoEmail(
@@ -259,6 +286,7 @@ async function triggerAutoEmail(
   email: string,
   name: string,
   today: string,
+  extra: Record<string, string> = {},
 ): Promise<RecipientResult> {
   try {
     const res = await fetch(`${STIBEE_AUTO_URL}/${encodeURIComponent(item.autoEmailId)}`, {
@@ -273,6 +301,7 @@ async function triggerAutoEmail(
         total_quantity: String(item.totalQuantity),
         quotation_amount: String(item.quotationAmount),
         ...mergeFieldsFor(item, today),
+        ...extra,
       }),
     });
     if (res.ok) return { email, ok: true };
@@ -297,7 +326,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   }
   const cfg = parsed.config;
   const today = todayKst();
-  const configOut = { stages: cfg.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label })), grace: cfg.grace };
+  const configOut = { stages: cfg.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label, mou: s.mou })), grace: cfg.grace };
 
   const customers = await fetchCustomers();
   // 진행 중 딜 목록 — 실제 실행에서 못 읽으면 보내지 않는다(상담 중인 회사에 엉뚱한 메일이 가지 않게)
@@ -329,12 +358,13 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
 
   if (opts.dryRun) {
     // 로그인 없이 열리는 미리보기라 수신자 이메일은 가리고, 고객별 건너뜀 목록은 요약만 보낸다
+    // 협약서 링크는 실제 실행에서만 만든다(D1 쓰기) — 미리보기는 몇 건인지만
     const dueOut = selected.map((d) => ({
       customerId: d.customerId, company: d.company, stage: d.stage, label: d.label, workDate: d.workDate, dueDate: d.dueDate,
-      projectName: d.projectName, recipients: d.recipients.map((r) => maskEmail(r.email)), supersededStages: d.supersededStages,
+      projectName: d.projectName, recipients: d.recipients.map((r) => maskEmail(r.email)), supersededStages: d.supersededStages, mou: d.mou,
     }));
     return jsonResponse(
-      { ok: true, dryRun: true, today, config: configOut, evaluated: customers.length, due: dueOut, deferred, skippedSummary, warnings },
+      { ok: true, dryRun: true, today, config: configOut, evaluated: customers.length, due: dueOut, deferred, skippedSummary, mouLinks: selected.filter((d) => d.mou).length, warnings },
       200,
       origin,
     );
@@ -343,6 +373,8 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   const sent: { customerId: number; company: string; stage: number; recipient: string }[] = [];
   const failed: { customerId: number; company: string; stage: number; recipient: string; error: string }[] = [];
   const errors: string[] = [];
+  const mouIssued: { customerId: number; mode: string; reused: boolean }[] = [];
+  const mouDeferred: { customerId: number; company: string; stage: number; dueDate: string; recipients: number }[] = [];
 
   if (selected.length > 0) {
     // 1) 대상 담당자를 주소록에 upsert — 주소록에 없으면 트리거가 조용히 무시되므로 필수
@@ -374,15 +406,39 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
       for (const e of list || []) rejected.add(e.toLowerCase());
     }
 
+    // 협약서 단계가 있으면 담당 매니저 직책을 한 번 읽는다
+    const positions = selected.some((d) => d.mou) ? await fetchManagerPositions() : new Map<string, string>();
+
     // 2) 고객별 트리거 → 즉시 재조회 → PUT (장부 기록). 고객 단위로 바로 기록해 발송/기록 간 창을 최소화.
     for (const item of selected) {
+      // 협약서 단계: 링크를 먼저 만든다. 못 만들면 링크 없는 메일이 나가지 않게 이 고객은 다음 날로 미룬다(장부 기록 없음).
+      let extra: Record<string, string> = {};
+      if (item.mou) {
+        try {
+          const link = await issueMouLink(
+            env,
+            {
+              customerId: item.customerId, jobKey: item.jobKey, company: item.company, workDate: item.workDate, dealId: item.dealId,
+              detailedQuantity: item.detailedQuantity, totalQuantity: item.totalQuantity, quotationAmount: item.quotationAmount,
+              manager: mouManager(item.manager, positions),
+            },
+            today,
+          );
+          extra = { mou_url: link.url };
+          mouIssued.push({ customerId: item.customerId, mode: link.mode, reused: link.reused });
+        } catch (err) {
+          errors.push(`고객 ${item.customerId}(${item.company}) 협약서 링크를 만들지 못해 오늘은 보내지 않음: ${err instanceof Error ? err.message : String(err)}`);
+          mouDeferred.push({ customerId: item.customerId, company: item.company, stage: item.stage, dueDate: item.dueDate, recipients: item.recipients.length });
+          continue;
+        }
+      }
       const results: RecipientResult[] = [];
       for (const rcpt of item.recipients) {
         if (rejected.has(rcpt.email)) {
           results.push({ email: rcpt.email, ok: false, error: '주소록 upsert 거부' });
           continue;
         }
-        results.push(await triggerAutoEmail(env, item, rcpt.email, rcpt.name, today));
+        results.push(await triggerAutoEmail(env, item, rcpt.email, rcpt.name, today, extra));
         await sleep(TRIGGER_INTERVAL_MS);
       }
       for (const res of results) {
@@ -413,7 +469,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   }
 
   return jsonResponse(
-    { ok: errors.length === 0, dryRun: false, today, config: configOut, evaluated: customers.length, sent, failed, deferred, skippedSummary, errors },
+    { ok: errors.length === 0, dryRun: false, today, config: configOut, evaluated: customers.length, sent, failed, deferred, mouIssued, mouDeferred, skippedSummary, errors },
     200,
     origin,
   );
@@ -447,6 +503,8 @@ async function handleTestTrigger(env: Env, emailRaw: unknown, stageRaw: unknown)
     email,
     '테스트',
     today,
+    // 협약서 단계는 공개 견본 링크를 싣는다 (D1 에 쓰지 않는다)
+    stage.mou ? { mou_url: `${mouBaseUrl(env)}/mou/sample` } : {},
   );
   return jsonResponse(
     { ok: result.ok, stage: stage.stage, label: stage.label, email, workDate, error: result.error },

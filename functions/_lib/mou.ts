@@ -1,0 +1,750 @@
+// 단가보장 협약서 링크 — B1(200일) 광고판 메일의 '단가보장 협약서 보기' (docs/mou.md)
+//
+// 흐름: 팔로업 실제 실행에서 mou 단계(NEWSLETTER_FOLLOWUPS 의 "mou": true) 대상마다 협약서 내용을
+// D1 mou_links 에 얼려 두고(추측할 수 없는 128비트 ID), 메일에는 {MOU_BASE_URL}/mou/<id> 를 개인화 값
+// mou_url 로 싣는다. 고객이 열면 functions/mou/[id].ts 가 이 스냅숏으로 화면을 그리고, <id>.pdf 는
+// Cloudflare Browser Run REST(/pdf)로 만들어 R2 에 한 번 저장한 뒤 내려보낸다.
+//
+// 표: 작업 항목 dealId → ai_files(견적서 도우미로 반영한 견적, applied_json.role='values' 1건) → 품목별 단가.
+//     판독이 없거나 금액이 딜과 맞지 않으면 설비별 대수 + 지난 작업 금액(VAT 포함), 금액도 없으면 대수만.
+// 직인: R2 brand/mou-seal.png 에만 둔다(공개 저장소에 두지 않는다). 없으면 (인) 만 찍는다.
+
+import { addDays, isYmd } from './followups';
+import { LOGO_COLOR_PNG, LOGO_WHITE_PNG } from './mou-assets';
+
+export const DEFAULT_MOU_BASE_URL = 'https://docs.airtor.co.kr';
+/** 서식을 바꾸면 올린다 — R2 의 PDF 캐시 키가 바뀌어 새 서식으로 다시 만든다 */
+export const MOU_VERSION = 'v1';
+export const SEAL_R2_KEY = 'brand/mou-seal.png';
+/** 적용 기간이 끝난 뒤에도 링크를 여는 날 수 */
+export const MOU_GRACE_DAYS = 30;
+const ID_RE = /^[A-Za-z0-9_-]{22}$/;
+
+export interface MouEnv {
+  AI_DB?: D1Database;
+  FILES?: R2Bucket;
+  /** Cloudflare API 토큰 (권한: Account · Browser Run · Edit) — PDF 만들기 */
+  BROWSER_RUN_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  /** 메일에 싣는 링크의 앞부분 (기본 https://docs.airtor.co.kr) */
+  MOU_BASE_URL?: string;
+}
+
+export interface MouRow {
+  name: string;
+  quantity: number;
+  unitPrice?: number;
+  supply?: number;
+  tax?: number;
+  total?: number;
+}
+
+export interface MouDoc {
+  v: 1;
+  company: string;
+  workDate: string;
+  /** 작업일 + 365일 — 메일의 due_date_kr 과 같은 날 */
+  validUntil: string;
+  issuedAt: string;
+  manager: { name: string; position: string } | null;
+  /** items: 견적서 품목별 단가 · total: 설비별 대수 + 지난 작업 금액 · same: 대수만(금액 기록 없음) */
+  mode: 'items' | 'total' | 'same';
+  rows: MouRow[];
+  /** items: 품목 합계 − 견적 총액(천 원 단위 절사 등). 0보다 크면 '단수 정리' 줄 */
+  rounding: number;
+  /** items: 견적 총액 · total: 지난 작업 금액 (모두 VAT 포함) · same: 0 */
+  amount: number;
+  /** items: 견적서 날짜 YYYY-MM-DD, 없으면 '' */
+  quoteDate: string;
+}
+
+// ─── 표 만들기 ──────────────────────────────────────────────────────────
+
+// 영업 화면 상세 수량 키 순서 (src/lib/ai/intake.ts EQUIPMENT_KEYS 와 같게 유지)
+const EQUIPMENT_ORDER = ['벽걸이형', '스탠드 일반형', '스탠드 대형', '1way 천정형', '2way 천정형', '4way 천정형', '원형 천정형', 'FCU형', '매립덕트형', '실외기'];
+const EQUIPMENT_ALIASES: Record<string, string> = { 스탠드형: '스탠드 일반형' };
+
+function toInt(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+/** 작업 항목 detailedQuantity(JSON 문자열·[{item, quantity}]·짧은 글) → 설비별 대수 줄 */
+export function equipmentRows(dq: unknown): MouRow[] {
+  let cats: Record<string, unknown> = {};
+  let others: unknown[] = [];
+  if (typeof dq === 'string') {
+    const t = dq.trim();
+    if (!t) return [];
+    if (t[0] !== '{' && t[0] !== '[') return t.length <= 80 ? [{ name: t, quantity: 0 }] : [];
+    try {
+      const parsed = JSON.parse(t);
+      if (Array.isArray(parsed)) others = parsed;
+      else {
+        cats = parsed?.categories && typeof parsed.categories === 'object' ? parsed.categories : {};
+        others = Array.isArray(parsed?.others) ? parsed.others : [];
+      }
+    } catch {
+      return [];
+    }
+  } else if (Array.isArray(dq)) {
+    others = dq;
+  }
+  const merged: Record<string, number> = {};
+  for (const [k, v] of Object.entries(cats)) {
+    const key = EQUIPMENT_ALIASES[k] ?? k;
+    merged[key] = (merged[key] ?? 0) + Math.max(0, toInt(v));
+  }
+  const keys = [...EQUIPMENT_ORDER.filter((k) => k in merged), ...Object.keys(merged).filter((k) => !EQUIPMENT_ORDER.includes(k))];
+  const rows: MouRow[] = keys.filter((k) => merged[k] > 0).map((k) => ({ name: k, quantity: merged[k] }));
+  for (const o of others) {
+    if (typeof o === 'string' && o.trim()) rows.push({ name: o.trim().slice(0, 60), quantity: 0 });
+    else if (o && typeof o === 'object') {
+      const r = o as { name?: unknown; item?: unknown; quantity?: unknown };
+      const name = String(r.name ?? r.item ?? '').trim();
+      if (name) rows.push({ name: name.slice(0, 60), quantity: Math.max(0, toInt(r.quantity)) });
+    }
+  }
+  return rows;
+}
+
+export interface QuoteFileRow {
+  extraction_json: string | null;
+  applied_json: string | null;
+}
+
+export interface QuoteTable {
+  rows: MouRow[];
+  amount: number;
+  rounding: number;
+  quoteDate: string;
+}
+
+function roleOf(appliedJson: string | null): string {
+  try {
+    const a = appliedJson ? JSON.parse(appliedJson) : null;
+    return a && typeof a.role === 'string' ? a.role : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 견적서 판독으로 품목별 단가표를 만든다. 아래를 모두 만족할 때만 쓰고, 아니면 null(→ 대수와 총액).
+ * - 이 딜에 수치를 반영한 견적(applied_json.role='values')이 딱 1건 (여러 장을 합산한 딜은 쓰지 않는다)
+ * - 에어터 발행 견적서 1장, 1회 작업 금액, VAT 포함
+ * - 줄마다 1대 단가 × 수량 = 공급가액, 공급가액 + 세액 = 합계
+ * - 품목 합계 − 총 견적 금액 = 0 ~ max(1만 원, 1%) (천 원 단위 절사까지는 '단수 정리' 줄로 보인다)
+ * - 딜 금액이 있으면 총 견적 금액과 max(1만 원, 1%) 안에서 같음 (협상으로 금액을 고친 딜은 쓰지 않는다)
+ */
+export function pickQuoteTable(files: QuoteFileRow[], dealAmount: number): QuoteTable | null {
+  const values = files.filter((f) => roleOf(f.applied_json) === 'values');
+  if (values.length !== 1) return null;
+  let ex: Record<string, unknown>;
+  try {
+    ex = JSON.parse(values[0].extraction_json || '');
+  } catch {
+    return null;
+  }
+  if (!ex || typeof ex !== 'object') return null;
+  if (ex.documentType !== 'quote' || ex.issuedByAirtor !== true || ex.vatIncluded !== true) return null;
+  if (ex.pricingBasis !== undefined && ex.pricingBasis !== 'one_off') return null;
+  if (toInt(ex.quoteCount) > 1) return null;
+  const items = Array.isArray(ex.lineItems) ? (ex.lineItems as Record<string, unknown>[]) : [];
+  if (items.length === 0 || items.length > 40) return null;
+
+  const rows: MouRow[] = [];
+  for (const it of items) {
+    const name = typeof it?.name === 'string' ? it.name.trim() : '';
+    const unitPrice = toInt(it?.unitPrice);
+    const quantity = toInt(it?.quantity);
+    const supply = toInt(it?.supplyAmount);
+    const tax = toInt(it?.taxAmount);
+    const total = toInt(it?.total);
+    if (!name || unitPrice <= 0 || quantity <= 0 || supply <= 0 || tax < 0 || total <= 0) return null;
+    if (Math.abs(unitPrice * quantity - supply) > quantity) return null;
+    if (Math.abs(supply + tax - total) > 1) return null;
+    rows.push({ name: name.slice(0, 60), unitPrice, quantity, supply, tax, total });
+  }
+  const linesTotal = rows.reduce((s, r) => s + (r.total || 0), 0);
+  const quoted = toInt(ex.quotedTotal);
+  if (quoted <= 0) return null;
+  const rounding = linesTotal - quoted;
+  if (rounding < 0 || rounding > Math.max(10_000, Math.round(linesTotal * 0.01))) return null;
+  if (dealAmount > 0 && Math.abs(quoted - dealAmount) > Math.max(10_000, Math.round(quoted * 0.01))) return null;
+  return { rows, amount: quoted, rounding, quoteDate: isYmd(ex.quoteDate) ? (ex.quoteDate as string) : '' };
+}
+
+export interface MouSource {
+  company: string;
+  workDate: string;
+  dealId: number | null;
+  detailedQuantity: unknown;
+  totalQuantity: number;
+  quotationAmount: number;
+  manager: { name: string; position: string } | null;
+}
+
+export function buildMouDoc(src: MouSource, quote: QuoteTable | null, today: string): MouDoc {
+  const base = {
+    v: 1 as const,
+    company: src.company.trim() || '귀사',
+    workDate: src.workDate,
+    validUntil: addDays(src.workDate, 365),
+    issuedAt: today,
+    manager: src.manager,
+  };
+  if (quote) return { ...base, mode: 'items', rows: quote.rows, rounding: quote.rounding, amount: quote.amount, quoteDate: quote.quoteDate };
+  let rows = equipmentRows(src.detailedQuantity);
+  if (rows.length === 0 && src.totalQuantity > 0) rows = [{ name: '에어컨', quantity: src.totalQuantity }];
+  const amount = src.quotationAmount > 0 ? Math.round(src.quotationAmount) : 0;
+  return { ...base, mode: amount > 0 ? 'total' : 'same', rows, rounding: 0, amount, quoteDate: '' };
+}
+
+// ─── D1 mou_links ───────────────────────────────────────────────────────
+
+// d1/migrations/0007_mou_links.sql 과 같은 문장. 폐기(revoked_at)한 행은 같은 작업의 새 링크를 막지 않는다.
+const MOU_TABLE_SQL = [
+  `CREATE TABLE IF NOT EXISTS mou_links (
+    id TEXT PRIMARY KEY,
+    customer_id INTEGER NOT NULL,
+    job_key TEXT NOT NULL,
+    deal_id INTEGER,
+    doc_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_on TEXT NOT NULL,
+    pdf_key TEXT,
+    revoked_at TEXT
+  )`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS mou_links_job ON mou_links (customer_id, job_key) WHERE revoked_at IS NULL',
+];
+let mouTableReady = false;
+
+export async function ensureMouTable(db: D1Database): Promise<void> {
+  if (mouTableReady) return;
+  await db.batch(MOU_TABLE_SQL.map((s) => db.prepare(s)));
+  mouTableReady = true;
+}
+
+export function isMouId(s: string): boolean {
+  return ID_RE.test(s);
+}
+
+export function newMouId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function mouBaseUrl(env: MouEnv): string {
+  return (env.MOU_BASE_URL || DEFAULT_MOU_BASE_URL).trim().replace(/\/+$/, '');
+}
+
+export function mouUrl(env: MouEnv, id: string): string {
+  return `${mouBaseUrl(env)}/mou/${id}`;
+}
+
+export interface MouLinkRow {
+  id: string;
+  doc_json: string;
+  expires_on: string;
+  pdf_key: string | null;
+  revoked_at: string | null;
+}
+
+export async function getMou(db: D1Database, id: string): Promise<MouLinkRow | null> {
+  try {
+    return await db.prepare('SELECT id, doc_json, expires_on, pdf_key, revoked_at FROM mou_links WHERE id = ?').bind(id).first<MouLinkRow>();
+  } catch (err) {
+    // 첫 발급 전에는 표가 없다 — 없는 링크와 같다
+    if (err instanceof Error && /no such table/i.test(err.message)) return null;
+    throw err;
+  }
+}
+
+export function parseMouDoc(json: string): MouDoc | null {
+  try {
+    const d = JSON.parse(json);
+    if (!d || d.v !== 1 || !isYmd(d.workDate) || !Array.isArray(d.rows)) return null;
+    return d as MouDoc;
+  } catch {
+    return null;
+  }
+}
+
+export async function setMouPdfKey(db: D1Database, id: string, key: string): Promise<void> {
+  await db.prepare('UPDATE mou_links SET pdf_key = ? WHERE id = ? AND pdf_key IS NULL').bind(key, id).run();
+}
+
+async function loadQuoteFiles(db: D1Database, dealId: number): Promise<QuoteFileRow[]> {
+  const res = await db
+    .prepare(
+      "SELECT extraction_json, applied_json FROM ai_files WHERE deal_id = ? AND kind = 'quote' AND status = 'linked' AND deleted_at IS NULL AND extraction_json IS NOT NULL ORDER BY linked_at DESC LIMIT 20",
+    )
+    .bind(dealId)
+    .all<QuoteFileRow>();
+  return res.results || [];
+}
+
+export interface MouIssueInput extends MouSource {
+  customerId: number;
+  jobKey: string;
+}
+
+/** 이 작업의 협약서 링크 — 이미 있으면 그 링크, 없으면 지금 내용으로 얼려 새로 만든다 */
+export async function issueMouLink(env: MouEnv, input: MouIssueInput, today: string): Promise<{ id: string; url: string; reused: boolean; mode: MouDoc['mode'] }> {
+  const db = env.AI_DB;
+  if (!db) throw new Error('AI_DB 바인딩이 없습니다');
+  await ensureMouTable(db);
+  const findSql = 'SELECT id, doc_json FROM mou_links WHERE customer_id = ? AND job_key = ? AND revoked_at IS NULL';
+  const existing = await db.prepare(findSql).bind(input.customerId, input.jobKey).first<{ id: string; doc_json: string }>();
+  if (existing) return { id: existing.id, url: mouUrl(env, existing.id), reused: true, mode: parseMouDoc(existing.doc_json)?.mode ?? 'same' };
+
+  const files = input.dealId ? await loadQuoteFiles(db, input.dealId) : [];
+  const doc = buildMouDoc(input, pickQuoteTable(files, input.quotationAmount), today);
+  const id = newMouId();
+  const res = await db
+    .prepare('INSERT OR IGNORE INTO mou_links (id, customer_id, job_key, deal_id, doc_json, created_at, expires_on) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, input.customerId, input.jobKey, input.dealId, JSON.stringify(doc), new Date().toISOString(), addDays(doc.validUntil, MOU_GRACE_DAYS))
+    .run();
+  if (!res.meta.changes) {
+    // 같은 작업의 행을 그사이 다른 실행이 만들었다 — 그 링크를 쓴다
+    const again = await db.prepare(findSql).bind(input.customerId, input.jobKey).first<{ id: string; doc_json: string }>();
+    if (again) return { id: again.id, url: mouUrl(env, again.id), reused: true, mode: parseMouDoc(again.doc_json)?.mode ?? 'same' };
+    throw new Error('mou_links 저장 실패');
+  }
+  return { id, url: mouUrl(env, id), reused: false, mode: doc.mode };
+}
+
+// ─── 화면 ────────────────────────────────────────────────────────────────
+
+/** 공개 견본 (/mou/sample) — 단가는 00,000 으로 가리고 직인 자리는 회색 점선 */
+export const SAMPLE_DOC: MouDoc = {
+  v: 1,
+  company: '한빛초등학교',
+  workDate: '2026-09-26',
+  validUntil: '2027-09-26',
+  issuedAt: '2027-04-14',
+  manager: { name: 'OOO', position: '팀장' },
+  mode: 'items',
+  rows: [
+    { name: '1way 천정형', unitPrice: 10_000, quantity: 22, supply: 220_000, tax: 22_000, total: 242_000 },
+    { name: '4way 천정형', unitPrice: 10_000, quantity: 2, supply: 20_000, tax: 2_000, total: 22_000 },
+  ],
+  rounding: 0,
+  amount: 264_000,
+  quoteDate: '',
+};
+
+export function escapeHtml(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+/** 'YYYY-MM-DD' → '2026. 9. 26.' */
+export function dotDate(ymd: string): string {
+  if (!isYmd(ymd)) return '';
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${y}. ${m}. ${d}.`;
+}
+
+function longDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${y}년 ${m}월 ${d}일`;
+}
+
+/** 견본은 숫자를 0 으로 가린다 (가격 비공개) */
+function money(n: number | undefined, sample: boolean): string {
+  const s = (n ?? 0).toLocaleString('ko-KR');
+  return sample ? s.replace(/\d/g, '0') : s;
+}
+
+export function mouFileName(doc: MouDoc): string {
+  return `${doc.company.replace(/[\\/:*?"<>|]+/g, ' ').trim() || '에어터'} 단가보장 협약서.pdf`;
+}
+
+export interface RenderOptions {
+  /** screen: 고객 화면(버튼·안내 포함, 인쇄는 A4) · pdf: Browser Run 에 보내는 인쇄용(외부 글꼴 없음) */
+  mode: 'screen' | 'pdf';
+  /** 링크 ID 또는 'sample' — 화면의 PDF 버튼 주소 */
+  id: string;
+  sample: boolean;
+  /** data: URI. 없으면 (인) 만 */
+  sealUri: string | null;
+  /** screen 의 인쇄 버튼 스크립트 nonce */
+  nonce?: string;
+  /** PDF 만들기에 실패해 돌아왔을 때 */
+  pdfFailed?: boolean;
+  /** 링크가 열리는 마지막 날 */
+  expiresOn?: string;
+}
+
+const STYLE = `
+:root{--ink:#1f2329;--sub:#3a4250;--muted:#6b7480;--line:#9fb2c8;--head:#dfe9f6;--blue:#1a4c9c;--bg:#eef1f5}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR','Noto Sans CJK KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif}
+.serif{font-family:'Noto Serif KR','Noto Serif CJK KR','AppleMyungjo','Batang',serif}
+.title,.intro,.art p,.closing,td.name,.top-title,.top-meta,.who dd{word-break:keep-all;overflow-wrap:anywhere}
+.top{max-width:826px;margin:0 auto;padding:24px 16px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+.top-logo{display:block;height:26px;width:auto}
+.top-text{flex:1 1 260px;min-width:0}
+.top-title{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px}
+.top-meta{margin:4px 0 0;font-size:14px;color:var(--sub);overflow-wrap:anywhere}
+.top-actions{display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #c4ccd6;background:#fff;color:var(--ink);font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn:focus-visible{outline:3px solid #8fb3e8;outline-offset:2px}
+.notice{flex-basis:100%;margin:0;font-size:14px;line-height:1.6;color:#8a3b12}
+.sheet-wrap{padding:0 16px 24px}
+.sheet{position:relative;max-width:794px;min-height:1000px;margin:0 auto;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+.bar{height:88px;background:#111;display:flex;align-items:center;justify-content:center;position:relative}
+.bar img{display:block;height:40px;width:auto}
+.stamp{position:absolute;right:24px;top:50%;transform:translateY(-50%);border:1.5px solid #ff6b6b;color:#ff8a8a;font-size:13px;font-weight:700;letter-spacing:2px;padding:4px 10px}
+.page{padding:8px 56px 96px}
+.title{margin:36px 0 0;text-align:center;font-weight:600;font-size:30px;letter-spacing:-0.5px}
+.intro{margin:16px 0 0;text-align:center;font-size:16px;line-height:1.75}
+.rule{height:2px;margin:26px 0 0;background:linear-gradient(90deg,#1fb3a4,#1a4c9c 55%,#7cc24a)}
+.who{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 26px;margin:18px 0 0;font-size:14px;color:var(--sub)}
+.who div{display:flex;gap:6px}
+.who dt{font-weight:700;color:var(--ink)}
+.who dd{margin:0}
+.tbl{margin:16px 0 0;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{background:var(--head);font-weight:700;padding:7px 6px;border:1px solid var(--line);font-size:12.5px;white-space:nowrap}
+td{padding:8px;border:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.name{text-align:center;font-weight:700;white-space:normal}
+td.c{text-align:center}
+td.l{text-align:left;white-space:normal}
+tr.sum td{background:#f3f6fa;font-weight:700}
+tr.adj td{color:var(--sub)}
+.note{margin:6px 0 0;font-size:12px;color:var(--muted);text-align:right}
+.art{margin:24px 0 0}
+.art h3{margin:0;font-weight:600;font-size:17px}
+.art h3::before{content:'';display:inline-block;width:9px;height:9px;margin:0 9px 2px 0;background:var(--blue);vertical-align:middle}
+.art p{margin:9px 0 0 18px;font-size:15px;line-height:1.75}
+.art u{font-weight:700;text-underline-offset:4px}
+.closing{margin:24px 0 0;text-align:center;font-size:15px;line-height:1.8}
+.issued{margin:18px 0 0;text-align:center;font-size:16px}
+.sign{margin:30px auto 0;width:300px;max-width:100%;text-align:center}
+.sign .line{border-top:1px solid var(--ink);margin:0 0 10px}
+.sign .ceo{font-size:18px}
+.seal{position:relative;display:inline-block;margin-left:10px;color:#8a929c;font-size:15px}
+.seal img{position:absolute;left:50%;top:50%;width:72px;height:72px;transform:translate(-35%,-50%) rotate(-4deg)}
+.seal.ph::after{content:'';position:absolute;left:50%;top:50%;width:60px;height:60px;border:1.5px dashed #c0c6ce;border-radius:50%;transform:translate(-50%,-50%)}
+.sign .mgr{margin:8px 0 0;font-size:14px;color:var(--sub)}
+.mou{position:absolute;left:56px;bottom:32px;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--muted);border:1px solid #c4ccd6;padding:3px 8px}
+.foot{max-width:826px;margin:0 auto;padding:0 16px 40px;font-size:13px;color:var(--muted);line-height:1.7}
+.foot p{margin:0}
+.foot a{color:inherit}
+@media screen and (max-width:640px){
+  .top-actions{width:100%}
+  .top-actions .btn{flex:1}
+  .sheet{min-height:0}
+  .bar{height:64px}
+  .bar img{height:28px}
+  .stamp{right:14px;font-size:11px;padding:3px 7px}
+  .page{padding:4px 20px 72px}
+  .title{margin-top:26px;font-size:22px}
+  .intro{font-size:14px}
+  .who{flex-direction:column;align-items:flex-start;font-size:13.5px}
+  table{font-size:13px}
+  th.opt,td.opt{display:none}
+  .art h3{font-size:16px}
+  .art p{margin-left:0;font-size:14px}
+  .closing{font-size:14px}
+  .intro br,.closing br{display:none}
+  .mou{left:20px;bottom:24px}
+}
+@page{size:A4;margin:14mm 0 16mm}
+@page :first{margin:0}
+@media print{
+  body{background:#fff}
+  .top,.foot{display:none!important}
+  .sheet-wrap{padding:0}
+  .sheet{width:210mm;max-width:none;min-height:297mm;margin:0;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .bar{height:22mm}
+  .bar img{height:10mm}
+  .stamp{right:10mm;font-size:9pt;padding:1.2mm 2.6mm}
+  .page{padding:0 18mm 17mm}
+  .title{margin-top:8mm;font-size:22pt}
+  .intro{margin-top:4mm;font-size:11pt;line-height:1.65}
+  .rule{height:2.2px;margin-top:6mm}
+  .who{margin-top:4mm;font-size:9.5pt;gap:0 7mm}
+  .tbl{margin-top:3.5mm;overflow:visible}
+  table{font-size:9pt}
+  th{padding:1.5mm 1mm;font-size:8pt}
+  td{padding:1.8mm 2mm}
+  .note{margin-top:1.4mm;font-size:7.5pt}
+  .art{margin-top:5mm}
+  .art h3{font-size:12pt}
+  .art h3::before{width:2.3mm;height:2.3mm;margin:0 2.3mm .6mm 0}
+  .art p{margin:2mm 0 0 4.6mm;font-size:10.5pt;line-height:1.65}
+  .art u{text-underline-offset:1.2mm}
+  .closing{margin-top:5mm;font-size:10.5pt;line-height:1.7}
+  .issued{margin-top:4mm;font-size:11pt}
+  .sign{margin-top:6mm;width:72mm}
+  .sign .line{margin-bottom:2.4mm}
+  .sign .ceo{font-size:12.5pt}
+  .seal{margin-left:3mm;font-size:10.5pt}
+  .seal img{width:19mm;height:19mm}
+  .seal.ph::after{width:15mm;height:15mm}
+  .sign .mgr{margin-top:1.4mm;font-size:10pt}
+  .mou{left:18mm;bottom:9mm;font-size:8pt;padding:1.2mm 2.4mm}
+  .compact .title{margin-top:6mm;font-size:21pt}
+  .compact .intro{margin-top:3mm;line-height:1.55}
+  .compact .rule{margin-top:4.5mm}
+  .compact .who{margin-top:3.5mm}
+  .compact th{padding:1.1mm 1mm}
+  .compact td{padding:1.1mm 2mm}
+  .compact .art{margin-top:3.6mm}
+  .compact .art p{margin-top:1.4mm;font-size:10pt;line-height:1.55}
+  .compact .closing{margin-top:3.6mm;line-height:1.55}
+  .compact .issued{margin-top:3mm}
+  .compact .sign{margin-top:4mm}
+}`;
+
+function tableHtml(doc: MouDoc, sample: boolean): string {
+  if (doc.mode === 'items') {
+    const head = '<tr><th style="width:24%">품 명</th><th>1대 단가(원)</th><th style="width:11%">수량(EA)</th><th class="opt">공급가액</th><th class="opt">세액</th><th>합계</th></tr>';
+    const body = doc.rows
+      .map(
+        (r) =>
+          `<tr><td class="name">${escapeHtml(r.name)}</td><td>${money(r.unitPrice, sample)}</td><td class="c">${r.quantity}</td>` +
+          `<td class="opt">${money(r.supply, sample)}</td><td class="opt">${money(r.tax, sample)}</td><td>${money(r.total, sample)}</td></tr>`,
+      )
+      .join('');
+    const qty = doc.rows.reduce((s, r) => s + r.quantity, 0);
+    const supply = doc.rows.reduce((s, r) => s + (r.supply || 0), 0);
+    const tax = doc.rows.reduce((s, r) => s + (r.tax || 0), 0);
+    const adj = doc.rounding > 0
+      ? `<tr class="adj"><td class="name">단수 정리</td><td></td><td></td><td class="opt"></td><td class="opt"></td><td>−${money(doc.rounding, sample)}</td></tr>`
+      : '';
+    const sum = `<tr class="sum"><td class="name">합 계</td><td></td><td class="c">${qty}</td><td class="opt">${money(supply, sample)}</td><td class="opt">${money(tax, sample)}</td><td>${money(doc.amount, sample)}</td></tr>`;
+    return `<table><thead>${head}</thead><tbody>${body}${adj}${sum}</tbody></table>`;
+  }
+  const rows = doc.rows.length > 0 ? doc.rows : [{ name: '에어컨 전문세척', quantity: 0 }];
+  const body = rows.map((r) => `<tr><td class="name">${escapeHtml(r.name)}</td><td class="c">${r.quantity > 0 ? r.quantity : '-'}</td></tr>`).join('');
+  const qty = rows.reduce((s, r) => s + r.quantity, 0);
+  const last = doc.mode === 'total'
+    ? `<tr class="sum"><td class="name">지난 작업 금액 (VAT 포함)</td><td class="c">${money(doc.amount, sample)}원</td></tr>`
+    : '<tr class="sum"><td class="name">보장 단가</td><td class="c">지난 작업 견적과 같은 단가</td></tr>';
+  const sum = qty > 0 ? `<tr class="sum"><td class="name">합 계</td><td class="c">${qty}</td></tr>` : '';
+  return `<table><thead><tr><th style="width:60%">품 명</th><th>수량(EA)</th></tr></thead><tbody>${body}${sum}${last}</tbody></table>`;
+}
+
+function noteText(doc: MouDoc, sample: boolean): string {
+  if (sample) return '견본입니다. 실제 협약서에는 지난 견적서의 품목별 1대 단가가 들어갑니다.';
+  if (doc.mode === 'items') return doc.quoteDate ? `${dotDate(doc.quoteDate)} 견적서 기준 · 금액은 원, VAT 포함` : '지난 견적서 기준 · 금액은 원, VAT 포함';
+  if (doc.mode === 'total') return '지난 작업의 설비·수량과 금액 기준';
+  return '지난 작업의 설비·수량 기준';
+}
+
+function article2(doc: MouDoc): string {
+  const first =
+    doc.mode === 'items'
+      ? '1. 보장 단가는 위 표에 기재되었으며, 적용기간은 작업일 기준 <b>1년</b>까지 적용한다.'
+      : doc.mode === 'total'
+        ? '1. 보장 단가는 위 표의 설비·수량 기준 지난 작업 금액과 같으며, 적용기간은 작업일 기준 <b>1년</b>까지 적용한다.'
+        : '1. 보장 단가는 지난 작업의 견적 단가와 같으며, 적용기간은 작업일 기준 <b>1년</b>까지 적용한다.';
+  return `${first}<br>2. 요청 <u>에어컨 수량이 15% 이상 변동되었을 시 별도 견적으로 처리</u>한다.`;
+}
+
+function sheetHtml(doc: MouDoc, opts: RenderOptions): string {
+  // 표 줄이 6줄을 넘으면 간격을 줄인다 — A4 한 장에 품목 9줄까지 (그보다 많으면 두 장)
+  const tableRows = doc.mode === 'items'
+    ? doc.rows.length + (doc.rounding > 0 ? 1 : 0) + 1
+    : Math.max(doc.rows.length, 1) + (doc.rows.some((r) => r.quantity > 0) ? 1 : 0) + 1;
+  const compact = tableRows > 6;
+  const seal = opts.sealUri
+    ? `<span class="seal">(인)<img src="${opts.sealUri}" alt=""></span>`
+    : `<span class="seal${opts.sample ? ' ph' : ''}">(인)</span>`;
+  const mgr = doc.manager && doc.manager.name
+    ? `담당 ${escapeHtml(doc.manager.name)}${doc.manager.position ? ` ${escapeHtml(doc.manager.position)}` : ''}`
+    : '문의 1644-1295';
+  return `<article class="sheet${compact ? ' compact' : ''}">
+<div class="bar"><img src="data:image/png;base64,${LOGO_WHITE_PNG}" alt="AIRTOR">${opts.sample ? '<span class="stamp">견본</span>' : ''}</div>
+<div class="page">
+<h2 class="title serif">에어컨 전문세척 단가보장 협약서</h2>
+<p class="intro serif">㈜에어터에서는 귀 사의 쾌적한 업무환경과 비용 안정을 위해, <br>당사는 단가보장 서비스를 약속드립니다.</p>
+<div class="rule"></div>
+<dl class="who"><div><dt>귀사</dt><dd>${escapeHtml(doc.company)}</dd></div><div><dt>작업일</dt><dd>${dotDate(doc.workDate)}</dd></div><div><dt>적용 기간</dt><dd>${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)}</dd></div></dl>
+<div class="tbl">${tableHtml(doc, opts.sample)}</div>
+<p class="note">${escapeHtml(noteText(doc, opts.sample))}</p>
+<section class="art serif"><h3>제 1조 (목적)</h3><p>본 협약서는 ㈜에어터와 귀 사간 에어컨 전문세척 서비스의 단가를 일정 기간 동안 유지함을 약속함으로써 상호 신뢰를 증진하고, 안정적인 시설 관리를 도모함을 목적으로 한다.</p></section>
+<section class="art serif"><h3>제 2조 (단가 및 적용 범위)</h3><p>${article2(doc)}</p></section>
+<section class="art serif"><h3>제 3조 (기타)</h3><p>1. 본 협약서 효력은 적용기간 동안 유효하며, 종료 1개월 전 별도 협의 시 연장 가능하다.<br>2. 협약 내용은 양사간 신뢰를 바탕으로 하며, 법적 효력은 발생하지 않는다.</p></section>
+<div class="rule"></div>
+<p class="closing serif">에어컨 위생파트너 ㈜에어터는 협약서의 내용을 성실히 준수하고 <br>적극 협력하며 계약서를 작성하여 각 1부씩 보관한다.</p>
+<p class="issued serif">${longDate(doc.issuedAt)} 발행</p>
+<div class="sign"><div class="line"></div><span class="ceo serif">㈜에어터 대표이사</span>${seal}<p class="mgr">${mgr}</p></div>
+</div>
+<span class="mou">MOU</span>
+</article>`;
+}
+
+export function renderMouHtml(doc: MouDoc, opts: RenderOptions): string {
+  const title = `${escapeHtml(doc.company)} 단가보장 협약서${opts.sample ? ' (견본)' : ''} · 에어터`;
+  const head = `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>${title}</title>
+${opts.mode === 'screen' ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;600&display=swap">' : ''}
+<style>${STYLE}</style>
+</head>`;
+  if (opts.mode === 'pdf') return `${head}\n<body>\n${sheetHtml(doc, opts)}\n</body>\n</html>`;
+
+  const pdfHref = `/mou/${encodeURIComponent(opts.id)}.pdf`;
+  const notice = opts.pdfFailed
+    ? `<p class="notice" role="status">PDF 파일을 바로 만들지 못했습니다. [인쇄]를 누른 뒤 인쇄 창에서 'PDF로 저장'을 고르시면 같은 협약서를 받으실 수 있습니다.</p>`
+    : '';
+  const expires = opts.expiresOn && isYmd(opts.expiresOn) ? `<p>이 주소는 ${dotDate(opts.expiresOn)}까지 열립니다. 내부 보고에 쓰시도록 다른 분께 전달하셔도 됩니다.</p>` : '';
+  return `${head}
+<body>
+<header class="top">
+<img class="top-logo" src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="AIRTOR 에어터">
+<div class="top-text"><h1 class="top-title">단가보장 협약서${opts.sample ? ' (견본)' : ''}</h1><p class="top-meta">${escapeHtml(doc.company)} · 적용 기간 ${dotDate(doc.workDate)} ~ ${dotDate(doc.validUntil)}</p></div>
+<div class="top-actions"><a class="btn primary" href="${pdfHref}">PDF 내려받기</a><button class="btn" type="button" id="print-btn">인쇄</button></div>
+${notice}
+</header>
+<main class="sheet-wrap">
+${sheetHtml(doc, opts)}
+</main>
+<footer class="foot">
+<p>문의 1644-1295 · <a href="mailto:relation@airtor.co.kr">relation@airtor.co.kr</a></p>
+${expires}
+<p>에어컨 위생파트너 ㈜에어터</p>
+</footer>
+<script nonce="${opts.nonce || ''}">document.getElementById('print-btn').addEventListener('click',function(){window.print();});</script>
+</body>
+</html>`;
+}
+
+export type MouErrorKind = 'notfound' | 'expired' | 'missing';
+
+export function renderMouError(kind: MouErrorKind): string {
+  const reason =
+    kind === 'expired'
+      ? '열람 기간이 지난 협약서입니다.'
+      : kind === 'missing'
+        ? '메일에 협약서 주소가 제대로 들어가지 않았습니다.'
+        : '주소가 올바르지 않거나 더 이상 열 수 없는 협약서입니다.';
+  return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>협약서를 열 수 없습니다 · 에어터</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef1f5;color:#1f2329;font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR','Noto Sans CJK KR',sans-serif}
+main{max-width:560px;margin:0 auto;padding:56px 16px}
+img{display:block;height:26px;width:auto}
+h1{margin:28px 0 0;font-size:22px;letter-spacing:-0.3px}
+p{margin:12px 0 0;font-size:15px;line-height:1.7;color:#3a4250}
+</style>
+</head>
+<body>
+<main>
+<img src="data:image/png;base64,${LOGO_COLOR_PNG}" alt="AIRTOR 에어터">
+<h1>협약서를 열 수 없습니다</h1>
+<p>${reason}</p>
+<p>받으신 메일에 '협약서'라고 회신하시거나 1644-1295로 연락 주시면 1영업일 안에 다시 보내 드립니다.</p>
+</main>
+</body>
+</html>`;
+}
+
+export function htmlHeaders(nonce?: string): Record<string, string> {
+  const csp = [
+    "default-src 'none'",
+    'img-src data:',
+    "style-src 'unsafe-inline' https://fonts.googleapis.com",
+    'font-src https://fonts.gstatic.com',
+    nonce ? `script-src 'nonce-${nonce}'` : "script-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+  return {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'private, no-store',
+    'X-Robots-Tag': 'noindex, nofollow',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': csp,
+  };
+}
+
+export function pdfHeaders(doc: MouDoc, size?: number): Record<string, string> {
+  const h: Record<string, string> = {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="airtor-mou.pdf"; filename*=UTF-8''${encodeURIComponent(mouFileName(doc))}`,
+    'Cache-Control': 'private, no-store',
+    'X-Robots-Tag': 'noindex, nofollow',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+  };
+  if (size !== undefined) h['Content-Length'] = String(size);
+  return h;
+}
+
+// ─── 직인·PDF ───────────────────────────────────────────────────────────
+
+let sealCache: { uri: string | null; at: number } | null = null;
+
+/** R2 의 직인 그림 → data: URI (isolate 안에서 10분 캐시). 없거나 못 읽으면 null → (인) 만 */
+export async function loadSealUri(env: MouEnv): Promise<string | null> {
+  if (sealCache && Date.now() - sealCache.at < 600_000) return sealCache.uri;
+  let uri: string | null = null;
+  try {
+    const obj = env.FILES ? await env.FILES.get(SEAL_R2_KEY) : null;
+    if (obj) {
+      const bytes = new Uint8Array(await obj.arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      uri = `data:image/png;base64,${btoa(bin)}`;
+    }
+  } catch {
+    uri = null;
+  }
+  sealCache = { uri, at: Date.now() };
+  return uri;
+}
+
+/** Cloudflare Browser Run REST /pdf — 인쇄용 HTML 을 A4 PDF 로. 실패하면 예외 */
+export async function renderPdf(env: MouEnv, html: string): Promise<ArrayBuffer> {
+  if (!env.BROWSER_RUN_TOKEN || !env.CF_ACCOUNT_ID) throw new Error('BROWSER_RUN_TOKEN·CF_ACCOUNT_ID 미설정');
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CF_ACCOUNT_ID)}/browser-run/pdf`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.BROWSER_RUN_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      html,
+      pdfOptions: { format: 'a4', printBackground: true, preferCSSPageSize: true },
+      gotoOptions: { waitUntil: 'load', timeout: 30_000 },
+    }),
+  });
+  const buf = await res.arrayBuffer();
+  const magic = String.fromCharCode(...new Uint8Array(buf.slice(0, 5)));
+  if (!res.ok || magic !== '%PDF-') {
+    const detail = magic === '%PDF-' ? '' : new TextDecoder().decode(buf.slice(0, 300)).replace(/\s+/g, ' ');
+    throw new Error(`Browser Run HTTP ${res.status} ${detail}`.trim());
+  }
+  return buf;
+}
+
+export function pdfR2Key(id: string): string {
+  return `mou/${MOU_VERSION}/${id}.pdf`;
+}
+
+export function newNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
