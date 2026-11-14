@@ -15,7 +15,8 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
    - 나중에 관리 앱 값을 고쳐도 이미 보낸 협약서는 바뀌지 않는다.
 3. `/mou/<id>.pdf`
    - R2 `FILES`에 `mou/v5/<id>.pdf`가 있으면 그것을 준다(v5 = 서식 버전 MOU_VERSION).
-   - 없으면 같은 서식(인쇄용 HTML)을 Cloudflare Browser Run REST `/pdf`로 만들어 R2에 저장한 뒤 준다. 한글 글꼴(Noto CJK)은 Browser Run에 기본으로 있다.
+   - 없으면 같은 서식(인쇄용 HTML)을 PDF Worker(`airtoradmin-pdf`, 아래 'PDF Worker')에 보내 A4 PDF로 만들고 R2에 저장한 뒤 준다. 한글 글꼴(Noto CJK)은 Browser Run에 기본으로 있다.
+   - Pages에 `PDF_RENDERER` 바인딩이 없으면 Browser Run REST `/pdf`(API 토큰)로 만든다. 지금은 바인딩을 쓴다.
    - 실패하면 화면(`?pdf=fail`)으로 돌려보내고 '인쇄 → PDF로 저장'을 안내한다.
 
 ## 단가표
@@ -66,9 +67,16 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
 |---|---|---|
 | `AI_DB` | D1 바인딩 | 이미 있음 (airtoradmin-ai) |
 | `FILES` | R2 바인딩 | 이미 있음 (airtoradmin-files). 직인 `brand/mou-seal.png`, 대표이사 서명 `brand/mou-sign.png`, 작업자 사진 `brand/mou-photo.png`, PDF `mou/v5/*.pdf` |
-| `BROWSER_RUN_TOKEN` | Secret | Cloudflare API 토큰. 권한 Account · Browser Run · Edit |
-| `CF_ACCOUNT_ID` | Text | Cloudflare 계정 ID |
+| `PDF_RENDERER` | Service 바인딩 | `airtoradmin-pdf` (Production · Preview, 2026-11-15 연결) |
+| `BROWSER_RUN_TOKEN` | Secret (선택) | `PDF_RENDERER`가 없을 때만. Cloudflare API 토큰, 권한 Account · Browser Run · Edit |
+| `CF_ACCOUNT_ID` | Text (선택) | `BROWSER_RUN_TOKEN`과 함께. Cloudflare 계정 ID |
 | `MOU_BASE_URL` | Text (선택) | 기본 `https://docs.airtor.co.kr` |
+
+- **PDF Worker** (`workers/pdf-renderer/`, `airtoradmin-pdf`)
+  - 본문으로 받은 인쇄용 HTML을 Browser Run 바인딩(`@cloudflare/puppeteer`)으로 A4 PDF로 만든다. 바인딩이라 API 토큰이 필요 없다.
+  - 공개 주소가 없다(`workers_dev = false`, `preview_urls = false`). Pages의 `PDF_RENDERER`로만 부른다.
+  - 배포는 Pages와 따로다: `npx wrangler login` 후 `npm run pdf:deploy`. 타입 검사는 `npm run pdf:typecheck`.
+  - 바인딩을 처음 만들 때: Pages → Settings → Bindings → Add → Service binding, 변수명 `PDF_RENDERER` → `airtoradmin-pdf`(Production · Preview). 저장한 뒤 다음 배포부터 쓴다.
 
 - **docs.airtor.co.kr**
   - 카페24 DNS에 CNAME `docs` → `airtoradmin.pages.dev`를 넣는다. 와일드카드 레코드가 있으니 이름을 정확히 만든다.
@@ -102,8 +110,8 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
 
 - **로컬**: `npm run build && npm run functions:dev`
   - `/mou/sample`이 200
-  - `/mou/sample.pdf`: 토큰이 없으면 303 → `?pdf=fail`
+  - `/mou/sample.pdf`: 로컬에는 `PDF_RENDERER`·토큰이 없으므로 303 → `?pdf=fail`
   - `/mou`: 404 안내 화면
 - **운영**
-  - `https://docs.airtor.co.kr/mou/sample.pdf`가 A4 한 장 PDF로 내려받아지는지 본다.
+  - `https://docs.airtor.co.kr/mou/sample.pdf`가 A4 한 장 PDF로 내려받아지는지 본다. 303으로 화면에 돌아오면 Pages 실시간 로그의 `mou pdf failed`를 본다.
   - 테스트 메일(relation@만)에서 `$%mou_url%$`가 실제 주소로 바뀌는지 본다.

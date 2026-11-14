@@ -1,0 +1,14 @@
+# 단가보장 협약서 PDF Worker — 배포: npm run pdf:deploy (먼저 npx wrangler login)
+# Pages 프로젝트 루트에는 wrangler.toml 을 두지 않는다(대시보드 바인딩이 대체됨). 이 파일은 이 Worker 전용이다.
+name = "airtoradmin-pdf"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 공개 주소 없음 — Pages 의 Service binding(PDF_RENDERER)으로만 호출
+workers_dev = false
+preview_urls = false
+
+# Cloudflare Browser Run — 바인딩이라 API 토큰이 필요 없다
+[browser]
+binding = "BROWSER"

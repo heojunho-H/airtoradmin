@@ -26,7 +26,9 @@ const ID_RE = /^[A-Za-z0-9_-]{22}$/;
 export interface MouEnv {
   AI_DB?: D1Database;
   FILES?: R2Bucket;
-  /** Cloudflare API 토큰 (권한: Account · Browser Run · Edit) — PDF 만들기 */
+  /** PDF Worker (Service binding → airtoradmin-pdf, workers/pdf-renderer) — 토큰 없이 Browser Run 바인딩으로 PDF 를 만든다 */
+  PDF_RENDERER?: Fetcher;
+  /** (바인딩이 없을 때만) Cloudflare API 토큰 (권한: Account · Browser Run · Edit) — REST 로 PDF 만들기 */
   BROWSER_RUN_TOKEN?: string;
   CF_ACCOUNT_ID?: string;
   /** 메일에 싣는 링크의 앞부분 (기본 https://docs.airtor.co.kr) */
@@ -753,9 +755,23 @@ export async function loadBrandAssets(env: MouEnv): Promise<BrandAssets> {
   return v;
 }
 
-/** Cloudflare Browser Run REST /pdf — 인쇄용 HTML 을 A4 PDF 로. 실패하면 예외 */
+function isPdf(buf: ArrayBuffer): boolean {
+  return String.fromCharCode(...new Uint8Array(buf.slice(0, 5))) === '%PDF-';
+}
+
+/** 인쇄용 HTML → A4 PDF. PDF Worker(PDF_RENDERER 바인딩)가 있으면 그것으로, 없으면 Browser Run REST(토큰)로. 실패하면 예외 */
 export async function renderPdf(env: MouEnv, html: string): Promise<ArrayBuffer> {
-  if (!env.BROWSER_RUN_TOKEN || !env.CF_ACCOUNT_ID) throw new Error('BROWSER_RUN_TOKEN·CF_ACCOUNT_ID 미설정');
+  if (env.PDF_RENDERER) {
+    const res = await env.PDF_RENDERER.fetch('https://pdf-renderer/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: html,
+    });
+    const buf = await res.arrayBuffer();
+    if (res.ok && isPdf(buf)) return buf;
+    throw new Error(`PDF Worker HTTP ${res.status} ${new TextDecoder().decode(buf.slice(0, 200)).replace(/\s+/g, ' ')}`.trim());
+  }
+  if (!env.BROWSER_RUN_TOKEN || !env.CF_ACCOUNT_ID) throw new Error('PDF_RENDERER 바인딩·BROWSER_RUN_TOKEN 미설정');
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CF_ACCOUNT_ID)}/browser-run/pdf`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.BROWSER_RUN_TOKEN}`, 'Content-Type': 'application/json' },
@@ -766,9 +782,8 @@ export async function renderPdf(env: MouEnv, html: string): Promise<ArrayBuffer>
     }),
   });
   const buf = await res.arrayBuffer();
-  const magic = String.fromCharCode(...new Uint8Array(buf.slice(0, 5)));
-  if (!res.ok || magic !== '%PDF-') {
-    const detail = magic === '%PDF-' ? '' : new TextDecoder().decode(buf.slice(0, 300)).replace(/\s+/g, ' ');
+  if (!res.ok || !isPdf(buf)) {
+    const detail = isPdf(buf) ? '' : new TextDecoder().decode(buf.slice(0, 300)).replace(/\s+/g, ' ');
     throw new Error(`Browser Run HTTP ${res.status} ${detail}`.trim());
   }
   return buf;
