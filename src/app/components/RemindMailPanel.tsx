@@ -162,8 +162,8 @@ export function RemindMailPanel({ customerId, refreshKey, userName, editing = fa
   const connected = Boolean(data?.sender?.connected);
   const job = data?.job ?? null;
   const lastRunStale = (() => {
-    if (!data) return false;
-    if (!data.lastRun) return true;
+    // 기록이 아직 없으면(가동 첫날 전) 경고하지 않는다
+    if (!data || !data.lastRun) return false;
     // 평일 이틀 넘게 실행이 없으면 멈췄을 수 있다
     let weekdays = 0;
     let d = data.lastRun.runAt.slice(0, 10);
@@ -280,7 +280,7 @@ export function RemindMailPanel({ customerId, refreshKey, userName, editing = fa
             <div>
               <p className="text-xs font-medium text-slate-500">마지막 자동 실행</p>
               <p className="text-slate-900">
-                {data.lastRun ? `${stamp(data.lastRun.runAt)} · 보냄 ${data.lastRun.sent}${data.lastRun.failed ? ` · 실패 ${data.lastRun.failed}` : ''}` : '기록 없음'}
+                {data.lastRun ? `${stamp(data.lastRun.runAt)} · 보냄 ${data.lastRun.sent}${data.lastRun.failed ? ` · 실패 ${data.lastRun.failed}` : ''}` : '아직 기록 없음 (첫 자동 실행 뒤 보입니다)'}
               </p>
               {lastRunStale && <p className="text-xs text-amber-700">평일 이틀 넘게 실행 기록이 없습니다. 자동 실행이 멈췄을 수 있습니다.</p>}
             </div>
