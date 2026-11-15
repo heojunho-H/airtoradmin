@@ -114,7 +114,7 @@ export function remindSubject(key: RemindMailKey, company: string): string {
   const org = company.trim() || '귀사';
   switch (key) {
     case 'a2':
-      return `[에어터] ${org} 에어컨 전문세척 이후 사용 상태를 여쭙습니다`;
+      return `[에어터] ${org} 에어컨 전문세척 A/S 안내`;
     case 'b1':
       return `[에어터] ${org} 에어컨 전문세척 장기 협력을 위한 단가 보장 안내`;
     case 'b2':
