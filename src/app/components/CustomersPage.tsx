@@ -959,7 +959,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     try {
       const r = await runFollowupsDryRun();
       if (r.disabled) {
-        alert('팔로업 자동 발송이 아직 설정되지 않았습니다.\nCloudflare Pages 환경변수 NEWSLETTER_FOLLOWUPS 를 등록하세요 (docs/newsletter-stibee.md 참조).');
+        alert('리마인드 자동 발송이 아직 설정되지 않았습니다.\nCloudflare Pages 환경변수 NEWSLETTER_FOLLOWUPS 를 등록하세요 (docs/remind-mails.md 참조).');
         return;
       }
       if (!r.ok) {
@@ -974,10 +974,15 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
         lines.push('오늘 발송 대상 없음');
       } else {
         lines.push(`오늘 발송 대상 ${r.due.length}건:`);
-        r.due.slice(0, 15).forEach(d => lines.push(`- ${d.company} · ${d.stage}차(예정 ${d.dueDate}) → ${d.recipients.join(', ')}`));
+        r.due.slice(0, 15).forEach(d => lines.push(`- ${d.company} · ${d.stage}차(예정 ${d.dueDate}) → ${d.recipients.join(', ')}${d.sender ? ` · 보내는 사람 ${d.sender.name}${d.sender.fallback ? '(대신)' : ''}` : ''}`));
         if (r.due.length > 15) lines.push(`… 외 ${r.due.length - 15}건`);
       }
       if (r.deferred.length > 0) lines.push(`다음 실행으로 이월: ${r.deferred.length}건`);
+      const waiting = r.waiting || [];
+      if (waiting.length > 0) {
+        const names = [...new Set(waiting.map(w => w.sender || '보낼 사람 없음'))];
+        lines.push(`담당자 메일 연결을 기다리는 고객: ${waiting.length}곳 (${names.join(', ')})`);
+      }
       const skip = Object.entries(r.skippedSummary || {});
       if (skip.length > 0) {
         lines.push('');

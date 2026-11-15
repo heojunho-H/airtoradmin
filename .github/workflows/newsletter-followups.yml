@@ -1,16 +1,16 @@
-# 스티비 팔로업 자동 발송 스케줄러
-# 매일 06:30 KST(21:30 UTC)에 Cloudflare Pages Function /api/newsletter {action:'run-followups'} 를 호출한다.
-# 직원이 고객 데이터를 편집하기 전 시각에 돌리고, 실제 메일 발송 시각은 스티비 자동 이메일의 발송 시간대 설정이 정한다.
+# 리마인드 메일 자동 발송 스케줄러 (담당 매니저 네이버웍스 계정으로 발송 — docs/remind-mails.md)
+# 평일 09:00 KST(00:00 UTC)에 Cloudflare Pages Function /api/newsletter {action:'run-followups'} 를 호출한다.
+# 손으로 예약해 보내던 메일과 같은 시각이다. 메일은 이 호출에서 바로 나간다.
 #
 # 필요한 설정:
 #   - GitHub Secrets: NEWSLETTER_CRON_SECRET (Cloudflare Pages env의 같은 값)
 #   - GitHub Variables: NEWSLETTER_LIVE = 'true' 일 때만 정기 실행이 돈다 (사용자 최종 승인 뒤에 켠다)
-#   - Cloudflare Pages env: NEWSLETTER_FOLLOWUPS, NEWSLETTER_CRON_SECRET (docs/stibee-emails/README.md 참조)
+#   - Cloudflare Pages env: NEWSLETTER_FOLLOWUPS, NEWSLETTER_CRON_SECRET, WORKS_CLIENT_ID·WORKS_CLIENT_SECRET (docs/remind-mails.md)
 #
 # 수동 실행(workflow_dispatch):
 #   - 기본은 dry-run — 발송 예정 대상만 세고 아무 것도 보내지 않는다
 #   - dryRun=false + limit=N : 담당자 N명까지만 실제 발송 (첫 실전 점검용)
-#   - testEmail + testStage  : 그 단계 메일을 견본 값으로 testEmail 한 곳에만 보낸다 (고객 장부와 무관)
+#   - testSender (+ testMail): 그 담당자 계정으로 견본 메일을 relation@airtor.co.kr 에만 보낸다 (고객 장부와 무관)
 #
 # 로그에는 건수만 남긴다 — 공개 저장소의 Actions 로그는 누구나 볼 수 있어 고객 이메일·회사명을 찍지 않는다.
 # 발송 상세는 관리 앱의 고객별 메일 기록(emailHistory)에서 본다.
@@ -20,7 +20,7 @@ name: newsletter-followups
 
 on:
   schedule:
-    - cron: '30 21 * * *'
+    - cron: '0 0 * * 1-5'
   workflow_dispatch:
     inputs:
       dryRun:
@@ -31,14 +31,14 @@ on:
         description: '실제 발송 상한(담당자 수). 비우면 기본 15'
         type: string
         default: ''
-      testEmail:
-        description: '테스트 메일 받을 주소 (입력하면 고객 발송 대신 이 주소로 테스트만)'
+      testSender:
+        description: '시험 발송할 담당자 이름 또는 메일 (입력하면 고객 발송 대신 relation@ 으로 시험만)'
         type: string
         default: ''
-      testStage:
-        description: '테스트할 단계 번호 (1 A2 · 2 A3 · 3 B1 · 4 B2 · 5 B3)'
+      testMail:
+        description: '시험할 메일 (a2 · b1 · b2 · b3 · all)'
         type: string
-        default: '1'
+        default: 'all'
 
 # 크론과 수동 실행이 겹쳐 같은 대상에게 두 번 보내지 않게 한 번에 하나만
 concurrency:
@@ -56,14 +56,14 @@ jobs:
           CRON_TOKEN: ${{ secrets.NEWSLETTER_CRON_SECRET }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun || 'false' }}
           LIMIT: ${{ inputs.limit }}
-          TEST_EMAIL: ${{ inputs.testEmail }}
-          TEST_STAGE: ${{ inputs.testStage }}
+          TEST_SENDER: ${{ inputs.testSender }}
+          TEST_MAIL: ${{ inputs.testMail }}
         run: |
           if [ -z "$CRON_TOKEN" ]; then echo "NEWSLETTER_CRON_SECRET secret is not set"; exit 1; fi
           BODY=$(node -e '
             const e = process.env;
-            if (e.TEST_EMAIL) {
-              console.log(JSON.stringify({ action: "test-trigger", email: e.TEST_EMAIL.trim(), stage: Number(e.TEST_STAGE || 1) }));
+            if (e.TEST_SENDER) {
+              console.log(JSON.stringify({ action: "test-send", sender: e.TEST_SENDER.trim(), mail: (e.TEST_MAIL || "all").trim() }));
             } else {
               const body = { action: "run-followups", dryRun: e.DRY_RUN === "true" };
               const n = parseInt(e.LIMIT || "", 10);
@@ -78,12 +78,12 @@ jobs:
           node -e '
             const r = require("./report.json");
             const n = (a) => (Array.isArray(a) ? a.length : 0);
-            if (r.stage !== undefined && r.label !== undefined) {
-              console.log(JSON.stringify({ test: true, ok: r.ok, stage: r.stage, label: r.label, workDate: r.workDate, error: r.error }));
+            if (Array.isArray(r.results)) {
+              console.log(JSON.stringify({ test: true, ok: r.ok, results: r.results.map((x) => ({ mail: x.mail, ok: x.ok, error: x.error })), error: r.error }));
             } else {
               console.log(JSON.stringify({
                 ok: r.ok, dryRun: r.dryRun, disabled: r.disabled, today: r.today, evaluated: r.evaluated,
-                due: n(r.due), sent: n(r.sent), failed: n(r.failed), deferred: n(r.deferred),
+                due: n(r.due), sent: n(r.sent), failed: n(r.failed), deferred: n(r.deferred), waiting: n(r.waiting),
                 skipped: r.skippedSummary, errors: n(r.errors), warnings: n(r.warnings), error: r.error,
               }, null, 1));
             }

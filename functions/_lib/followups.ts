@@ -6,11 +6,13 @@
 // 단계 4·5는 체크 칸이 없다(PHP 허용 목록이 reminder1~3뿐) — 장부만으로 중복을 막는다.
 //
 // 설정 env NEWSLETTER_FOLLOWUPS (JSON):
-//   {"grace":30,"stages":[{"stage":1,"days":45,"autoEmailId":"...","label":"A2 사용 가이드"},
-//                         {"stage":3,"days":300,"altDays":240,"altWorkMonths":[7,8,9,10],...}, ...]}
+//   {"grace":30,"fallbackManager":"<담당 매니저가 없을 때 보낼 사람 이름>",
+//    "stages":[{"stage":1,"days":45,"mail":"a2"},{"stage":2,"days":200,"mail":"b1","mou":true},
+//              {"stage":3,"days":335,"mail":"b2"},{"stage":4,"days":395,"mail":"b3"}]}
 //   - 배열만 주면 grace 기본 30일. grace는 단계 간 최소 간격(35일)보다 작아야 한다
-//   - stage 1..5 정수·중복 불가, days > 0, autoEmailId 필수
-//   - altDays + altWorkMonths: 작업월이 altWorkMonths면 days 대신 altDays (리마인드 기획 B1: 7~10월 작업은 D+240)
+//   - stage 1..5 정수·중복 불가, days > 0, mail(문안 키 a2·b1·b2·b3 — functions/_lib/remind-mails.ts) 필수
+//   - b1 은 언제나 협약서 링크를 싣는다(mou). altDays + altWorkMonths 는 예전 규칙 호환용(지금은 쓰지 않음)
+//   - fallbackManager: 이름만 env 에 둔다(공개 저장소에 직원 이름 X). 메일은 담당 매니저 네이버웍스 계정으로 나간다
 //
 // 규칙 요약 (계획서 "멱등 규칙"):
 //   - 오늘(KST) >= 예정일 이고 오늘 <= 예정일+grace 일 때만 발송 (첫 가동/크론 중단 시 대량 발송 방지)
@@ -19,28 +21,32 @@
 //   - 여러 단계가 동시에 due면 가장 높은 단계만 발송, 낮은 단계는 superseded로 장부 기록
 //   - 같은 (jobKey, stage, recipient)가 sent|skipped 로 장부에 있으면 재발송 안 함
 //
-// 리마인드 기획(2026-11, 5통 모두 정보성): 1 A2 D+45 · 2 A3 D+150 · 3 B1 D+300(7~10월 240) · 4 B2 D+335 · 5 B3 D+395
+// 리마인드 메일(2026-11-15 확정, 광고 표시 없음 — 사용자 결정): 1 A2 D+45 · 2 B1 D+200(협약서) · 3 B2 D+335 · 4 B3 D+395
 
 import { formatDetailedQuantity } from '../../src/lib/quantity';
 import { normalizeCompanyName } from '../../src/lib/company';
+import { isRemindMailKey, type RemindMailKey } from './remind-mails';
 
 export type StageNo = 1 | 2 | 3 | 4 | 5;
 
 export interface FollowupStage {
   stage: StageNo;
   days: number;
-  autoEmailId: string;
+  /** 보낼 문안 — functions/_lib/remind-mails.ts */
+  mail: RemindMailKey;
   label?: string;
   /** 작업월이 altWorkMonths에 있으면 days 대신 이 값 */
   altDays?: number;
   altWorkMonths?: number[];
-  /** 단가보장 협약서 링크(개인화 값 mou_url)를 만들어 싣는 단계 — functions/_lib/mou.ts */
+  /** 단가보장 협약서 링크를 만들어 싣는 단계 (b1 은 언제나) — functions/_lib/mou.ts */
   mou?: boolean;
 }
 
 export interface FollowupConfig {
   stages: FollowupStage[]; // days 오름차순
   grace: number;
+  /** 담당 매니저가 없거나 찾지 못한 고객을 맡을 매니저 이름 */
+  fallbackManager?: string;
 }
 
 export type ParsedFollowupConfig =
@@ -71,6 +77,9 @@ export interface LedgerEntry {
   jobKey?: string;
   source?: 'auto';
   reason?: string;
+  /** 보낸 담당자 계정 (네이버웍스) */
+  sender?: string;
+  via?: 'works';
 }
 
 export interface ContactLike {
@@ -109,7 +118,7 @@ export interface DueItem {
   stage: number;
   days: number;
   label: string;
-  autoEmailId: string;
+  mail: RemindMailKey;
   jobKey: string;
   workDate: string;
   dueDate: string;
@@ -183,6 +192,7 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
   }
   let stagesRaw: unknown;
   let grace = 30;
+  let fallbackManager: string | undefined;
   if (Array.isArray(parsed)) {
     stagesRaw = parsed;
   } else if (parsed && typeof parsed === 'object') {
@@ -191,6 +201,11 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
     if (g !== undefined) {
       if (typeof g !== 'number' || !Number.isInteger(g) || g < 0) return { ok: false, error: 'grace must be a non-negative integer' };
       grace = g;
+    }
+    const fm = (parsed as { fallbackManager?: unknown }).fallbackManager;
+    if (fm !== undefined) {
+      if (typeof fm !== 'string') return { ok: false, error: 'fallbackManager must be a string' };
+      fallbackManager = fm.trim() || undefined;
     }
   }
   if (!Array.isArray(stagesRaw) || stagesRaw.length === 0) return { ok: false, error: 'stages must be a non-empty array' };
@@ -203,11 +218,11 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
     const o = s as Record<string, unknown>;
     const stage = o.stage;
     const days = o.days;
-    const autoEmailId = o.autoEmailId;
+    const mail = o.mail;
     if (stage !== 1 && stage !== 2 && stage !== 3 && stage !== 4 && stage !== 5) return { ok: false, error: `stage must be 1~5 (got ${String(stage)})` };
     if (seen.has(stage)) return { ok: false, error: `duplicate stage ${stage}` };
     if (typeof days !== 'number' || !Number.isInteger(days) || days <= 0) return { ok: false, error: `stage ${stage}: days must be a positive integer` };
-    if (typeof autoEmailId !== 'string' || !autoEmailId.trim()) return { ok: false, error: `stage ${stage}: autoEmailId required` };
+    if (!isRemindMailKey(mail)) return { ok: false, error: `stage ${stage}: mail must be one of a2, b1, b2, b3` };
     let altDays: number | undefined;
     let altWorkMonths: number[] | undefined;
     if (o.altDays !== undefined || o.altWorkMonths !== undefined) {
@@ -225,15 +240,15 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
     stages.push({
       stage,
       days,
-      autoEmailId: autoEmailId.trim(),
+      mail,
       label: typeof o.label === 'string' ? o.label : undefined,
       altDays,
       altWorkMonths,
-      mou: o.mou === true ? true : undefined,
+      mou: o.mou === true || mail === 'b1' ? true : undefined,
     });
   }
   stages.sort((a, b) => a.days - b.days);
-  return { ok: true, config: { stages, grace } };
+  return { ok: true, config: { stages, grace, fallbackManager } };
 }
 
 export function stageLabel(s: FollowupStage): string {
@@ -346,7 +361,7 @@ export function computeDue(
         stage: s.stage,
         days,
         label: stageLabel(s),
-        autoEmailId: s.autoEmailId,
+        mail: s.mail,
         jobKey,
         workDate,
         dueDate,
@@ -392,7 +407,7 @@ export interface ApplyResult {
 }
 
 // 최신 조회본(fresh)에 발송 결과를 반영. 항목은 jobKey로 찾는다 (사용자가 그 사이 편집했을 수 있음).
-export function applyResult(fresh: CustomerRow, item: DueItem, results: RecipientResult[], today: string): ApplyResult {
+export function applyResult(fresh: CustomerRow, item: DueItem, results: RecipientResult[], today: string, sender?: string): ApplyResult {
   const ledger: LedgerEntry[] = Array.isArray(fresh.emailHistory) ? fresh.emailHistory.slice() : [];
   const before = ledger.length;
   const type = `팔로업 ${item.stage}단계 (+${item.days}d)`;
@@ -405,7 +420,8 @@ export function applyResult(fresh: CustomerRow, item: DueItem, results: Recipien
       stage: item.stage,
       jobKey: item.jobKey,
       source: 'auto',
-      reason: r.ok ? undefined : (r.error || 'trigger failed'),
+      reason: r.ok ? undefined : (r.error || 'send failed'),
+      ...(sender ? { sender, via: 'works' as const } : {}),
     });
   }
   // 상위 단계에 밀린 낮은 단계 — 다시 발송되지 않도록 담당자별 skipped 기록
@@ -441,7 +457,7 @@ export function applyResult(fresh: CustomerRow, item: DueItem, results: Recipien
   return { workHistory: wh, emailHistory: ledger, appended: ledger.slice(before), flags, entryFound: true, flagSet };
 }
 
-// ── 메일 개인화 값 (스티비 주소록 사용자 정의 필드와 키가 같아야 한다 — docs/stibee-emails/README.md) ──
+// ── 메일 값 (functions/_lib/remind-mails.ts 가 문안에 넣는다) ──
 
 export const DEFAULT_MANAGER = '에어터';
 
@@ -466,53 +482,4 @@ export function equipmentLine(entry: WorkEntry): string {
   if (line) return line;
   const total = Number(entry.totalQuantity) || 0;
   return total > 0 ? `에어컨 ${total}대` : '작업한 설비';
-}
-
-// 'YYYY-MM-DD' → '2026년 6월 12일' / '2026년 6월'
-export function koreanDate(ymd: string): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return `${y}년 ${m}월 ${d}일`;
-}
-export function koreanMonth(ymd: string): string {
-  const [y, m] = ymd.split('-').map(Number);
-  return `${y}년 ${m}월`;
-}
-
-// 메일이 실제로 도착하는 날 — 스티비 발송 시간대가 평일 9~18시라 주말 트리거는 월요일에 나간다
-export function arrivalDate(today: string): string {
-  const [y, m, d] = today.split('-').map(Number);
-  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 일 ~ 6 토
-  if (dow === 6) return addDays(today, 2);
-  if (dow === 0) return addDays(today, 1);
-  return today;
-}
-
-// 계절 관리법 4종 — 회사 '냉난방기 유지관리 지침' 기준 (리마인드 기획 문서 '계절 관리법 4종' 표와 같게 유지)
-export const CARE_BY_SEASON: { months: number[]; season: string; line: string }[] = [
-  { months: [3, 4], season: '냉방 준비', line: '여름 가동 전에 필터를 청소하고 전체를 한 번 점검해 주세요.' },
-  { months: [5, 6, 7, 8], season: '냉방철', line: '필터는 최소 한 달에 한 번 청소해 주세요. 켤 때 냄새가 나면 창문을 열고 1~2시간 송풍으로 돌리면 좋아집니다.' },
-  { months: [9, 10], season: '냉방 마감', line: '쓰지 않는 동안에는 분전함 차단기를 내려 대기 전력을 막고, 다음에 켜기 전에 필터를 청소해 주세요.' },
-  { months: [11, 12, 1, 2], season: '난방철', line: '겨울에 실외기에서 김이 나는 것은 성에를 녹이는 정상 운전입니다. 필터는 한 달에 한 번 청소해 주세요.' },
-];
-
-export function careFor(ymd: string): { season: string; line: string } {
-  const month = Number(ymd.slice(5, 7));
-  const hit = CARE_BY_SEASON.find((c) => c.months.includes(month)) || CARE_BY_SEASON[1];
-  return { season: hit.season, line: hit.line };
-}
-
-// 자동 이메일 트리거에 실어 보내는 개인화 값 (스티비 $%키%$)
-export function mergeFieldsFor(item: Pick<DueItem, 'workDate' | 'equipment' | 'manager'>, today: string): Record<string, string> {
-  const care = careFor(arrivalDate(today));
-  const due = addDays(item.workDate, 365);
-  return {
-    work_date_kr: koreanDate(item.workDate),
-    work_month: koreanMonth(item.workDate),
-    due_date_kr: koreanDate(due),
-    due_month: koreanMonth(due),
-    equipment: item.equipment,
-    manager: item.manager,
-    care_season: care.season,
-    care_line: care.line,
-  };
 }

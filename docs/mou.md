@@ -1,12 +1,12 @@
 # 단가보장 협약서 링크 (mou)
 
-B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크다. 고객이 누르면 그 고객의 협약서가 열리고, [PDF 내려받기]로 A4 PDF를 받는다. 2026-11-14 도입(A안). 리마인드 메일을 최종 승인하기 전까지는 견본(`/mou/sample`)만 열린다.
+B1(작업 후 200일) 리마인드 메일의 '단가보장 협약서 보기' 링크다. 고객이 누르면 그 고객의 협약서가 열리고, [PDF 내려받기]로 A4 PDF를 받는다. 2026-11-14 도입(A안). 2026-11-15부터 B1은 모든 고객에게 광고 표시 없이 담당 매니저 네이버웍스 계정으로 나간다(사용자 결정 — `docs/remind-mails.md`). 가동 전까지는 견본(`/mou/sample`)만 열린다.
 
-스티비 자동 메일에는 파일을 붙일 수 없어서(링크만 가능) 손으로 붙이던 '○○ 단가보장 협약서.pdf'를 링크로 바꿨다.
+자동 메일에 고객마다 다른 PDF를 붙이는 대신, 손으로 붙이던 '○○ 단가보장 협약서.pdf'를 고객별 링크로 바꿨다.
 
 ## 흐름
 
-1. 팔로업 실제 실행(`run-followups`, 크론 토큰)에서 `NEWSLETTER_FOLLOWUPS`의 `"mou": true` 단계 대상마다 `issueMouLink`(functions/_lib/mou.ts)가 협약서 내용을 D1 `mou_links`에 얼려 두고 링크를 만든다. 트리거 값은 `mou_url = {MOU_BASE_URL}/mou/<id>`다.
+1. 리마인드 실제 실행(`run-followups`, 크론 토큰)에서 B1 단계(`"mail":"b1"`) 대상마다 `issueMouLink`(functions/_lib/mou.ts)가 협약서 내용을 D1 `mou_links`에 얼려 두고 링크(`{MOU_BASE_URL}/mou/<id>`)를 만든다. 메일 본문(`functions/_lib/remind-mails.ts`)에 바로 넣는다.
    - id는 128비트 무작위 base64url 22자다. 링크를 아는 사람만 연다.
    - 같은 고객·작업(job_key)은 기존 링크를 다시 쓴다.
    - 링크를 못 만들면 그 고객은 그날 보내지 않는다. 다음 날 다시 시도하고, 응답의 `mouDeferred`와 `errors`에 남는다.
@@ -83,10 +83,7 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
   - 카페24 DNS에 CNAME `docs` → `airtoradmin.pages.dev`를 넣는다. 와일드카드 레코드가 있으니 이름을 정확히 만든다.
   - Pages → 사용자 지정 도메인에 `docs.airtor.co.kr`을 더한다.
   - 이 호스트의 `/`는 `functions/index.ts`가 www.airtor.co.kr로 보낸다.
-- **스티비**
-  - 사용자 정의 필드 `mou_url`. 기본값은 `https://docs.airtor.co.kr/mou/`이고, 이 주소는 회신 안내 화면을 연다.
-  - B1 광고판 본문에 `<a href="$%mou_url%$">단가보장 협약서 보기</a>`를 넣는다.
-- **NEWSLETTER_FOLLOWUPS**: B1 단계에 `"mou": true`를 넣는다. 다른 단계에는 넣지 않는다.
+- **메일**: B1 문안이 협약서 링크를 직접 싣는다(스티비 필드 `mou_url`은 2026-11-15 이후 쓰지 않는다). `NEWSLETTER_FOLLOWUPS`의 `"mail":"b1"` 단계는 언제나 협약서를 만든다.
 - **공개 저장소**이므로 직인 그림과 직원 이름은 코드·문서에 두지 않는다. 직인은 R2에만 둔다.
 
 ## 운영
@@ -117,4 +114,4 @@ B1(작업 후 200일) 광고판 메일의 '단가보장 협약서 보기' 링크
   - `/mou`: 404 안내 화면
 - **운영**
   - `https://docs.airtor.co.kr/mou/sample.pdf`가 A4 한 장 PDF로 내려받아지는지 본다. 303으로 화면에 돌아오면 Pages 실시간 로그의 `mou pdf failed`를 본다.
-  - 테스트 메일(relation@만)에서 `$%mou_url%$`가 실제 주소로 바뀌는지 본다.
+  - 시험 발송(`test-send`, relation@만)의 B1에서 협약서 링크(견본)가 열리는지 본다.

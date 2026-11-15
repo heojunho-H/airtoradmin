@@ -227,6 +227,8 @@ export interface FollowupDueItem {
   projectName: string;
   recipients: string[];
   supersededStages: number[];
+  /** 보낼 담당 매니저 (네이버웍스 계정) — 연결 안 됐으면 그 고객은 기다린다 */
+  sender?: { name: string; connected: boolean; fallback: boolean } | null;
 }
 
 export interface FollowupDryRunReport {
@@ -238,6 +240,10 @@ export interface FollowupDryRunReport {
   evaluated: number;
   due: FollowupDueItem[];
   deferred: { customerId: number; company: string; stage: number; dueDate: string; recipients: number }[];
+  /** 담당자 계정이 연결되지 않았거나 보낼 사람이 없어 기다리는 고객 */
+  waiting?: { customerId: number; company: string; stage: number; dueDate: string; recipients: number; reason: string; sender: string | null }[];
+  senders?: { name: string; connected: boolean; customers: number }[];
+  worksConfigured?: boolean;
   skippedSummary: Record<string, number>;
   error?: string;
 }

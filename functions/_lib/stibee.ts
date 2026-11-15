@@ -8,16 +8,14 @@
 //   - 요금제: 구독자 API는 스탠다드부터 사용 가능 (그룹/이메일 API는 프로 이상 — 여기서는 사용 안 함)
 
 export const STIBEE_BASE_URL = 'https://api.stibee.com/v2';
-// 자동 이메일(트리거) API — v1. 자동 이메일의 "API 직접 요청" 트리거 URL: {STIBEE_AUTO_URL}/{autoEmailId}
-// 본문 { subscriber: email, ...개인화 키 }. 3회/초, 256KB. 200이어도 발송 보장 아님.
-export const STIBEE_AUTO_URL = 'https://stibee.com/api/v1.0/auto';
+// 리마인드 메일은 2026-11-15부터 스티비 자동 이메일이 아니라 네이버웍스 담당자 계정으로 보낸다 (functions/_lib/works.ts)
 export const BATCH_MAX = 1000;
 // 고객 데이터 원본 (cafe24 PHP). Functions는 /api/customers 프록시가 아니라 원본을 직접 호출한다.
 // v2 — 작업이력·메일 기록은 _v + 패치로만 고친다 (functions/api/newsletter.ts 실행기 참고)
 export const CUSTOMERS_API = 'https://airtor.co.kr/api/customers_api_v2.php';
 // 딜 원본 — 팔로업 러너가 '진행 중 딜이 있는 회사'를 건너뛸 때 읽는다 (읽기 전용 GET)
 export const DEALS_API = 'https://airtor.co.kr/api/deals_api_v2.php';
-// 고객 담당 매니저 목록 — 협약서의 '담당 {이름} {직책}' 직책을 찾을 때 읽는다 (읽기 전용 GET)
+// 고객 담당 매니저 목록 — 리마인드 메일을 보낼 계정·서명과 협약서 '담당자' 줄 (읽기 전용 GET)
 export const MANAGERS_API = 'https://airtor.co.kr/api/managers_api.php';
 
 export interface StibeeEnv {
@@ -25,7 +23,7 @@ export interface StibeeEnv {
   STIBEE_LIST_ID: string;
   NEWSLETTER_WEBHOOK_SECRET?: string;
   // 팔로업 자동 발송 — functions/_lib/followups.ts 참조
-  NEWSLETTER_FOLLOWUPS?: string; // JSON: {"grace":7,"stages":[{"stage":1,"days":30,"autoEmailId":"..."}]}
+  NEWSLETTER_FOLLOWUPS?: string; // JSON: {"grace":30,"fallbackManager":"…","stages":[{"stage":1,"days":45,"mail":"a2"}, …]}
   NEWSLETTER_CRON_SECRET?: string; // run-followups 실제 실행 토큰 (GitHub Secrets와 동일)
   ALLOWED_ORIGIN?: string;
 }
