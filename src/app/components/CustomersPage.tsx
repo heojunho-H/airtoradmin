@@ -1032,8 +1032,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // 리마인드 1~4차 칸 — 최근 작업 줄은 서버 상태(발송기와 같은 규칙, /api/newsletter?action=remind)로 발송·예약·보내지 않음을 보인다.
-  // 보내지 않음: 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels (운영 주소에서만) — docs/remind-mails.md
+  // 리마인드 1~4차 칸 — 최근 작업 줄은 서버 상태(발송기와 같은 규칙, /api/newsletter?action=remind)로 발송완료·예약 완료·예약발송 취소를 보인다.
+  // 예약발송 취소: 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels (운영 주소에서만) — docs/remind-mails.md
   const [remindStatus, setRemindStatus] = useState<RemindStatus | null>(null);
   const [remindBusy, setRemindBusy] = useState(false);
   const remindSeq = useRef(0);
@@ -1066,7 +1066,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     });
   };
 
-  // 칸 누름 — flag: 예전처럼 체크만, off: 보내지 않음, on: 다시 보냄
+  // 칸 누름 — flag: 예전처럼 체크만, off: 예약발송 취소, on: 다시 예약
   const onReminderCell = async (workIndex: number, work: WorkHistory, n: 1 | 2 | 3 | 4, action: ReminderCellAction) => {
     if (!selectedCustomer || isEditing || remindBusy || action === 'none') return;
     const flagKey = n <= 3 ? (`reminder${n}` as 'reminder1' | 'reminder2' | 'reminder3') : null;
@@ -1077,8 +1077,8 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     const due = reminderDueLabel(work.workDate, n);
     const st = remindStatus?.stages.find((s) => s.stage === n);
     const ask = action === 'off'
-      ? `리마인드${n}차(${due}) 메일을 보내지 않습니다.\n다시 누르면 되돌릴 수 있습니다.`
-      : `리마인드${n}차(${due}) 메일을 다시 자동으로 보냅니다.\n예정일과 기한 안이면 평일 오전 9시경 나갑니다.`;
+      ? `리마인드${n}차(${due}) 예약발송을 취소합니다.\n다시 누르면 다시 예약됩니다.`
+      : `리마인드${n}차(${due})를 다시 예약합니다.\n예정일과 기한 안이면 평일 오전 9시경 발송됩니다.`;
     if (!window.confirm(ask)) return;
     // 1~3차는 리마인드 체크로 (D1 로 끈 것이 아니면)
     if (flagKey && !(action === 'on' && st?.status === 'cancelled')) {

@@ -1,14 +1,14 @@
 // 작업 히스토리 표의 '리마인드 1~4차' 칸 — 지금 칸 모양 그대로(아이콘 + 예정일 + 작은 글씨 한 줄).
-// 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송·예약·보내지 않음'을 보이고,
-// 아직 안 나간 칸을 누르면 보내지 않음 ↔ 다시 보냄. 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels — docs/remind-mails.md
-import { CheckCircle, Clock, X } from 'lucide-react';
+// 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송완료·예약 완료·예약발송 취소'를 보이고,
+// 아직 안 나간 칸을 누르면 예약발송 취소 ↔ 다시 예약. 시계 아이콘은 쓰지 않는다(무슨 뜻인지 헷갈린다는 사용자 지적, 11-15). 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels — docs/remind-mails.md
+import { AlertCircle, CheckCircle, X, XCircle } from 'lucide-react';
 import type { RemindStage } from '../../lib/newsletter';
 
-/** 누르면 하는 일 — flag: 체크만 바꿈(예전 그대로), off: 보내지 않음, on: 다시 보냄, none: 누를 수 없음 */
+/** 누르면 하는 일 — flag: 체크만 바꿈(예전 그대로), off: 예약발송 취소, on: 다시 예약, none: 누를 수 없음 */
 export type ReminderCellAction = 'flag' | 'off' | 'on' | 'none';
 
 export interface ReminderCellModel {
-  icon: 'sent' | 'off' | 'due' | 'scheduled' | 'held' | 'missed' | 'checked' | 'unchecked';
+  icon: 'sent' | 'reserved' | 'cancelled' | 'held' | 'missed' | 'checked' | 'unchecked';
   line: string;
   tone: 'emerald' | 'slate' | 'blue' | 'amber';
   title: string;
@@ -51,12 +51,12 @@ export function reminderCellModel(x: {
     // 지난 작업 줄 또는 상태를 못 불러온 때 — 예전 모양 그대로
     if (!hasFlag) {
       return x.autoSentDate
-        ? { icon: 'sent', line: `자동발송 ${x.autoSentDate}`, tone: 'emerald', title: '자동 발송함', action: 'none' }
+        ? { icon: 'sent', line: `발송완료 ${md(x.autoSentDate)}`, tone: 'emerald', title: `발송완료 ${x.autoSentDate}`, action: 'none' }
         : { icon: 'unchecked', line: '', tone: 'slate', title: '지난 작업 — 자동 발송은 최근 작업만 합니다', action: 'none' };
     }
     return {
       icon: x.flag ? 'checked' : 'unchecked',
-      line: x.autoSentDate ? `자동발송 ${x.autoSentDate}` : '',
+      line: x.autoSentDate ? `발송완료 ${md(x.autoSentDate)}` : '',
       tone: 'emerald',
       title: x.flag ? '체크됨' : '체크 안 됨',
       action: 'flag',
@@ -64,7 +64,7 @@ export function reminderCellModel(x: {
   }
 
   const { st, connected, blocked } = x.latest;
-  const d1Note = x.canWriteD1 ? '' : ' (4차 보내지 않기는 운영 주소에서만 됩니다)';
+  const d1Note = x.canWriteD1 ? '' : ' (4차 예약발송 취소는 운영 주소에서만 됩니다)';
   switch (st.status) {
     case 'sent': {
       const first = st.sent[0];
@@ -73,45 +73,41 @@ export function reminderCellModel(x: {
       const partial = st.pending.length > 0;
       return {
         icon: 'sent',
-        line: `${partial ? '일부 발송' : '발송'} ${when}`,
+        line: `${partial ? '일부 발송완료' : '발송완료'} ${when}`,
         tone: 'emerald',
-        title: `자동 발송함 (네이버웍스 접수) · ${who}${partial ? ` · 아직 안 받은 담당자: ${st.pending.join(', ')}` : ''}`,
+        title: `발송완료 (네이버웍스 접수) · ${who}${partial ? ` · 아직 안 받은 담당자: ${st.pending.join(', ')}` : ''}`,
         action: 'none',
       };
     }
     case 'cancelled':
       return {
-        icon: 'off',
-        line: '보내지 않음',
+        icon: 'cancelled',
+        line: '예약발송 취소',
         tone: 'slate',
-        title: `${st.cancel ? `${st.cancel.setBy} · ${stamp(st.cancel.setAt)} 끔` : '보내지 않음'} — 누르면 다시 보냅니다${d1Note}`,
+        title: `예약발송 취소${st.cancel ? ` (${st.cancel.setBy} · ${stamp(st.cancel.setAt)})` : ''} — 누르면 다시 예약합니다${d1Note}`,
         action: x.canWriteD1 ? 'on' : 'none',
       };
     case 'checked':
-      return { icon: 'off', line: '보내지 않음', tone: 'slate', title: '체크됨(손으로 보냈거나 끔) — 누르면 다시 자동으로 보냅니다', action: 'on' };
+      return { icon: 'cancelled', line: '예약발송 취소', tone: 'slate', title: '예약발송 취소 (리마인드 체크 — 손으로 보냈거나 끔) — 누르면 다시 예약합니다', action: 'on' };
     case 'skipped':
-      return { icon: 'off', line: '건너뜀', tone: 'slate', title: '장부에 건너뜀 기록이 있어 보내지 않습니다', action: hasFlag ? 'flag' : 'none' };
+      return { icon: 'cancelled', line: '건너뜀', tone: 'slate', title: '장부에 건너뜀 기록이 있어 보내지 않습니다', action: hasFlag ? 'flag' : 'none' };
     case 'expired':
       return { icon: 'missed', line: '미발송', tone: 'slate', title: '예정일 뒤 기한이 지나 보내지 않았습니다', action: hasFlag ? 'flag' : 'none' };
     case 'blocked': {
       const can = hasFlag || x.canWriteD1;
-      return { icon: 'held', line: '보류', tone: 'amber', title: `${BLOCK_TITLE[blocked || ''] || '보류 중'} — 누르면 보내지 않음${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' };
+      return { icon: 'held', line: '보류', tone: 'amber', title: `${BLOCK_TITLE[blocked || ''] || '보류 중'} — 누르면 예약발송 취소${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' };
     }
     case 'due': {
       const can = hasFlag || x.canWriteD1;
       return connected
-        ? { icon: 'due', line: `${md(st.sendDate)} 발송 예정`, tone: 'blue', title: `다음 자동 실행(평일 오전 9시경)에 보냅니다 — 누르면 보내지 않음${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' }
-        : { icon: 'due', line: '연결 대기', tone: 'amber', title: `보내는 담당자의 네이버웍스 계정이 연결되면 보냅니다 — 누르면 보내지 않음${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' };
+        ? { icon: 'reserved', line: '예약 완료', tone: 'blue', title: `예약 완료 — ${md(st.sendDate)} 오전 9시경 발송 · 누르면 예약발송 취소${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' }
+        : { icon: 'held', line: '연결 대기', tone: 'amber', title: `보내는 담당자의 네이버웍스 계정이 연결되면 발송 · 누르면 예약발송 취소${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' };
     }
     default: {
       const can = hasFlag || x.canWriteD1;
-      return {
-        icon: 'scheduled',
-        line: '예약',
-        tone: 'blue',
-        title: `${md(st.sendDate)} 오전 9시경 자동 발송${connected ? '' : ' — 그 전에 보내는 담당자 계정을 연결해야 합니다'} · 누르면 보내지 않음${hasFlag ? '' : d1Note}`,
-        action: can ? 'off' : 'none',
-      };
+      return connected
+        ? { icon: 'reserved', line: '예약 완료', tone: 'blue', title: `예약 완료 — ${md(st.sendDate)} 오전 9시경 발송 · 누르면 예약발송 취소${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' }
+        : { icon: 'held', line: '연결 대기', tone: 'amber', title: `${md(st.sendDate)} 발송 예정이지만 보내는 담당자의 네이버웍스 계정을 먼저 연결해야 합니다 · 누르면 예약발송 취소${hasFlag ? '' : d1Note}`, action: can ? 'off' : 'none' };
     }
   }
 }
@@ -121,14 +117,12 @@ function CellIcon({ icon }: { icon: ReminderCellModel['icon'] }) {
     case 'sent':
     case 'checked':
       return <CheckCircle className="w-5 h-5 text-emerald-600" />;
-    case 'off':
-      return <CheckCircle className="w-5 h-5 text-slate-400" />;
-    case 'due':
-      return <Clock className="w-5 h-5 text-blue-600" />;
-    case 'scheduled':
-      return <Clock className="w-5 h-5 text-slate-400" />;
+    case 'reserved':
+      return <CheckCircle className="w-5 h-5 text-blue-600" />;
+    case 'cancelled':
+      return <XCircle className="w-5 h-5 text-slate-400" />;
     case 'held':
-      return <Clock className="w-5 h-5 text-amber-500" />;
+      return <AlertCircle className="w-5 h-5 text-amber-500" />;
     default:
       return <X className="w-5 h-5 text-slate-400" />;
   }
