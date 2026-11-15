@@ -210,7 +210,7 @@ export function ReminderCell({ model, dueLabel, dueTitle, disabled, onClick }: {
 
 // ── 고객 목록 '리마인드 상태' 열 — 배지 한 줄 (사용자 선택 '최근 발송만 한 줄', 11-15) ──
 // 가장 최근에 나간 메일 → 없으면 다음 예약 → 보류 → 예약발송 취소 → 미발송. 값은 서버 remind-list(발송기와 같은 규칙)
-// 칸이 좁아 '발송완료'에는 날짜를 붙이지 않는다(사용자 지시 11-15) — 날짜·시각은 툴팁
+// 칸이 좁아 배지에는 날짜를 붙이지 않는다(사용자 지시 11-15 "날짜 다 빼") — 날짜·시각은 툴팁
 
 export interface RemindListBadgeModel {
   text: string;
@@ -230,13 +230,13 @@ export function remindListBadgeModel(b: RemindBrief): RemindListBadgeModel {
     const when = b.last.at ? stamp(b.last.at) : b.last.date;
     return b.last.kind === 'sent'
       ? { text: `${b.last.stage}차 발송완료`, tone: 'emerald', icon: 'sent', title: `리마인드${b.last.stage}차 발송완료 ${when} · ${b.last.manual ? '손으로 보냄' : '자동 발송'}` }
-      : { text: `${b.last.stage}차 발송 실패 ${md(b.last.date)}`, tone: 'amber', icon: 'held', title: `리마인드${b.last.stage}차 손으로 보낸 메일이 실패했습니다(${when}) — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다` };
+      : { text: `${b.last.stage}차 발송 실패`, tone: 'amber', icon: 'held', title: `리마인드${b.last.stage}차 손으로 보낸 메일이 실패했습니다(${when}) — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다` };
   }
   if (b.next) {
     // 손 예약은 네이버웍스에 있어 담당자 계정 연결과 상관없다
     return b.waiting && b.next.kind !== 'reserved'
       ? { text: `${b.next.stage}차 연결 대기`, tone: 'amber', icon: 'held', title: `리마인드${b.next.stage}차 ${b.next.date} — 보낼 담당자의 네이버웍스 계정을 연결하면 발송됩니다` }
-      : { text: `${b.next.stage}차 예약 완료 ${md(b.next.date)}`, tone: 'blue', icon: 'reserved', title: `리마인드${b.next.stage}차 ${b.next.date} — ${NEXT_TITLE[b.next.kind]}` };
+      : { text: `${b.next.stage}차 예약 완료`, tone: 'blue', icon: 'reserved', title: `리마인드${b.next.stage}차 ${b.next.date} — ${NEXT_TITLE[b.next.kind]}` };
   }
   if (b.blocked && b.blocked !== 'no-work-entry') return { text: '보류', tone: 'amber', icon: 'held', title: BLOCK_TITLE[b.blocked] || '보류 중' };
   if (b.off) return { text: '예약발송 취소', tone: 'slate', icon: 'cancelled', title: '남은 회차를 꺼 두었습니다 — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다' };
