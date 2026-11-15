@@ -1,7 +1,7 @@
 // 네이버웍스 메일 API — 리마인드 메일을 담당 매니저 본인 계정으로 보낸다 (보낸메일함·수신확인에 남고 회신도 담당자에게 간다)
 //
 // 공식 문서: https://developers.worksmobile.com/kr/docs/mail-create
-//   POST https://www.worksapis.com/v1.0/users/{userId}/mail   scope `mail` (Standard 이상)
+//   POST https://www.worksapis.com/v1.0/users/{userId}/mail   scope `mail` (Standard 이상) + `user.profile.read`(로그인한 본인 메일 확인)
 //   메일 API 는 구성원 OAuth 토큰으로만 쓸 수 있다(서비스 계정 JWT 불가) → 담당자마다 한 번 /api/works/connect 에서 로그인·허용.
 //   Refresh Token 90일 — 개발자 콘솔에서 Refresh Token Rotation 을 켜 두면 갱신할 때마다 새로 받는다. 매일 실행에서 갱신해 만료를 막는다.
 //
@@ -21,7 +21,7 @@ export interface WorksEnv {
 export const WORKS_AUTH_URL = 'https://auth.worksmobile.com/oauth2/v2.0/authorize';
 export const WORKS_TOKEN_URL = 'https://auth.worksmobile.com/oauth2/v2.0/token';
 export const WORKS_API_BASE = 'https://www.worksapis.com/v1.0';
-export const WORKS_SCOPE = 'mail user.read';
+export const WORKS_SCOPE = 'mail user.profile.read';
 export const WORKS_DOMAIN = 'airtor.co.kr';
 export const DEFAULT_WORKS_REDIRECT = 'https://airtoradmin.co.kr/api/works/callback';
 /** 시험 발송 받는 주소 — 이 주소 말고는 시험 발송을 못 한다 */

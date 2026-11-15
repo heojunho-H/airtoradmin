@@ -65,7 +65,7 @@ async function connect(env: Env): Promise<Response> {
     `<p>세척 고객에게 가는 리마인드 메일(작업 후 45·200·335·395일)을 <b>담당자님 메일 계정으로</b> 보내기 위한 연결입니다.
 보낸 메일은 담당자님 보낸메일함에 남고, 고객 회신도 담당자님께 바로 갑니다.</p>
 <p><a class="btn" href="${escapeHtml(link)}">네이버웍스로 로그인해 연결하기</a></p>
-<p><small>로그인 뒤 나오는 화면에서 '메일 보내기'와 '구성원 정보 읽기' 권한을 허용해 주세요. 에어터 계정(@${WORKS_DOMAIN})만 연결됩니다.
+<p><small>로그인 뒤 나오는 화면에서 '메일'과 '프로필 정보 조회' 권한을 허용해 주세요. 에어터 계정(@${WORKS_DOMAIN})만 연결됩니다.
 연결을 끊고 싶으시면 관리자에게 말씀해 주세요.</small></p>`,
     200,
     { 'Set-Cookie': `${COOKIE}=${nonce}; Path=/api/works; Max-Age=900; HttpOnly; Secure; SameSite=Lax` },

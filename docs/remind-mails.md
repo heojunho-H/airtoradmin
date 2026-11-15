@@ -44,7 +44,7 @@
 
 1. 네이버웍스 관리자가 개발자 콘솔에서 앱을 만든다.
    - Redirect URL: `https://airtoradmin.co.kr/api/works/callback`
-   - OAuth Scope: `mail`, `user.read`
+   - OAuth Scope: `mail`, `user.profile.read` (본인 프로필·메일만 — 구성원 목록 읽기 권한은 받지 않는다)
    - Refresh Token Rotation: 켬. Access Token 유효 기간은 24시간이다.
    - 메일 API는 구성원 계정 토큰으로만 쓸 수 있다(서비스 계정 불가). 그래서 담당자마다 한 번 로그인해야 한다.
 2. Cloudflare Pages 환경변수
