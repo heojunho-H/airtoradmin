@@ -21,6 +21,7 @@
 //   - 같은 회사에 진행 중인 딜이 있거나, 작업일 없이 수주된 작업이 있으면 보내지 않음 (open-deal / pending-job)
 //   - 여러 단계가 동시에 due면 가장 높은 단계만 발송, 낮은 단계는 superseded로 장부 기록
 //   - 같은 (jobKey, stage, recipient)가 sent|skipped 로 장부에 있으면 재발송 안 함
+//   - 고객 상세에서 '보내지 않기'로 취소한 회차(D1 remind_cancels — functions/_lib/remind-cancels.ts)는 보내지 않음
 //
 // 리마인드 메일(2026-11-15 확정, 광고 표시 없음 — 사용자 결정): 1 A2 D+45 · 2 B1 D+200(협약서) · 3 B2 D+335 · 4 B3 D+395
 
@@ -83,6 +84,8 @@ export interface LedgerEntry {
   /** 보낸 담당자 계정 (네이버웍스) */
   sender?: string;
   via?: 'works';
+  /** 보낸 시각 (ISO) — 고객 상세 '리마인드 메일'에 시각을 보인다. 예전 항목은 날짜만 있다 */
+  at?: string;
 }
 
 export interface ContactLike {
@@ -153,11 +156,27 @@ export type SkipReason =
   | 'not-due'
   | 'out-of-grace'
   | 'flag-set'
+  | 'cancelled'
   | 'already-sent';
 
 export interface ComputeOptions {
   /** 진행 중 딜이 있는 회사 — normalizeCompanyName 결과 */
   openDealCompanies?: Set<string>;
+  /** 보내지 않기로 한 회차 — cancelKeyOf 키 (D1 remind_cancels, functions/_lib/remind-cancels.ts) */
+  cancelled?: Set<string>;
+}
+
+// 취소 키 — jobKey '*' = 이 고객의 모든 작업, stage 0 = 모든 회차 ('이 고객 리마인드 모두 끄기'는 '*'·0)
+export function cancelKeyOf(customerId: number, jobKey: string, stage: number): string {
+  return `${customerId}|${jobKey}|${stage}`;
+}
+
+export function isCancelled(set: Set<string> | undefined, customerId: number, jobKey: string, stage: number): boolean {
+  if (!set || set.size === 0) return false;
+  return (
+    set.has(cancelKeyOf(customerId, jobKey, stage)) || set.has(cancelKeyOf(customerId, jobKey, 0))
+    || set.has(cancelKeyOf(customerId, '*', stage)) || set.has(cancelKeyOf(customerId, '*', 0))
+  );
 }
 
 export interface SkipItem {
@@ -362,6 +381,7 @@ export function computeDue(
       const dueDate = addDays(workDate, days);
       const flagKey = reminderKey(s.stage);
       if (flagKey && entry[flagKey] === true) { skipped.push({ ...base, stage: s.stage, reason: 'flag-set' }); continue; }
+      if (isCancelled(opts.cancelled, c.id, jobKey, s.stage)) { skipped.push({ ...base, stage: s.stage, reason: 'cancelled' }); continue; }
       if (today < dueDate) { skipped.push({ ...base, stage: s.stage, reason: 'not-due' }); continue; }
       if (today > addDays(dueDate, cfg.grace)) { skipped.push({ ...base, stage: s.stage, reason: 'out-of-grace' }); continue; }
       const pending = recipients.filter((r) => !alreadyDone(c.emailHistory, jobKey, s.stage, r.email));
@@ -400,6 +420,125 @@ export function computeDue(
   return { due, skipped };
 }
 
+// ── 고객 상세 '리마인드 메일' (src/app/components/RemindMailPanel.tsx) ──
+// 회차별 판단은 computeDue 를 그대로 쓰고(규칙을 따로 베끼지 않는다), 그 위에 장부·취소·체크를 얹는다.
+// 상태 우선순위: 보냄 > 취소됨 > 체크됨 > 건너뜀 > 기한 지남 > 보류(고객 전체 사유) > 곧 보냄 > 예약됨.
+
+export type StageStatus = 'sent' | 'cancelled' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
+
+export interface StageLedgerItem {
+  recipient: string;
+  date: string;
+  at?: string;
+  sender?: string;
+  reason?: string;
+}
+
+export interface StageTimeline {
+  stage: number;
+  mail: RemindMailKey;
+  label: string;
+  days: number;
+  dueDate: string;
+  /** 자동 실행 기준 예상 발송일 — 예약됨은 예정일(주말이면 다음 평일), 곧 보냄은 다음 실행일 */
+  sendDate: string | null;
+  status: StageStatus;
+  /** computeDue 판단 — 'due'·'superseded' 또는 회차 건너뜀 사유 (고객 전체 사유로 막혔으면 null) */
+  verdict: SkipReason | 'due' | 'superseded' | null;
+  sent: StageLedgerItem[];
+  failed: StageLedgerItem[];
+  skipped: StageLedgerItem[];
+  /** 아직 이 회차를 받지 않은 담당자 — '보냄'인데 남아 있으면 일부만 보낸 것 */
+  pending: string[];
+  /** 작업 히스토리의 리마인드 N차 칸 (④는 칸이 없어 false) */
+  flag: boolean;
+}
+
+export interface RemindTimeline {
+  customerId: number;
+  company: string;
+  /** 고객 전체를 막는 computeDue 사유 (수신거부·반송·메일 없음·작업 없음·미래 작업·진행 중 딜·작업일 없는 수주) */
+  blocked: SkipReason | null;
+  job: { jobKey: string; workDate: string; projectName: string } | null;
+  recipients: Recipient[];
+  stages: StageTimeline[];
+}
+
+// 그날이 평일이면 그날, 토·일이면 다음 월요일
+export function weekdayOnOrAfter(ymd: string): string {
+  let d = ymd;
+  for (let i = 0; i < 3; i++) {
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+    if (dow !== 0 && dow !== 6) return d;
+    d = addDays(d, 1);
+  }
+  return d;
+}
+
+export function remindTimeline(
+  c: CustomerRow,
+  cfg: FollowupConfig,
+  today: string,
+  opts: ComputeOptions & { nextRun?: string } = {},
+): RemindTimeline {
+  const recipients = recipientsOf(c);
+  const { due, skipped } = computeDue([c], cfg, today, opts);
+  const customerSkip = skipped.find((s) => s.stage === undefined);
+  const blocked = customerSkip ? customerSkip.reason : null;
+  const entry = latestEntry(c.workHistory);
+  if (!entry) return { customerId: c.id, company: c.company || '', blocked, job: null, recipients, stages: [] };
+
+  const workDate = entry.workDate as string;
+  const jobKey = jobKeyOf(entry);
+  const top = due[0];
+  const ledger = Array.isArray(c.emailHistory) ? c.emailHistory : [];
+  const toItem = (l: LedgerEntry): StageLedgerItem => ({
+    recipient: l.recipient,
+    date: l.date,
+    ...(l.at ? { at: l.at } : {}),
+    ...(l.sender ? { sender: l.sender } : {}),
+    ...(l.reason ? { reason: l.reason } : {}),
+  });
+
+  const stages = cfg.stages.map((s): StageTimeline => {
+    const days = stageDays(s, workDate);
+    const dueDate = addDays(workDate, days);
+    const mine = ledger.filter((l) => l && l.source === 'auto' && l.jobKey === jobKey && l.stage === s.stage);
+    const sent = mine.filter((l) => l.status === 'sent').map(toItem);
+    const failed = mine.filter((l) => l.status === 'failed').map(toItem);
+    const skippedLedger = mine.filter((l) => l.status === 'skipped').map(toItem);
+    const pending = recipients.filter((r) => !alreadyDone(ledger, jobKey, s.stage, r.email)).map((r) => r.email);
+    const flagKey = reminderKey(s.stage);
+    const flag = Boolean(flagKey && entry[flagKey] === true);
+    let verdict: StageTimeline['verdict'] = null;
+    if (top && top.stage === s.stage) verdict = 'due';
+    else if (top && top.supersededStages.includes(s.stage)) verdict = 'superseded';
+    else verdict = skipped.find((x) => x.stage === s.stage)?.reason ?? null;
+
+    let status: StageStatus;
+    if (sent.length > 0) status = 'sent';
+    else if (isCancelled(opts.cancelled, c.id, jobKey, s.stage)) status = 'cancelled';
+    else if (flag) status = 'checked';
+    else if (skippedLedger.length > 0 || verdict === 'superseded') status = 'skipped';
+    else if (today > addDays(dueDate, cfg.grace)) status = 'expired';
+    else if (blocked && blocked !== 'future-work-date') status = 'blocked';
+    else if (verdict === 'due' || today >= dueDate) status = 'due';
+    else status = 'scheduled';
+
+    const sendDate = status === 'scheduled' ? weekdayOnOrAfter(dueDate) : status === 'due' ? (opts.nextRun ?? weekdayOnOrAfter(today)) : null;
+    return { stage: s.stage, mail: s.mail, label: stageLabel(s), days, dueDate, sendDate, status, verdict, sent, failed, skipped: skippedLedger, pending, flag };
+  });
+
+  return {
+    customerId: c.id,
+    company: c.company || '',
+    blocked,
+    job: { jobKey, workDate, projectName: entry.projectName || '' },
+    recipients,
+    stages,
+  };
+}
+
 export interface RecipientResult {
   email: string;
   ok: boolean;
@@ -418,7 +557,7 @@ export interface ApplyResult {
 }
 
 // 최신 조회본(fresh)에 발송 결과를 반영. 항목은 jobKey로 찾는다 (사용자가 그 사이 편집했을 수 있음).
-export function applyResult(fresh: CustomerRow, item: DueItem, results: RecipientResult[], today: string, sender?: string): ApplyResult {
+export function applyResult(fresh: CustomerRow, item: DueItem, results: RecipientResult[], today: string, sender?: string, at?: string): ApplyResult {
   const ledger: LedgerEntry[] = Array.isArray(fresh.emailHistory) ? fresh.emailHistory.slice() : [];
   const before = ledger.length;
   const type = `팔로업 ${item.stage}단계 (+${item.days}d)`;
@@ -433,6 +572,7 @@ export function applyResult(fresh: CustomerRow, item: DueItem, results: Recipien
       source: 'auto',
       reason: r.ok ? undefined : (r.error || 'send failed'),
       ...(sender ? { sender, via: 'works' as const } : {}),
+      ...(at ? { at } : {}),
     });
   }
   // 상위 단계에 밀린 낮은 단계 — 다시 발송되지 않도록 담당자별 skipped 기록

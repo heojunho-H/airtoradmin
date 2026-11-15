@@ -40,6 +40,7 @@ import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './M
 import { btn, ICON_BTN_DANGER, KPI, TILE, BADGE, TONE, MODAL_CLOSE, TABLE, type Tone } from './ui-kit';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
+import { RemindMailPanel } from './RemindMailPanel';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
@@ -837,6 +838,25 @@ interface CustomersPageProps {
   onCustomerOpened?: () => void;
   /** 등급 수동 고정(D1) — App 이 들고 있다. 없으면 등급 칸은 보기만 */
   gradeLocks?: GradeLocksState;
+  /** 로그인 이름 — 리마인드 '보내지 않기'를 누가 했는지 남긴다 */
+  userName?: string;
+}
+
+// 고객 상세 '리마인드 메일'을 다시 불러올 때 — 메모처럼 상관없는 칸이 바뀔 때는 다시 부르지 않는다
+function remindRefreshKey(c: Customer): string {
+  let latest: Customer['workHistory'][number] | null = null;
+  for (const w of c.workHistory || []) {
+    if (w?.workDate && /^\d{4}-\d{2}-\d{2}$/.test(w.workDate) && (!latest || w.workDate > (latest.workDate || ''))) latest = w;
+  }
+  const emails = (c.contacts || []).map((x) => (x.email || '').trim().toLowerCase()).join(',');
+  return [
+    latest ? jobKeyOf(latest) : '',
+    latest ? `${latest.reminder1 ? 1 : 0}${latest.reminder2 ? 1 : 0}${latest.reminder3 ? 1 : 0}` : '',
+    emails || (c.email || ''),
+    c.newsletterStatus || '',
+    c.accountManager || '',
+    (c.emailHistory || []).length,
+  ].join('|');
 }
 
 function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
@@ -912,7 +932,7 @@ function SubcontractorMultiSelect({ value, onChange, names, className = '' }: {
   );
 }
 
-export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null, openCustomerId = null, onCustomerOpened, gradeLocks }: CustomersPageProps = {}) {
+export function CustomersPage({ externalCustomersState, subcontractorNames = [], customerManagerNames = [], onNotification, onNavigateToProfit, onSynced, dealStates = null, openCustomerId = null, onCustomerOpened, gradeLocks, userName = '' }: CustomersPageProps = {}) {
   const [internalCustomers, setInternalCustomers] = useState<Customer[]>(initialCustomers);
   const customers = externalCustomersState ? externalCustomersState[0] : internalCustomers;
   const setCustomers = externalCustomersState ? externalCustomersState[1] : setInternalCustomers;
@@ -2554,6 +2574,14 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     </div>
                   </div>
                 </div>
+
+                {/* 리마인드 메일 — 예약·발송 확인, 보내지 않기 (저장된 고객만) */}
+                <RemindMailPanel
+                  customerId={selectedCustomer.id}
+                  refreshKey={remindRefreshKey(selectedCustomer)}
+                  userName={userName}
+                  editing={isEditing}
+                />
 
                 {/* 하단 영역 - 작업 히스토리 */}
                 <div>

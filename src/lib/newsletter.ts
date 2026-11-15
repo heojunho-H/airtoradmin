@@ -259,6 +259,7 @@ export const FOLLOWUP_SKIP_LABEL: Record<string, string> = {
   'not-due': '예정일 전',
   'out-of-grace': '유예 기간 경과',
   'flag-set': '이미 체크됨',
+  cancelled: '보내지 않기(취소)',
   'already-sent': '이미 발송',
 };
 
@@ -277,6 +278,115 @@ export async function fetchFollowupConfig(): Promise<FollowupConfig | null> {
 // 토큰 없이 허용되는 미리보기 — 아무 것도 발송/기록하지 않는다. 실제 발송은 GitHub Actions 크론이 담당.
 export async function runFollowupsDryRun(): Promise<FollowupDryRunReport> {
   return postNewsletter<FollowupDryRunReport>({ action: 'run-followups', dryRun: true });
+}
+
+// ── 고객 상세 '리마인드 메일' (functions/api/newsletter.ts action=remind…, src/app/components/RemindMailPanel.tsx) ──
+
+export type RemindStageStatus = 'sent' | 'cancelled' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
+
+export interface RemindLedgerItem {
+  recipient: string;
+  date: string;
+  at?: string;
+  sender?: string;
+  reason?: string;
+}
+
+export interface RemindStage {
+  stage: number;
+  mail: 'a2' | 'b1' | 'b2' | 'b3';
+  label: string;
+  days: number;
+  dueDate: string;
+  sendDate: string | null;
+  status: RemindStageStatus;
+  verdict: string | null;
+  sent: RemindLedgerItem[];
+  failed: RemindLedgerItem[];
+  skipped: RemindLedgerItem[];
+  pending: string[];
+  flag: boolean;
+  cancel: { setBy: string; setAt: string; scope: 'all' | 'stage' } | null;
+}
+
+export interface RemindCancelInfo {
+  jobKey: string;
+  stage: number;
+  workDate: string;
+  projectName: string;
+  setBy: string;
+  setAt: string;
+  restoredBy?: string | null;
+  restoredAt?: string | null;
+}
+
+export interface RemindStatus {
+  ok: boolean;
+  error?: string;
+  disabled?: boolean;
+  today: string;
+  nextRun: string;
+  grace: number;
+  worksConfigured: boolean;
+  lastRun: { runAt: string; targets: number; sent: number; failed: number } | null;
+  customer: { id: number; company: string; accountManager: string };
+  blocked: string | null;
+  job: { jobKey: string; workDate: string; projectName: string } | null;
+  recipients: { email: string; name: string; position: string }[];
+  sender: { name: string; position: string; team: string; email: string; connected: boolean; needsReconnect: boolean; fallback: boolean } | null;
+  stages: RemindStage[];
+  cancelAll: { setBy: string; setAt: string } | null;
+  orphanCancels: RemindCancelInfo[];
+  history: RemindCancelInfo[];
+  warnings: string[];
+}
+
+export interface RemindPreview {
+  ok: boolean;
+  error?: string;
+  subject: string;
+  html: string;
+  day: string;
+  to: { name: string; email: string }[];
+  sender: string;
+  note: string | null;
+}
+
+async function getNewsletter<T extends { ok: boolean; error?: string }>(params: Record<string, string | number>): Promise<T> {
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const response = await fetch(`/api/newsletter?${qs}`, { headers: { Accept: 'application/json' } });
+  const text = await response.text();
+  let json: T;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`뉴스레터 API 응답이 JSON이 아닙니다 (HTTP ${response.status})`);
+  }
+  if (!response.ok) throw new Error(json.error || `뉴스레터 API 오류 (HTTP ${response.status})`);
+  return json;
+}
+
+export function fetchRemindStatus(customerId: number): Promise<RemindStatus> {
+  return getNewsletter<RemindStatus>({ action: 'remind', customerId });
+}
+
+export function fetchRemindPreview(customerId: number, stage: number): Promise<RemindPreview> {
+  return getNewsletter<RemindPreview>({ action: 'remind-preview', customerId, stage });
+}
+
+// 보내지 않기 / 되돌리기 — jobKey '*' + stage 0 은 '이 고객 리마인드 모두 끄기'. 응답은 새 상태표
+export function cancelRemind(x: { customerId: number; jobKey: string; stage: number; userName: string }): Promise<RemindStatus> {
+  return postNewsletter<RemindStatus>({ action: 'remind-cancel', ...x });
+}
+
+export function restoreRemind(x: { customerId: number; jobKey: string; stage: number; userName: string }): Promise<RemindStatus> {
+  return postNewsletter<RemindStatus>({ action: 'remind-restore', ...x });
+}
+
+// 보내지 않기·되돌리기는 운영 주소에서만 — 로컬 개발 화면도 /api/newsletter 를 운영으로 보내 실제 발송이 바뀌므로 예외를 두지 않는다
+const REMIND_PROD_HOSTS = ['airtoradmin.co.kr', 'www.airtoradmin.co.kr', 'airtoradmin.pages.dev'];
+export function canWriteRemind(): boolean {
+  return typeof window !== 'undefined' && REMIND_PROD_HOSTS.includes(window.location.hostname);
 }
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;

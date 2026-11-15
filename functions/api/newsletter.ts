@@ -26,9 +26,13 @@
 //     → B1(협약서) 단계는 실제 실행에서만 고객별 협약서 링크를 D1 에 만든다. 못 만들면 그 고객은 다음 날로 미룬다.
 //   { action: 'test-send', sender, mail? }                   ← 받는 주소는 relation@airtor.co.kr 고정, 하루 20통
 //     → 연결된 담당자 계정으로 견본 값 메일을 보낸다 (고객 장부는 건드리지 않음)
+//   { action: 'remind-cancel' | 'remind-restore', customerId, jobKey('*'=모든 작업), stage(0=모든 회차), userName }
+//     → 고객 상세 '리마인드 메일'의 보내지 않기·되돌리기 (D1 remind_cancels). 운영 주소 화면의 Origin 만 받는다.
 // 요청 (GET):
 //   ?action=status  → 스티비 /auth-check + 주소록 구독자 수
 //   ?action=config  → 리마인드 단계 설정 — 프론트 예정일 표시용
+//   ?action=remind&customerId=N              → 고객 상세 '리마인드 메일' 상태표 (읽기만 — 토큰 갱신·협약서 발급 없음)
+//   ?action=remind-preview&customerId=N&stage=S → 그 회차 메일 제목·본문 미리보기 (발송 없음, B1 협약서 링크는 견본)
 //
 // 수신동의(marketingAllowed)는 보내지 않는다 (2026-11-10). 스티비에서 받은 광고 동의를 덮어쓰지 않도록 키 자체를 뺀다.
 
@@ -53,14 +57,20 @@ import {
   DEFAULT_MANAGER,
   addDays,
   applyResult,
+  cancelKeyOf,
   computeDue,
+  equipmentLine,
+  latestEntry,
   parseFollowupConfig,
+  remindTimeline,
   todayKst,
+  weekdayOnOrAfter,
   type CustomerRow,
   type DueItem,
   type RecipientResult,
 } from '../_lib/followups';
 import { issueMouLink, mouBaseUrl, type MouEnv } from '../_lib/mou';
+import { activeCancelKeys, addCancel, lastRun, listCustomerCancels, recordRun, restoreCancel, type CancelRow, type RunRecord } from '../_lib/remind-cancels';
 import { REMIND_MAIL_KEYS, isRemindMailKey, renderRemindMail, type RemindMailKey, type RemindSender } from '../_lib/remind-mails';
 import { TEST_RECIPIENT, WORKS_DOMAIN, listConnections, refreshStaleTokens, sendWorksMail, takeTestQuota, worksConfigured, type WorksEnv } from '../_lib/works';
 
@@ -347,7 +357,18 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
     if (!opts.dryRun) return jsonResponse({ ok: false, error: `${msg} — 발송하지 않음` }, 502, origin);
     warnings.push(msg);
   }
-  const { due, skipped } = computeDue(customers, cfg, today, { openDealCompanies });
+  // 고객 상세에서 '보내지 않기'로 끈 회차 — 실제 실행에서 못 읽으면 보내지 않는다(끈 메일이 나가지 않게)
+  let cancelled = new Set<string>();
+  if (env.AI_DB) {
+    try {
+      cancelled = await activeCancelKeys(env.AI_DB);
+    } catch (err) {
+      const msg = `리마인드 취소 목록 조회 실패: ${err instanceof Error ? err.message : String(err)}`;
+      if (!opts.dryRun) return jsonResponse({ ok: false, error: `${msg} — 발송하지 않음` }, 502, origin);
+      warnings.push(msg);
+    }
+  }
+  const { due, skipped } = computeDue(customers, cfg, today, { openDealCompanies, cancelled });
 
   // 보낼 사람(담당 매니저 계정) — 목록을 못 읽으면 실제 실행은 멈춘다
   let managers: ManagerRow[] = [];
@@ -466,7 +487,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
         errors.push(`고객 ${item.customerId}(${item.company}) 재조회 실패 — 장부 미기록 (다음 실행에서 재발송될 수 있음)`);
         continue;
       }
-      const applied = applyResult(fresh, item, results, today, sender.email);
+      const applied = applyResult(fresh, item, results, today, sender.email, new Date().toISOString());
       // customers_api_v2: 장부는 덧붙이기, 리마인드 체크는 작업이력 패치 — 그사이 다른 수정(작업일 등)을 덮지 않는다
       const body: Record<string, unknown> = { id: item.customerId, _v: 2, emailHistoryAppend: applied.appended };
       if (applied.entryFound) {
@@ -479,6 +500,14 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
     } catch (err) {
       errors.push(`고객 ${item.customerId}(${item.company}) 기록 중 예외: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  // 고객 상세 '마지막 자동 실행' — 고객 id 만 남긴다. 기록 실패는 발송 결과에 영향 없음
+  if (env.AI_DB) {
+    await recordRun(env.AI_DB, {
+      runAt: new Date().toISOString(), targets: selected.length, sent: sent.length, failed: failed.length,
+      customerIds: selected.map((a) => a.d.customerId),
+    }).catch((err) => errors.push(`실행 기록 실패: ${err instanceof Error ? err.message : String(err)}`));
   }
 
   return jsonResponse(
@@ -525,6 +554,214 @@ async function handleTestSend(env: Env, senderRaw: unknown, mailRaw: unknown): P
   return jsonResponse({ ok: results.length > 0 && results.every((r) => r.ok), to: TEST_RECIPIENT, sender: `${sender.name} ${sender.position}`.trim(), results }, 200, origin);
 }
 
+// ── 고객 상세 '리마인드 메일' (src/app/components/RemindMailPanel.tsx · docs/remind-mails.md '고객 상세에서 관리') ──
+// 상태 조회·미리보기는 읽기만 한다 — 토큰 갱신·협약서 발급·시험 한도처럼 상태를 바꾸는 호출을 하지 않는다.
+// 취소·되돌리기는 운영 주소의 화면에서만 받는다(로컬 개발 화면도 /api/newsletter 를 운영으로 보내므로 Origin 호스트로 막는다).
+
+const REMIND_PROD_HOSTS = ['airtoradmin.co.kr', 'www.airtoradmin.co.kr', 'airtoradmin.pages.dev'];
+
+function remindJson(body: unknown, status: number, origin: string): Response {
+  const res = jsonResponse(body, status, origin);
+  res.headers.set('Cache-Control', 'no-store');
+  return res;
+}
+
+// 저장된 고객 번호만 — 저장 전 화면의 임시 번호(Date.now())는 받지 않는다
+function parseCustomerId(raw: unknown): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 && n < 1_000_000_000 ? n : null;
+}
+
+// 다음 자동 실행일 — 평일 09:00 KST(GitHub 예약이라 늦을 수 있다). 오늘이 평일이고 9시 전이면 오늘
+export function nextRunDate(now: number = Date.now()): string {
+  const kst = new Date(now + 9 * 3600 * 1000);
+  const today = kst.toISOString().slice(0, 10);
+  const dow = kst.getUTCDay();
+  if (dow !== 0 && dow !== 6 && kst.getUTCHours() < 9) return today;
+  return weekdayOnOrAfter(addDays(today, 1));
+}
+
+const cancelOut = (r: CancelRow) => ({ jobKey: r.jobKey, stage: r.stage, workDate: r.workDate, projectName: r.projectName, setBy: r.setBy, setAt: r.setAt });
+
+interface RemindBuilt {
+  status: number;
+  body: Record<string, unknown>;
+  /** 미리보기용 — 응답에는 싣지 않는다 */
+  ctx?: { customer: CustomerRow; sender: RemindSender | null };
+}
+
+async function buildRemindStatus(env: Env, customerId: number): Promise<RemindBuilt> {
+  const parsed = parseFollowupConfig(env.NEWSLETTER_FOLLOWUPS);
+  if (!parsed.ok) return { status: 200, body: { ok: false, disabled: 'disabled' in parsed, error: 'error' in parsed ? parsed.error : '리마인드 설정이 꺼져 있습니다' } };
+  const cfg = parsed.config;
+  const today = todayKst();
+  const customer = (await fetchCustomers()).find((c) => c.id === customerId);
+  if (!customer) return { status: 404, body: { ok: false, error: '고객을 찾지 못했습니다' } };
+
+  const warnings: string[] = [];
+  let openDealCompanies = new Set<string>();
+  try {
+    openDealCompanies = await fetchOpenDealCompanies();
+  } catch (err) {
+    warnings.push(`진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let managers: ManagerRow[] = [];
+  try {
+    managers = await fetchManagers();
+  } catch (err) {
+    warnings.push(`담당 매니저 목록 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  // 연결 목록은 D1 에서 읽기만 한다 (refreshStaleTokens·accessTokenFor 를 부르지 않는다)
+  const conns = worksConfigured(env) ? await listConnections(env).catch(() => []) : [];
+  let cancels: CancelRow[] = [];
+  let last: RunRecord | null = null;
+  if (env.AI_DB) {
+    try {
+      cancels = await listCustomerCancels(env.AI_DB, customerId);
+      last = await lastRun(env.AI_DB);
+    } catch (err) {
+      warnings.push(`취소 기록 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const active = cancels.filter((r) => !r.restoredAt);
+  const cancelled = new Set(active.map((r) => cancelKeyOf(r.customerId, r.jobKey, r.stage)));
+  const tl = remindTimeline(customer, cfg, today, { openDealCompanies, cancelled, nextRun: nextRunDate() });
+
+  const picked = pickSender((customer.accountManager || '').trim() || DEFAULT_MANAGER, managers, cfg.fallbackManager, conns, cfg.teams);
+  const conn = picked ? conns.find((c) => c.email === picked.sender.email) : undefined;
+  const nameOf = (email?: string) => (email ? conns.find((c) => c.email === email)?.name || email : '');
+  const jobKey = tl.job?.jobKey ?? '';
+  const cancelFor = (stage: number) =>
+    active.find((r) => r.jobKey === jobKey && r.stage === stage) ?? active.find((r) => r.jobKey === jobKey && r.stage === 0)
+    ?? active.find((r) => r.jobKey === '*' && r.stage === stage) ?? active.find((r) => r.jobKey === '*' && r.stage === 0);
+  const all = active.find((r) => r.jobKey === '*' && r.stage === 0);
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      today,
+      nextRun: nextRunDate(),
+      grace: cfg.grace,
+      worksConfigured: worksConfigured(env),
+      lastRun: last,
+      customer: { id: customer.id, company: customer.company || '', accountManager: customer.accountManager || '' },
+      blocked: tl.blocked,
+      job: tl.job,
+      recipients: tl.recipients,
+      sender: picked
+        ? {
+            name: picked.sender.name, position: picked.sender.position, team: picked.sender.team || '', email: picked.sender.email,
+            connected: Boolean(conn && !conn.lastError), needsReconnect: Boolean(conn && conn.lastError), fallback: picked.fallback,
+          }
+        : null,
+      stages: tl.stages.map((s) => {
+        const c = s.status === 'cancelled' ? cancelFor(s.stage) : undefined;
+        return {
+          ...s,
+          sent: s.sent.map((x) => ({ ...x, sender: nameOf(x.sender) })),
+          cancel: c ? { setBy: c.setBy, setAt: c.setAt, scope: c.jobKey === '*' && c.stage === 0 ? 'all' : 'stage' } : null,
+        };
+      }),
+      cancelAll: all ? { setBy: all.setBy, setAt: all.setAt } : null,
+      // 작업일·작업명을 고쳐 작업 키가 바뀐 취소 — 지금 작업에는 걸리지 않는다
+      orphanCancels: active.filter((r) => r.jobKey !== '*' && r.jobKey !== jobKey).map(cancelOut),
+      history: cancels.filter((r) => r.restoredAt).slice(0, 10).map((r) => ({ ...cancelOut(r), restoredBy: r.restoredBy, restoredAt: r.restoredAt })),
+      warnings,
+    },
+    ctx: { customer, sender: picked ? picked.sender : null },
+  };
+}
+
+async function handleRemindStatus(env: Env, rawId: string | null): Promise<Response> {
+  const origin = getOrigin(env);
+  const id = parseCustomerId(rawId);
+  if (!id) return remindJson({ ok: false, error: '저장된 고객 번호가 아닙니다' }, 400, origin);
+  const r = await buildRemindStatus(env, id);
+  return remindJson(r.body, r.status, origin);
+}
+
+// 미리보기 — 이 고객에게 갈 제목·본문. 예상 발송일 기준으로 쓰고(경과 문구), B1 협약서 링크는 견본이다. 발송하지 않는다.
+async function handleRemindPreview(env: Env, rawId: string | null, rawStage: string | null): Promise<Response> {
+  const origin = getOrigin(env);
+  const id = parseCustomerId(rawId);
+  const stageNo = Number(rawStage);
+  if (!id || !Number.isInteger(stageNo)) return remindJson({ ok: false, error: 'customerId·stage 가 필요합니다' }, 400, origin);
+  const r = await buildRemindStatus(env, id);
+  if (r.status !== 200 || r.body.ok !== true || !r.ctx) return remindJson(r.body, r.status, origin);
+  const b = r.body as {
+    stages: { stage: number; mail: RemindMailKey; dueDate: string; sendDate: string | null; sent: { date: string }[] }[];
+    recipients: { email: string; name: string; position: string }[];
+  };
+  const st = b.stages.find((s) => s.stage === stageNo);
+  if (!st) return remindJson({ ok: false, error: '그 회차가 없습니다' }, 404, origin);
+  const { customer, sender } = r.ctx;
+  if (!sender) return remindJson({ ok: false, error: '보낼 사람(담당 매니저)이 없습니다' }, 400, origin);
+  const entry = latestEntry(customer.workHistory);
+  if (!entry) return remindJson({ ok: false, error: '작업 기록이 없습니다' }, 400, origin);
+  const day = st.sent[0]?.date || st.sendDate || st.dueDate;
+  const first = b.recipients[0];
+  const mail = renderRemindMail({
+    key: st.mail, company: customer.company || '', recipientName: first?.name || '', recipientPosition: first?.position || '', sender,
+    workDate: entry.workDate as string, today: day, equipment: equipmentLine(entry), mouUrl: `${mouBaseUrl(env)}/mou/sample`,
+  });
+  return remindJson(
+    {
+      ok: true, subject: mail.subject, html: mail.html, day,
+      to: b.recipients.map((x) => ({ name: x.name, email: x.email })),
+      sender: `${sender.name} ${sender.position}`.trim(),
+      note: st.mail === 'b1' ? '협약서 링크는 견본입니다. 실제 메일에는 이 고객의 협약서 링크가 들어갑니다.' : null,
+    },
+    200,
+    origin,
+  );
+}
+
+function remindWriteOriginOk(request: Request): boolean {
+  const o = request.headers.get('Origin');
+  if (!o) return false;
+  try {
+    const host = new URL(o).host;
+    return host === new URL(request.url).host && REMIND_PROD_HOSTS.includes(host);
+  } catch {
+    return false;
+  }
+}
+
+// 보내지 않기 / 되돌리기 — { customerId, jobKey('*'=모든 작업), stage(0=모든 회차), userName }
+async function handleRemindCancel(env: Env, request: Request, payload: Record<string, unknown>, restore: boolean): Promise<Response> {
+  const origin = getOrigin(env);
+  if (!remindWriteOriginOk(request)) return remindJson({ ok: false, error: '운영 주소의 관리 화면에서만 바꿀 수 있습니다' }, 403, origin);
+  if (!env.AI_DB) return remindJson({ ok: false, error: 'D1(AI_DB) 바인딩이 없습니다' }, 503, origin);
+  const id = parseCustomerId(payload.customerId);
+  const jobKey = typeof payload.jobKey === 'string' ? payload.jobKey.trim().slice(0, 300) : '';
+  const stage = Number(payload.stage);
+  if (!id || !jobKey || !Number.isInteger(stage) || stage < 0 || stage > 5 || (stage === 0 && jobKey !== '*')) {
+    return remindJson({ ok: false, error: 'customerId·jobKey·stage 가 올바르지 않습니다' }, 400, origin);
+  }
+  const by = (typeof payload.userName === 'string' ? payload.userName.trim().slice(0, 40) : '') || '알 수 없음';
+  const now = new Date().toISOString();
+  const cur = await buildRemindStatus(env, id);
+  if (cur.status !== 200 || cur.body.ok !== true) return remindJson(cur.body, cur.status, origin);
+  const b = cur.body as { job: { jobKey: string; workDate: string; projectName: string } | null; stages: { stage: number; status: string }[] };
+
+  if (restore) {
+    await restoreCancel(env.AI_DB, { customerId: id, jobKey, stage, by, at: now });
+  } else {
+    if (jobKey !== '*') {
+      if (!b.job || b.job.jobKey !== jobKey) return remindJson({ ok: false, error: '지금 기준 작업이 아닙니다. 화면을 새로 고쳐 주세요' }, 409, origin);
+      const st = b.stages.find((s) => s.stage === stage);
+      if (!st) return remindJson({ ok: false, error: '그 회차가 없습니다' }, 400, origin);
+      if (st.status === 'sent') return remindJson({ ok: false, error: '이미 보낸 메일은 취소할 수 없습니다' }, 409, origin);
+    }
+    await addCancel(env.AI_DB, {
+      customerId: id, jobKey, stage, workDate: b.job?.workDate || '', projectName: b.job?.projectName || '', by, at: now,
+    });
+  }
+  const next = await buildRemindStatus(env, id);
+  return remindJson(next.body, next.status, origin);
+}
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const env = context.env;
   const origin = getOrigin(env);
@@ -567,6 +804,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         const limit = typeof payload.limit === 'number' && Number.isInteger(payload.limit) && payload.limit > 0 ? payload.limit : undefined;
         return await handleRunFollowups(env, { dryRun, limit });
       }
+      case 'remind-cancel':
+      case 'remind-restore':
+        return await handleRemindCancel(env, context.request, payload as Record<string, unknown>, payload.action === 'remind-restore');
       default:
         return jsonResponse({ ok: false, error: `Unknown action: ${String(payload.action)}` }, 400, origin);
     }
@@ -581,6 +821,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const action = new URL(context.request.url).searchParams.get('action');
 
   if (action === 'config') return handleConfig(env); // 스티비 키 없이도 조회 가능
+  if (action === 'remind' || action === 'remind-preview') {
+    const q = new URL(context.request.url).searchParams;
+    try {
+      return action === 'remind' ? await handleRemindStatus(env, q.get('customerId')) : await handleRemindPreview(env, q.get('customerId'), q.get('stage'));
+    } catch (err) {
+      return remindJson({ ok: false, error: err instanceof Error ? err.message : String(err) }, 502, origin);
+    }
+  }
 
   const cfgError = missingConfig(env);
   if (cfgError) return jsonResponse({ ok: false, error: cfgError }, 500, origin);
