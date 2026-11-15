@@ -1,6 +1,7 @@
 // 고객관리(CRM) 전문가 스냅샷 — 다시 계산한 관리일, RFM 세그먼트, 재구매 간격, 교차판매 후보, 사후 관리.
 
 import { GRADE_RULE_TEXT } from '../../customerGrade';
+import { STATUS_RULE_TEXT } from '../../customerStatus';
 import { daysBetween } from '../format';
 import { addDays, cell, eok, manwon, pct, ratio, section, table, type Section } from './common';
 import { isLowUsage, SEGMENT_RULES, usageOf, type Ctx, type CustomerFact } from './derive';
@@ -81,7 +82,7 @@ export function crmSections(ctx: Ctx, customers: CustomerFact[]): Section[] {
   return [
     section(`고객 포트폴리오 (전체 ${n}곳, 누적 거래 ${eok(total)}, 오늘 ${ctx.today})`, [
       `- 등급별 고객 수와 매출 비중: ${gradeLine}`,
-      `- 상태별: ${[...statuses.entries()].map(([k, v]) => `${k} ${v}곳`).join(', ')}`,
+      `- 상태별: ${[...statuses.entries()].map(([k, v]) => `${k} ${v}곳`).join(', ')} (상태 규칙: ${STATUS_RULE_TEXT})`,
       `- 2회 이상 재구매율 = 작업 2회 이상 ${repeat2}곳 ÷ 전체 ${n}곳 = ${pct(ratio(repeat2, n))} (고객 화면 KPI)`,
       `- 충성고객 전환율 = 작업 3회 이상 ${loyal3}곳 ÷ 전체 ${n}곳 = ${pct(ratio(loyal3, n))} (고객 화면 KPI)`,
       `- 매출 집중도: 상위 10곳이 누적 거래의 ${pct(ratio(top10, total))}`,

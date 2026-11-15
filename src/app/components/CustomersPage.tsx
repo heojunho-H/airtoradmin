@@ -82,6 +82,17 @@ import {
 } from '../../lib/dealSync';
 import { autoGrade, customerTotalAmount, GRADE_NONE, GRADE_RULE_TEXT, gradeClass, gradeLabel, type GradeClass } from '../../lib/customerGrade';
 import type { GradeLocksState } from '../../lib/gradeLocks';
+import {
+  CUSTOMER_STATUS_OPTIONS,
+  isCustomerStatus,
+  resolveCustomerStatus,
+  statusStage,
+  STATUS_CHURN_DAYS,
+  STATUS_RISK_DAYS,
+  STATUS_RULE_TEXT,
+  type CustomerStatus,
+} from '../../lib/customerStatus';
+import { kstYmd } from '../../lib/ai/format';
 
 interface WorkHistory {
   dealId?: number; // 영업관리 딜 ID — syncDealToCustomer가 채움 (legacy 엔트리는 없을 수 있음)
@@ -134,7 +145,8 @@ interface Customer {
   company: string; // 기업명
   // 고객 등급 — 누적 거래 금액으로 자동 분류(src/lib/customerGrade.ts), 손으로 바꾸면 수동 고정. '미설정'·빈 값은 예전 저장값('그 외'와 같게 다룬다)
   grade: GradeClass | '미설정' | '';
-  customerStatus: '신규' | '재구매' | '충성고객'; // 고객 상태
+  // 고객 상태 — 작업 횟수(신규·재구매·충성고객) + 마지막 작업 후 지난 날수(이탈위험·이탈)로 자동(src/lib/customerStatus.ts), 손으로 고르면 수동 고정
+  customerStatus: CustomerStatus;
   contactName: string; // 담당자명 (첫 번째 담당자, 하위 호환)
   contactPosition: string; // 담당자 직책 (첫 번째 담당자, 하위 호환)
   contacts?: Contact[]; // 담당자 목록 (복수)
@@ -1507,6 +1519,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     if (confirm(`${customerName} 고객을 삭제하시겠습니까?${note}`)) {
       setCustomers(customers.filter(customer => customer.id !== customerId));
       if (gradeLocks?.locks.has(Number(customerId))) void gradeLocks.unlock(Number(customerId), { silent: true });
+      if (gradeLocks?.statusLocks.has(Number(customerId))) void gradeLocks.unlockStatus(Number(customerId), { silent: true });
       onNotification?.(`[${customerName}] 고객이 삭제되었습니다`);
       deleteCustomer(Number(customerId))
         .then(() => { if (linked) onSynced?.(null); })
@@ -1725,7 +1738,13 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     충성고객: 'emerald',
     고객이탈: 'red',
   };
-  const customerStatusTone = (status: string): Tone => CUSTOMER_STATUS_TONE[status] ?? 'slate';
+  // '… 이탈위험'은 amber, '… 이탈'은 빨강 (신규·재구매·충성고객 모두 같다)
+  const customerStatusTone = (status: string): Tone => {
+    const stage = statusStage(status);
+    if (stage === 'risk') return 'amber';
+    if (stage === 'churn') return 'red';
+    return CUSTOMER_STATUS_TONE[status] ?? 'slate';
+  };
 
   const getGradeBadge = (grade: string) => {
     return (
@@ -1787,6 +1806,61 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
         {status}
       </span>
     );
+  };
+
+  // 고객 상태 자동 변경 + 수동 고정 — 규칙은 src/lib/customerStatus.ts, 고정은 D1(gradeLocks.statusLocks). 저장된 상태를 맞추는 일은 App.tsx 가 한다
+  const statusToday = kstYmd();
+  const statusLockOf = (customer: Pick<Customer, 'id'>) => gradeLocks?.statusLocks.get(Number(customer.id));
+  const statusInfo = (customer: Customer) => resolveCustomerStatus(customer, statusLockOf(customer), dealStates, statusToday);
+  // 자동 변경이 도는 조건과 같다(App.tsx) — 이때만 손으로 고른 상태를 고정할 수 있다
+  const statusLockable = !!gradeLocks && gradeLocks.status === 'ok' && gradeLocks.statusReady && dealStates !== null;
+  const statusBlockedReason = !gradeLocks
+    ? ''
+    : gradeLocks.status === 'loading'
+      ? '상태 정보를 불러오는 중입니다'
+      : gradeLocks.status === 'unavailable'
+        ? `고정 저장소에 연결하지 못해 지금은 상태를 바꿀 수 없습니다 — ${gradeLocks.error}`
+        : !gradeLocks.statusReady
+          ? '상태 고정 저장소 표가 아직 없어 지금은 상태를 바꿀 수 없습니다(관리자 확인 필요)'
+          : dealStates === null
+            ? '영업 딜 목록을 불러오지 못해 지금은 상태를 바꿀 수 없습니다'
+            : '';
+  // 작업일이 없는 고객은 자동 대상이 아니라 예전처럼 바로 저장한다
+  const statusIsAuto = (customer: Customer) => !!gradeLocks && statusInfo(customer).auto != null;
+  const statusEditable = (customer: Customer) => !statusIsAuto(customer) || statusLockable;
+  const statusTitle = (customer: Customer): string => {
+    const info = statusInfo(customer);
+    if (!gradeLocks || info.auto == null) return '작업일이 없어 자동 변경 대상이 아닙니다. 눌러서 바로 바꿀 수 있습니다';
+    if (statusBlockedReason) return statusBlockedReason;
+    const days = info.days ?? 0;
+    const basis = days < 0 ? `작업 예정 ${info.lastWork}` : `마지막 작업 ${info.lastWork} · ${days}일 지남`;
+    const lock = statusLockOf(customer);
+    if (info.locked && lock) {
+      const who = [lock.setBy, lock.setAt.slice(0, 10)].filter(Boolean).join(' · ');
+      return `수동 고정 (${who}) — ${basis}, 자동이면 ${info.auto}. 새 작업이 들어오면 자동으로 돌아갑니다. 눌러서 '자동'을 고르면 바로 풀립니다`;
+    }
+    return `${basis} → ${info.auto} (자동: ${STATUS_RISK_DAYS}일 넘으면 이탈위험, ${STATUS_CHURN_DAYS}일 넘으면 이탈). 눌러서 상태를 바꾸면 새 작업이 들어올 때까지 수동으로 고정됩니다`;
+  };
+  // 배지 옆 '수동' — 자동과 다르게 손으로 고정한 고객 (새 작업이 들어와 끝난 고정은 표시하지 않는다)
+  const statusManual = (customer: Customer) => !!statusLockOf(customer) && statusInfo(customer).locked;
+  const statusManualMark = (customer: Customer) =>
+    statusManual(customer) ? <span className="text-xs font-medium text-slate-500">수동</span> : null;
+  // 상태 선택 — '자동'이나 자동과 같은 값을 고르면 고정을 풀고, 다른 값을 고르면 그때의 마지막 작업일과 함께 수동 고정
+  const changeStatus = (customer: Customer, value: string) => {
+    setEditingCell(null);
+    const id = Number(customer.id);
+    if (isTempCustomerId(id)) return;
+    if (!statusIsAuto(customer)) {
+      if (isCustomerStatus(value)) updateCustomerField(customer.id, 'customerStatus', value);
+      return;
+    }
+    if (!gradeLocks || !statusLockable) return;
+    const info = statusInfo(customer);
+    if (value === 'auto' || value === info.auto) {
+      if (gradeLocks.statusLocks.has(id)) void gradeLocks.unlockStatus(id);
+      return;
+    }
+    if (isCustomerStatus(value)) void gradeLocks.lockStatus({ id, company: customer.company }, value, info.lastWork);
   };
 
   // 스티비 뉴스레터 상태 배지 (newsletterStatus 캐시 기준; 웹훅/동기화로 갱신됨)
@@ -2105,6 +2179,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 </MobileCardBadge>
                 <MobileCardBadge tone={customerStatusTone(customer.customerStatus)}>
                   {customer.customerStatus}
+                  {statusManual(customer) ? ' · 수동' : ''}
                 </MobileCardBadge>
               </MobileCardRow>
               
@@ -2170,7 +2245,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600" title={`${GRADE_RULE_TEXT}. 등급을 손으로 바꾸면 '수동'으로 고정됩니다`}>
                   고객 등급
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
+                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600" title={`${STATUS_RULE_TEXT}. 상태를 손으로 바꾸면 새 작업이 들어올 때까지 '수동'으로 고정됩니다`}>
                   고객 상태
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600">
@@ -2287,27 +2362,33 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                     className="px-4 py-4 relative"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditingCell({ customerId: customer.id, field: 'customerStatus' });
+                      if (statusEditable(customer)) setEditingCell({ customerId: customer.id, field: 'customerStatus' });
                     }}
                   >
                     {editingCell?.customerId === customer.id && editingCell?.field === 'customerStatus' ? (
                       <div className="relative">
                         <select
                           className={`${BADGE} ${TONE[customerStatusTone(customer.customerStatus)]} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                          value={customer.customerStatus}
-                          onChange={(e) => updateCustomerField(customer.id, 'customerStatus', e.target.value)}
+                          value={statusIsAuto(customer) && !statusManual(customer) ? 'auto' : customer.customerStatus}
+                          onChange={(e) => changeStatus(customer, e.target.value)}
                           onBlur={() => setEditingCell(null)}
                           autoFocus
                         >
-                          <option value="충성고객">충성고객</option>
-                          <option value="재구매">재구매</option>
-                          <option value="신규">신규</option>
-                          <option value="고객이탈">고객이탈</option>
+                          {statusIsAuto(customer) && <option value="auto">자동 ({statusInfo(customer).auto})</option>}
+                          {CUSTOMER_STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     ) : (
-                      <div className="cursor-pointer hover:opacity-70 transition-opacity">
+                      <div
+                        className={`inline-flex items-center gap-1.5 ${statusEditable(customer) ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+                        title={statusTitle(customer)}
+                      >
                         {getCustomerStatusBadge(customer.customerStatus)}
+                        {statusManualMark(customer)}
                       </div>
                     )}
                   </td>

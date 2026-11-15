@@ -17,6 +17,7 @@ import { buildDealStateMap, currentWriteEpoch, hasSynced, linkedDealId, type Syn
 import { managerActivities, sameActivities, subcontractorActivities } from '../lib/activitySync';
 import { customerTotalAmount, effectiveGrade, gradeClass, gradeLabel, managerToAssign } from '../lib/customerGrade';
 import { canPersistGrades, useGradeLocks } from '../lib/gradeLocks';
+import { resolveCustomerStatus } from '../lib/customerStatus';
 
 // AI 어시스턴트·설정은 첫 방문 때 내려받는다 (마크다운 렌더러 포함 별도 청크)
 const AiAssistantPage = lazy(() => import('./components/ai/AiAssistantPage'));
@@ -368,27 +369,40 @@ export default function App() {
   // 고객 등급 자동 분류 — 누적 거래 금액 기준(src/lib/customerGrade.ts), 수동 고정한 고객은 고정한 등급.
   // 고객책임자 자동 지정 — 책임자가 비어 있는 S·A·B 고객에게만 등급별 책임자(D1, gradeLocks.gradeManagers)를 넣는다.
   //   이미 책임자가 있으면 등급이 바뀌어도 바꾸지 않는다(B → A 승급 포함).
-  // 저장된 값과 다른 고객만 화면 상태를 바꾸고 그 고객만 저장한다 (위 활동내역과 같은 '바뀐 것만 PUT').
+  // 고객 상태 자동 변경 — 마지막 작업 후 365일 넘으면 '… 이탈위험', 450일 넘으면 '… 이탈'(src/lib/customerStatus.ts).
+  //   손으로 고정한 상태는 새 작업이 들어올 때까지 그 값이고, 끝난 고정은 지운다. 날짜가 바뀌면(today) 다시 계산한다.
+  //   상태 고정 표를 읽었고 딜 목록이 있을 때만 바꾼다 — 딜 목록이 없으면 수주 취소된 작업을 가려낼 수 없다.
+  // 저장된 값과 다른 고객만 화면 상태를 바꾸고 그 고객만 저장한다 (위 활동내역과 같은 '바뀐 것만 PUT'). 한 고객은 PUT 한 번.
   // 수주로 새 고객이 생기거나 작업 금액이 바뀌면 고객 목록을 다시 불러올 때 여기서 맞춰진다.
-  // 고정 목록을 정상으로 불러온 뒤에만 돈다 — 못 불러왔는데 돌면 수동 고정한 고객을 금액 기준으로 덮어쓴다.
+  // 고정 목록을 정상으로 불러온 뒤에만 돈다 — 못 불러왔는데 돌면 수동 고정한 고객을 자동 값으로 덮어쓴다.
   // 저장은 운영 주소에서만 한다(canPersistGrades) — 프리뷰·로컬은 고정 저장소가 운영과 달라 화면 표시만 맞춘다.
-  const gradeSavingRef = useRef(new Set<string>()); // 저장 중인 "고객:바꿀 값"
+  // 저장은 하나씩 차례로 보낸다 — 상태가 처음 적용될 때처럼 수십 곳이 한꺼번에 바뀌어도 카페24에 몰아 보내지 않게.
+  const gradeSavingRef = useRef(new Set<string>()); // 저장 중이거나 저장 차례를 기다리는 "고객:바꿀 값"
   const gradeFailedRef = useRef(new Set<string>()); // 이 세션에서 저장에 실패한 것 — 다시 시도하지 않는다 (화면 표시는 계속 맞춘다)
+  const statusUnlockingRef = useRef(new Set<number>()); // 끝난 상태 고정을 지우는 중인 고객
   // 자동 지정할 수 있는 고객책임자 — 퇴사자는 뺀다. 이름이 바뀔 때만 새로 만든다(활동내역 갱신으로 managers 가 바뀌어도 그대로)
   const assignableManagersKey = managers.filter((m) => m?.status !== 'leave').map((m) => String(m?.name || '')).filter(Boolean).join('\n');
   const assignableManagers = useMemo(() => new Set(assignableManagersKey ? assignableManagersKey.split('\n') : []), [assignableManagersKey]);
   useEffect(() => {
     if (gradeLocks.status !== 'ok' || !customers.length) return;
-    const changes = new Map<any, { patch: { grade?: string; accountManager?: string }; note: string; notify: boolean }>();
+    const statusAuto = gradeLocks.statusReady && dealStates !== null;
+    type Patch = { grade?: string; accountManager?: string; customerStatus?: string };
+    type StatusMove = { company: string; from: string; to: string; lastWork: string; days: number | null };
+    const changes = new Map<any, { patch: Patch; note: string; notify: boolean; move: StatusMove | null }>();
+    const staleLocks: number[] = [];
     for (const c of customers) {
       const id = Number(c.id);
       if (!Number.isInteger(id) || id <= 0 || isTempCustomerId(id)) continue;
+      const company = String(c.company || '-');
       const lock = gradeLocks.locks.get(id);
       const want = effectiveGrade(c, lock?.grade);
       const from = gradeClass(c.grade);
       const manager = managerToAssign(c.accountManager, want, gradeLocks.gradeManagers, assignableManagers);
-      if (from === want && !manager) continue;
-      const patch: { grade?: string; accountManager?: string } = {};
+      const st = statusAuto ? resolveCustomerStatus(c, gradeLocks.statusLocks.get(id), dealStates, today) : null;
+      if (st?.staleLock) staleLocks.push(id);
+      const statusTo = st?.want && st.want !== c.customerStatus ? st.want : null;
+      if (from === want && !manager && !statusTo) continue;
+      const patch: Patch = {};
       const notes: string[] = [];
       if (from !== want) {
         patch.grade = want;
@@ -398,28 +412,75 @@ export default function App() {
         patch.accountManager = manager;
         notes.push(`고객책임자 ${manager} 자동 지정${from === want ? ` (${gradeLabel(want)})` : ''}`);
       }
-      // 손으로 고정해서 등급만 바뀐 것은 본인이 방금 한 일이라 알리지 않는다
-      changes.set(c.id, { patch, note: `[${String(c.company || '-')}] ${notes.join(' · ')}`, notify: !!manager || !lock });
+      if (statusTo) patch.customerStatus = statusTo;
+      changes.set(c.id, {
+        patch,
+        note: `[${company}] ${notes.join(' · ')}`,
+        // 손으로 고정해서 등급만 바뀐 것은 본인이 방금 한 일이라 알리지 않는다
+        notify: notes.length > 0 && (!!manager || !lock),
+        // 상태 알림은 저장이 끝난 뒤 모아서 — 손으로 고정한 상태로 바뀐 것은 알리지 않는다
+        move: statusTo && st && !st.locked ? { company, from: String(c.customerStatus || '-'), to: statusTo, lastWork: st.lastWork, days: st.days } : null,
+      });
+    }
+    // 새 작업이 들어와 끝난 상태 고정은 지운다 (운영 주소에서만 — 프리뷰·로컬의 고정 저장소는 운영과 다르다)
+    if (canPersistGrades()) {
+      for (const id of staleLocks) {
+        if (statusUnlockingRef.current.has(id)) continue;
+        statusUnlockingRef.current.add(id);
+        void gradeLocks.unlockStatus(id, { silent: true }).finally(() => statusUnlockingRef.current.delete(id));
+      }
     }
     if (!changes.size) return;
     setCustomers((prev) => prev.map((c) => (changes.has(c.id) ? { ...c, ...changes.get(c.id)!.patch } : c)));
     if (!canPersistGrades()) return;
+    const queue: Array<{ id: number; key: string; patch: Patch; note: string; notify: boolean; move: StatusMove | null }> = [];
     changes.forEach((ch, rawId) => {
       const id = Number(rawId);
-      const key = `${id}:${ch.patch.grade ?? ''}:${ch.patch.accountManager ?? ''}`;
+      const key = `${id}:${ch.patch.grade ?? ''}:${ch.patch.accountManager ?? ''}:${ch.patch.customerStatus ?? ''}`;
       if (gradeSavingRef.current.has(key) || gradeFailedRef.current.has(key)) return;
       gradeSavingRef.current.add(key);
-      updateCustomerFields(id, ch.patch as any)
-        .then(() => {
-          if (ch.notify) addNotification('admin_action', ch.note);
-        })
-        .catch((err) => {
-          gradeFailedRef.current.add(key);
-          console.error('고객 등급·책임자 자동 반영 API 실패:', err);
-        })
-        .finally(() => gradeSavingRef.current.delete(key));
+      queue.push({ id, key, ...ch });
     });
-  }, [customers, gradeLocks.locks, gradeLocks.gradeManagers, gradeLocks.status, assignableManagers]);
+    if (!queue.length) return;
+    void (async () => {
+      const moved: StatusMove[] = [];
+      for (const job of queue) {
+        try {
+          await updateCustomerFields(job.id, job.patch as any);
+          if (job.notify) addNotification('admin_action', job.note);
+          if (job.move) moved.push(job.move);
+        } catch (err) {
+          gradeFailedRef.current.add(job.key);
+          console.error('고객 등급·책임자·상태 자동 반영 API 실패:', err);
+        } finally {
+          gradeSavingRef.current.delete(job.key);
+        }
+      }
+      // 상태 알림 — 5곳 이하면 한 곳씩, 그보다 많으면(처음 적용할 때 등) 요약 한 줄
+      if (moved.length > 0 && moved.length <= 5) {
+        for (const m of moved) {
+          const basis = m.days != null ? ` (마지막 작업 ${m.lastWork}, ${m.days}일)` : '';
+          addNotification('admin_action', `[${m.company}] 고객 상태 ${m.from} → ${m.to} 자동 변경${basis}`);
+        }
+      } else if (moved.length > 5) {
+        const byStatus = new Map<string, number>();
+        for (const m of moved) byStatus.set(m.to, (byStatus.get(m.to) ?? 0) + 1);
+        const summary = [...byStatus].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ');
+        addNotification('admin_action', `고객 상태 ${moved.length}곳 자동 변경 — ${summary}`);
+      }
+    })();
+  }, [
+    customers,
+    gradeLocks.locks,
+    gradeLocks.gradeManagers,
+    gradeLocks.status,
+    gradeLocks.statusLocks,
+    gradeLocks.statusReady,
+    gradeLocks.unlockStatus,
+    assignableManagers,
+    dealStates,
+    today,
+  ]);
 
   // 모바일 화면 감지
   useEffect(() => {
