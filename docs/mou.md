@@ -14,7 +14,7 @@ B1(작업 후 200일) 리마인드 메일의 '단가보장 협약서 보기' 링
 2. 고객이 `/mou/<id>`를 열면 `functions/mou/[id].ts`가 얼려 둔 내용으로 화면을 그린다. 직인은 R2에서 읽는다.
    - 나중에 관리 앱 값을 고쳐도 이미 보낸 협약서는 바뀌지 않는다.
 3. `/mou/<id>.pdf`
-   - R2 `FILES`에 `mou/v5/<id>.pdf`가 있으면 그것을 준다(v5 = 서식 버전 MOU_VERSION).
+   - R2 `FILES`에 `mou/v6/<id>.pdf`가 있으면 그것을 준다(v6 = 서식 버전 MOU_VERSION, 11-15 컬러 로고 교체로 v5→v6).
    - 없으면 같은 서식(인쇄용 HTML)을 PDF Worker(`airtoradmin-pdf`, 아래 'PDF Worker')에 보내 A4 PDF로 만들고 R2에 저장한 뒤 준다. 한글 글꼴(Noto CJK)은 Browser Run에 기본으로 있다.
    - Pages에 `PDF_RENDERER` 바인딩이 없으면 Browser Run REST `/pdf`(API 토큰)로 만든다. 지금은 바인딩을 쓴다.
    - 실패하면 화면(`?pdf=fail`)으로 돌려보내고 '인쇄 → PDF로 저장'을 안내한다.
@@ -50,6 +50,8 @@ B1(작업 후 200일) 리마인드 메일의 '단가보장 협약서 보기' 링
 - **글꼴**: 보낸 PDF와 같은 맑은 고딕, 자간 −1pt. 맑은 고딕이 없으면 Noto Sans KR(화면), Browser Run에서는 Noto Sans CJK KR로 그린다. 원본 pptx가 지정한 글꼴도 Noto Sans다.
 - **그림**
   - 코드(`functions/_lib/mou-assets.ts`): 띠·흰 로고·조항 아이콘·악수 아이콘·컬러 로고
+    - 컬러 로고(모자 위 작은 로고, 안내 화면)는 2026-11-15 에어터 로고 확정본(`무제-7.png`)으로 바꿨다.
+    - 띠 위 흰 로고는 확정본 흰색판이 없어 예전 그대로다.
   - R2: `brand/mou-seal.png`(직인), `brand/mou-sign.png`(대표이사 서명), `brand/mou-photo.png`(작업자 사진)
   - 직인은 2026-11-15부터 법인인감 원본 스캔을 쓴다. 투명 바탕이고, 원에 맞춰 잘라 360×360, 128색으로 줄였다. 그 전에는 pptx에서 뽑은 저화질본이었다. 서명은 원래 협약서 pptx의 손글씨 그대로다.
   - R2 그림은 공개 저장소에 두지 않는다. 공개 견본(`/mou/sample`)에는 작업자 사진만 싣고(사용자 허락), 직인·서명은 점선 자리만 둔다(2026-11-15 사용자 재확인: 서명·인감은 실제 협약서에만).

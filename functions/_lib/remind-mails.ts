@@ -39,8 +39,9 @@ export interface RemindMailInput {
   mouUrl?: string;
 }
 
-// 담당자 네이버웍스 서명의 로고 그대로(150×42) — public/mail/airtor-sign-logo.png
-export const MAIL_LOGO_URL = 'https://docs.airtor.co.kr/mail/airtor-sign-logo.png';
+// 에어터 로고 확정본(2026-11-15, 무제-7.png) — public/mail/airtor-logo.png 300×90, 메일에는 150×45 로 싣는다.
+// ?v=2 는 예전 로고를 담아 둔 메일 이미지 캐시를 피하려는 것이다(파일은 같다)
+export const MAIL_LOGO_URL = 'https://docs.airtor.co.kr/mail/airtor-logo.png?v=2';
 
 // 평가 구글 폼 2개 (2026-11-14 게시) — 누른 평가와 기관명을 미리 채운다
 const FORM_A = 'https://docs.google.com/forms/d/e/1FAIpQLSdWhZQzCSlxNiV4C3qsW5PxGwtCkNzJGz89wGKfoUJwqL8jBg/viewform'; // 1분 설문
@@ -149,7 +150,7 @@ ${body}
         </tr>
         <tr>
           <td style="padding:0;font-size:14px;font-family:'Malgun Gothic','맑은 고딕',sans-serif;word-break:keep-all;">
-            <div><img src="${MAIL_LOGO_URL}" width="150" height="42" alt="AIRTOR" style="width:150px;height:42px;border:0;outline:none;text-decoration:none;"><br></div>
+            <div><img src="${MAIL_LOGO_URL}" width="150" height="45" alt="AIRTOR" style="width:150px;height:45px;border:0;outline:none;text-decoration:none;"><br></div>
             <div>${SIG_BOLD(sigName)}${SIG_BAR}<span style="white-space:nowrap;">D. ${SIG_BOLD('1644-1295')}</span>${mobile}&nbsp; <span style="white-space:nowrap;">E. ${SIG_BOLD(escapeHtml(sender.email))}</span></div>
             <div><span style="font-size:12px;">(06314) 서울특별시 강남구 논현로10길 30, 에어터</span>${SIG_BAR}<span style="font-weight:700;"><a href="http://airtor.co.kr" target="_blank" rel="noreferrer noopener">http://www.airtor.co.kr</a></span></div>
           </td>

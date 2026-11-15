@@ -14,7 +14,7 @@ import { LOGO_COLOR_PNG, MOU_BAR_JPG, MOU_BULLET_PNG, MOU_HANDSHAKE_PNG, MOU_LOG
 
 export const DEFAULT_MOU_BASE_URL = 'https://docs.airtor.co.kr';
 /** 서식을 바꾸면 올린다 — R2 의 PDF 캐시 키가 바뀌어 새 서식으로 다시 만든다 */
-export const MOU_VERSION = 'v5';
+export const MOU_VERSION = 'v6';
 export const SEAL_R2_KEY = 'brand/mou-seal.png';
 /** 대표이사 손글씨 서명·작업자 사진 (원래 협약서 그림) — 공개 저장소에 두지 않는다 */
 export const SIGN_R2_KEY = 'brand/mou-sign.png';
