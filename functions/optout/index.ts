@@ -1,4 +1,4 @@
-// Cloudflare Pages Function — /optout (리마인드 메일 바닥글의 '수신거부')
+// Cloudflare Pages Function — /optout ('수신거부' 확인 화면 — 11-15부터 리마인드 메일에는 링크를 넣지 않는다)
 // GET 은 확인 화면만 보인다 — 메일 보안 검사기가 링크를 미리 열어도 처리되지 않게, 버튼(POST)을 눌러야 처리한다.
 // 처리: 고객 newsletterStatus = 'unsubscribed' (팔로업 러너가 건너뛴다) + 스티비 주소록에서도 수신거부(되면).
 

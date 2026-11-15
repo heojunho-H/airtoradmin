@@ -10,10 +10,10 @@
 //   STIBEE_LIST_ID            대상 주소록 ID (스티비 URL의 /lists/{id})
 //   NEWSLETTER_WEBHOOK_SECRET 웹훅 수신 토큰 — functions/api/newsletter/webhook.ts 참조
 //   NEWSLETTER_FOLLOWUPS      리마인드 단계 설정 JSON — functions/_lib/followups.ts 참조
-//   NEWSLETTER_CRON_SECRET    run-followups 실제 실행 토큰 (GitHub Secrets와 동일 값). 수신거부 링크 서명 키도 겸한다
+//   NEWSLETTER_CRON_SECRET    run-followups 실제 실행 토큰 (GitHub Secrets와 동일 값)
 //   WORKS_CLIENT_ID·WORKS_CLIENT_SECRET  네이버웍스 개발자 콘솔 앱 — functions/_lib/works.ts
 //   ALLOWED_ORIGIN            CORS 허용 오리진 (기본 https://airtoradmin.pages.dev)
-//   MOU_BASE_URL              협약서·수신거부 링크 앞부분 (기본 https://docs.airtor.co.kr) — docs/mou.md
+//   MOU_BASE_URL              협약서 링크 앞부분 (기본 https://docs.airtor.co.kr) — docs/mou.md
 //
 // 요청 (POST, JSON):
 //   { action: 'sync', subscribers: [{ email, status, fields }] }
@@ -63,9 +63,8 @@ import {
 import { issueMouLink, mouBaseUrl, type MouEnv } from '../_lib/mou';
 import { REMIND_MAIL_KEYS, isRemindMailKey, renderRemindMail, type RemindMailKey, type RemindSender } from '../_lib/remind-mails';
 import { TEST_RECIPIENT, WORKS_DOMAIN, listConnections, refreshStaleTokens, sendWorksMail, takeTestQuota, worksConfigured, type WorksEnv } from '../_lib/works';
-import { optoutUrl, type OptoutEnv } from '../_lib/optout';
 
-type Env = StibeeEnv & MouEnv & WorksEnv & OptoutEnv;
+type Env = StibeeEnv & MouEnv & WorksEnv;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -445,7 +444,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
       try {
         const mail = renderRemindMail({
           key: item.mail, company: item.company, recipientName: rcpt.name, recipientPosition: rcpt.position, sender,
-          workDate: item.workDate, today, equipment: item.equipment, mouUrl, optoutUrl: await optoutUrl(env, item.customerId, rcpt.email),
+          workDate: item.workDate, today, equipment: item.equipment, mouUrl,
         });
         const r = await sendWorksMail(env, sender.email, { to: rcpt.email, subject: mail.subject, html: mail.html });
         results.push(r.ok ? { email: rcpt.email, ok: true } : { email: rcpt.email, ok: false, error: r.error });
@@ -514,7 +513,7 @@ async function handleTestSend(env: Env, senderRaw: unknown, mailRaw: unknown): P
     }
     const mail = renderRemindMail({
       key, company: '한빛초등학교', recipientName: '김지현', recipientPosition: '주무관', sender, workDate: addDays(today, -SAMPLE_DAYS[key]), today,
-      equipment: '1way 천정형 22대, 4way 천정형 2대', mouUrl: `${base}/mou/sample`, optoutUrl: `${base}/optout?c=0`,
+      equipment: '1way 천정형 22대, 4way 천정형 2대', mouUrl: `${base}/mou/sample`,
     });
     const r = await sendWorksMail(env, sender.email, { to: TEST_RECIPIENT, subject: `[테스트] ${mail.subject}`, html: mail.html });
     results.push(r.ok ? { mail: key, ok: true } : { mail: key, ok: false, error: r.error });

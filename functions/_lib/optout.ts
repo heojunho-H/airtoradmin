@@ -1,4 +1,5 @@
-// 리마인드 메일 바닥글의 수신거부 링크 — {MOU_BASE_URL}/optout?c=고객번호&e=메일(base64url)&s=서명
+// 수신거부 링크 — {MOU_BASE_URL}/optout?c=고객번호&e=메일(base64url)&s=서명
+// 2026-11-15부터 리마인드 메일에는 넣지 않는다(맨 아래 3줄 삭제, docs/remind-mails.md). 다시 넣을 때 optoutUrl 을 쓴다.
 // 서명 키는 NEWSLETTER_CRON_SECRET(없으면 WORKS_CLIENT_SECRET). 키를 바꾸면 이미 보낸 링크는 열리지 않는다.
 // c=0 은 시험 발송용 견본 링크 — 확인 화면만 보이고 아무것도 처리하지 않는다 (functions/optout/index.ts)
 

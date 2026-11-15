@@ -1,10 +1,10 @@
 // 리마인드 메일 4통 — 작업일 기준 ① A2 45일 · ② B1 200일 · ③ B2 335일 · ④ B3 395일
 // 담당 매니저의 네이버웍스 계정으로 직접 보낸다(functions/_lib/works.ts). 문안은 2026-11-15 사용자 확정본이다.
 // 모두 광고 표시 없이 보낸다 — B1(단가보장 협약서)·B2(우선 배정)는 KISA 기준 광고성 소지가 있다는 설명을 듣고
-// 사용자가 정한 것이다(docs/remind-mails.md). 그래서 바닥글도 정보성 문구 하나로 통일했다.
+// 사용자가 정한 것이다(docs/remind-mails.md).
 //
 // 틀: 왼쪽 정렬(손으로 보내는 메일처럼), 바탕색 없음(아이폰 네이버웍스 다크 모드가 지정한 흰 바탕을 검은 상자로 바꾼다),
-// light-only meta(애플 메일·안드로이드 웹뷰용). 서명의 E.는 보내는 담당자 메일, 회사 바닥글은 대표 주소 그대로.
+// light-only meta(애플 메일·안드로이드 웹뷰용). 서명의 E.는 보내는 담당자 메일이고, 메일은 서명으로 끝난다(바닥글 없음).
 
 export type RemindMailKey = 'a2' | 'b1' | 'b2' | 'b3';
 export const REMIND_MAIL_KEYS: readonly RemindMailKey[] = ['a2', 'b1', 'b2', 'b3'];
@@ -35,8 +35,6 @@ export interface RemindMailInput {
   equipment: string;
   /** B1 협약서 링크 (functions/_lib/mou.ts issueMouLink) */
   mouUrl?: string;
-  /** 바닥글 수신거부 링크 (optoutUrl) */
-  optoutUrl: string;
 }
 
 export const MAIL_LOGO_URL = 'https://docs.airtor.co.kr/mail/airtor-logo.png';
@@ -113,12 +111,13 @@ export function remindSubject(key: RemindMailKey, company: string): string {
   }
 }
 
-function wrap(body: string, sender: RemindSender, optoutUrl: string): string {
+// 메일은 담당자 서명(로고·이름 줄)으로 끝난다 — 회사 정보·안내·수신거부 줄은 넣지 않는다 (2026-11-15 사용자 결정).
+// API 로 보낸 메일에는 네이버웍스 개인 서명이 붙지 않으므로 이 서명이 모든 담당자의 서명이다.
+function wrap(body: string, sender: RemindSender): string {
   const sigName = escapeHtml(`${sender.name} ${sender.position}`.trim());
   const mobile = sender.phone.trim()
     ? `<span style="white-space:nowrap;">M. ${escapeHtml(sender.phone.trim())}</span>&nbsp;&nbsp;`
     : '';
-  const footer = `에어터에 세척을 맡기신 고객께 보내는 작업 후 안내입니다. 더 받지 않으시려면 <a href="${escapeHtml(optoutUrl)}" style="color:#6b6b6b;">수신거부</a>를 눌러 주세요.`;
   return `<meta name="color-scheme" content="only light">
 <meta name="supported-color-schemes" content="light">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="color-scheme:only light;">
@@ -132,19 +131,10 @@ ${body}
           </td>
         </tr>
         <tr>
-          <td style="padding:0 0 22px 0;">
+          <td style="padding:0;">
             <img src="${MAIL_LOGO_URL}" width="110" height="33" alt="AIRTOR" style="display:block;width:110px;height:33px;border:0;outline:none;text-decoration:none;">
             <p style="margin:8px 0 0 0;font-size:13px;line-height:1.7;color:#222222;word-break:keep-all;"><strong>${sigName}</strong> | <span style="white-space:nowrap;">D. <strong>1644-1295</strong></span>&nbsp;&nbsp;${mobile}<span style="white-space:nowrap;">E. <strong>${escapeHtml(sender.email)}</strong></span><br><a href="https://www.airtor.co.kr" style="color:#194c9b;text-decoration:underline;">www.airtor.co.kr</a></p>
           </td>
-        </tr>
-        <tr>
-          <td style="padding:12px 0 0 0;border-top:1px solid #e5e5e5;font-size:13px;line-height:1.7;color:#555555;word-break:keep-all;">
-            <strong style="color:#222222;">(주)에어터</strong> · 대표전화 <a href="tel:16441295" style="color:#555555;text-decoration:none;white-space:nowrap;">1644-1295</a> · <a href="mailto:relation@airtor.co.kr" style="color:#555555;text-decoration:none;">relation@airtor.co.kr</a><br>
-            서울특별시 강남구 논현로10길 30
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:18px 0 0 0;font-size:12px;line-height:1.6;color:#6b6b6b;word-break:keep-all;">${footer}</td>
         </tr>
       </table>
       <!--[if mso]></td></tr></table><![endif]-->
@@ -224,5 +214,5 @@ export function renderRemindMail(input: RemindMailInput): { subject: string; htm
       );
       break;
   }
-  return { subject: remindSubject(input.key, company), html: wrap(body, sender, input.optoutUrl) };
+  return { subject: remindSubject(input.key, company), html: wrap(body, sender) };
 }
