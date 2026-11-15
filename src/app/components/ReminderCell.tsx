@@ -210,6 +210,7 @@ export function ReminderCell({ model, dueLabel, dueTitle, disabled, onClick }: {
 
 // ── 고객 목록 '리마인드 상태' 열 — 배지 한 줄 (사용자 선택 '최근 발송만 한 줄', 11-15) ──
 // 가장 최근에 나간 메일 → 없으면 다음 예약 → 보류 → 예약발송 취소 → 미발송. 값은 서버 remind-list(발송기와 같은 규칙)
+// 칸이 좁아 '발송완료'에는 날짜를 붙이지 않는다(사용자 지시 11-15) — 날짜·시각은 툴팁
 
 export interface RemindListBadgeModel {
   text: string;
@@ -228,7 +229,7 @@ export function remindListBadgeModel(b: RemindBrief): RemindListBadgeModel {
   if (b.last) {
     const when = b.last.at ? stamp(b.last.at) : b.last.date;
     return b.last.kind === 'sent'
-      ? { text: `${b.last.stage}차 발송완료 ${md(b.last.date)}`, tone: 'emerald', icon: 'sent', title: `리마인드${b.last.stage}차 발송완료 ${when} · ${b.last.manual ? '손으로 보냄' : '자동 발송'}` }
+      ? { text: `${b.last.stage}차 발송완료`, tone: 'emerald', icon: 'sent', title: `리마인드${b.last.stage}차 발송완료 ${when} · ${b.last.manual ? '손으로 보냄' : '자동 발송'}` }
       : { text: `${b.last.stage}차 발송 실패 ${md(b.last.date)}`, tone: 'amber', icon: 'held', title: `리마인드${b.last.stage}차 손으로 보낸 메일이 실패했습니다(${when}) — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다` };
   }
   if (b.next) {
