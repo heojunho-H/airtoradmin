@@ -296,8 +296,9 @@ function worksEmailFor(m: ManagerRow, conns: { email: string; name: string }[]):
   return conns.find((c) => c.name.replace(/\s+/g, '') === key)?.email ?? null;
 }
 
-const toSender = (m: ManagerRow, conns: { email: string; name: string }[]): RemindSender => ({
-  name: m.name, position: m.position, email: worksEmailFor(m, conns) ?? m.email, phone: m.phone,
+// teams: 서명 '직급(팀)'의 팀 (env NEWSLETTER_FOLLOWUPS teams — managers 데이터에 팀이 없다)
+const toSender = (m: ManagerRow, conns: { email: string; name: string }[], teams: Record<string, string> = {}): RemindSender => ({
+  name: m.name, position: m.position, email: worksEmailFor(m, conns) ?? m.email, phone: m.phone, team: teams[m.name] || undefined,
 });
 
 /** 고객 담당 매니저 → 보낼 사람. 담당이 없거나 찾지 못하면(휴직 포함) fallbackManager(설정), 그것도 없으면 null.
@@ -307,11 +308,12 @@ export function pickSender(
   managers: ManagerRow[],
   fallbackName?: string,
   conns: { email: string; name: string }[] = [],
+  teams: Record<string, string> = {},
 ): { sender: RemindSender; fallback: boolean } | null {
   const own = findManager(managerName, managers);
-  if (own) return { sender: toSender(own, conns), fallback: false };
+  if (own) return { sender: toSender(own, conns, teams), fallback: false };
   const fb = findManager(fallbackName, managers);
-  if (fb) return { sender: toSender(fb, conns), fallback: true };
+  if (fb) return { sender: toSender(fb, conns, teams), fallback: true };
   return null;
 }
 
@@ -366,7 +368,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   const connected = new Set(conns.filter((c) => !c.lastError).map((c) => c.email));
 
   // 연결된 담당자 계정으로 보낼 수 있는 대상만 상한 안에서 고른다. 나머지는 기다린다(waiting).
-  const annotated = due.map((d) => ({ d, picked: pickSender(d.manager, managers, cfg.fallbackManager, conns) }));
+  const annotated = due.map((d) => ({ d, picked: pickSender(d.manager, managers, cfg.fallbackManager, conns, cfg.teams) }));
   const waiting = annotated
     .filter((a) => !a.picked || !connected.has(a.picked.sender.email))
     .map((a) => ({ ...brief(a.d), reason: a.picked ? 'not-connected' : 'no-sender', sender: a.picked ? a.picked.sender.name : null }));
@@ -499,7 +501,8 @@ async function handleTestSend(env: Env, senderRaw: unknown, mailRaw: unknown): P
   const conns = await listConnections(env);
   const m = managers.find((x) => x.email === want.toLowerCase()) ?? findManager(want, managers);
   if (!m) return jsonResponse({ ok: false, error: '보낼 담당자를 찾지 못했습니다 (이름이나 메일로)' }, 400, origin);
-  const sender = toSender(m, conns);
+  const cfg = parseFollowupConfig(env.NEWSLETTER_FOLLOWUPS);
+  const sender = toSender(m, conns, cfg.ok ? cfg.config.teams : {});
   if (!conns.some((c) => c.email === sender.email && !c.lastError)) {
     return jsonResponse({ ok: false, error: `${m.name} 님 계정이 아직 연결되지 않았습니다 (/api/works/connect)` }, 400, origin);
   }

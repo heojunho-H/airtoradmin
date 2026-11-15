@@ -4,7 +4,7 @@
 // 사용자가 정한 것이다(docs/remind-mails.md).
 //
 // 틀: 왼쪽 정렬(손으로 보내는 메일처럼), 바탕색 없음(아이폰 네이버웍스 다크 모드가 지정한 흰 바탕을 검은 상자로 바꾼다),
-// light-only meta(애플 메일·안드로이드 웹뷰용). 서명의 E.는 보내는 담당자 메일이고, 메일은 서명으로 끝난다(바닥글 없음).
+// light-only meta(애플 메일·안드로이드 웹뷰용). 메일은 담당자 네이버웍스 서명과 같은 모양의 서명으로 끝난다(바닥글 없음).
 
 export type RemindMailKey = 'a2' | 'b1' | 'b2' | 'b3';
 export const REMIND_MAIL_KEYS: readonly RemindMailKey[] = ['a2', 'b1', 'b2', 'b3'];
@@ -19,6 +19,8 @@ export interface RemindSender {
   position: string;
   email: string;
   phone: string;
+  /** 서명의 '직급(팀)' 괄호 안 — managers 데이터에 없어 env NEWSLETTER_FOLLOWUPS teams 에서 온다. 없으면 괄호를 뺀다 */
+  team?: string;
 }
 
 export interface RemindMailInput {
@@ -37,7 +39,8 @@ export interface RemindMailInput {
   mouUrl?: string;
 }
 
-export const MAIL_LOGO_URL = 'https://docs.airtor.co.kr/mail/airtor-logo.png';
+// 담당자 네이버웍스 서명의 로고 그대로(150×42) — public/mail/airtor-sign-logo.png
+export const MAIL_LOGO_URL = 'https://docs.airtor.co.kr/mail/airtor-sign-logo.png';
 
 // 평가 구글 폼 2개 (2026-11-14 게시) — 누른 평가와 기관명을 미리 채운다
 const FORM_A = 'https://docs.google.com/forms/d/e/1FAIpQLSdWhZQzCSlxNiV4C3qsW5PxGwtCkNzJGz89wGKfoUJwqL8jBg/viewform'; // 1분 설문
@@ -66,6 +69,15 @@ function addDays(ymd: string, n: number): string {
 function koreanDate(ymd: string): string {
   const [y, m, d] = ymd.split('-').map(Number);
   return `${y}년 ${m}월 ${d}일`;
+}
+
+// 휴대폰 '01022223333' → '010-2222-3333' (managers 데이터는 하이픈 없이 저장된 경우가 있다). 이미 하이픈이 있으면 그대로
+export function formatPhone(raw: string): string {
+  const s = raw.trim();
+  const d = s.replace(/\D/g, '');
+  if (/^01\d{9}$/.test(d) && !/-/.test(s)) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (/^01\d{8}$/.test(d) && !/-/.test(s)) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return s;
 }
 
 // '2026-09-26' → '26.09.26' (원래 메일의 작업일 표기)
@@ -111,13 +123,18 @@ export function remindSubject(key: RemindMailKey, company: string): string {
   }
 }
 
-// 메일은 담당자 서명(로고·이름 줄)으로 끝난다 — 회사 정보·안내·수신거부 줄은 넣지 않는다 (2026-11-15 사용자 결정).
-// API 로 보낸 메일에는 네이버웍스 개인 서명이 붙지 않으므로 이 서명이 모든 담당자의 서명이다.
+// 메일은 담당자 서명으로 끝난다 — 회사 정보·안내·수신거부 줄은 넣지 않는다 (2026-11-15 사용자 결정).
+// API 로 보낸 메일에는 네이버웍스 개인 서명이 붙지 않으므로, 담당자 네이버웍스 서명과 같은 모양을 여기서 만든다
+// (사용자가 준 서명 HTML 기준: 로고 / 이름 직급(팀)｜D. M. E. / 주소｜홈페이지, 맑은 고딕 14px·주소 12px).
+// 번호·메일은 모바일에서 중간에 끊기지 않게 nowrap 으로 묶는다.
+const SIG_BAR = '<span style="color:rgb(195,195,195);">｜</span>';
+const SIG_BOLD = (s: string) => `<span style="font-weight:bold;">${s}</span>`;
+
 function wrap(body: string, sender: RemindSender): string {
-  const sigName = escapeHtml(`${sender.name} ${sender.position}`.trim());
-  const mobile = sender.phone.trim()
-    ? `<span style="white-space:nowrap;">M. ${escapeHtml(sender.phone.trim())}</span>&nbsp;&nbsp;`
-    : '';
+  const team = (sender.team || '').trim();
+  const sigName = escapeHtml(`${`${sender.name} ${sender.position}`.trim()}${team ? `(${team})` : ''}`);
+  const phone = formatPhone(sender.phone);
+  const mobile = phone ? `&nbsp; <span style="white-space:nowrap;">M. ${SIG_BOLD(escapeHtml(phone))}</span>` : '';
   return `<meta name="color-scheme" content="only light">
 <meta name="supported-color-schemes" content="light">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="color-scheme:only light;">
@@ -131,9 +148,10 @@ ${body}
           </td>
         </tr>
         <tr>
-          <td style="padding:0;">
-            <img src="${MAIL_LOGO_URL}" width="110" height="33" alt="AIRTOR" style="display:block;width:110px;height:33px;border:0;outline:none;text-decoration:none;">
-            <p style="margin:8px 0 0 0;font-size:13px;line-height:1.7;color:#222222;word-break:keep-all;"><strong>${sigName}</strong> | <span style="white-space:nowrap;">D. <strong>1644-1295</strong></span>&nbsp;&nbsp;${mobile}<span style="white-space:nowrap;">E. <strong>${escapeHtml(sender.email)}</strong></span><br><a href="https://www.airtor.co.kr" style="color:#194c9b;text-decoration:underline;">www.airtor.co.kr</a></p>
+          <td style="padding:0;font-size:14px;font-family:'Malgun Gothic','맑은 고딕',sans-serif;word-break:keep-all;">
+            <div><img src="${MAIL_LOGO_URL}" width="150" height="42" alt="AIRTOR" style="width:150px;height:42px;border:0;outline:none;text-decoration:none;"><br></div>
+            <div>${SIG_BOLD(sigName)}${SIG_BAR}<span style="white-space:nowrap;">D. ${SIG_BOLD('1644-1295')}</span>${mobile}&nbsp; <span style="white-space:nowrap;">E. ${SIG_BOLD(escapeHtml(sender.email))}</span></div>
+            <div><span style="font-size:12px;">(06314) 서울특별시 강남구 논현로10길 30, 에어터</span>${SIG_BAR}<span style="font-weight:700;"><a href="http://airtor.co.kr" target="_blank" rel="noreferrer noopener">http://www.airtor.co.kr</a></span></div>
           </td>
         </tr>
       </table>

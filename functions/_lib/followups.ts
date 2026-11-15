@@ -6,13 +6,14 @@
 // 단계 4·5는 체크 칸이 없다(PHP 허용 목록이 reminder1~3뿐) — 장부만으로 중복을 막는다.
 //
 // 설정 env NEWSLETTER_FOLLOWUPS (JSON):
-//   {"grace":30,"fallbackManager":"<담당 매니저가 없을 때 보낼 사람 이름>",
+//   {"grace":30,"fallbackManager":"<담당 매니저가 없을 때 보낼 사람 이름>","teams":{"<매니저 이름>":"<팀>"},
 //    "stages":[{"stage":1,"days":45,"mail":"a2"},{"stage":2,"days":200,"mail":"b1","mou":true},
 //              {"stage":3,"days":335,"mail":"b2"},{"stage":4,"days":395,"mail":"b3"}]}
 //   - 배열만 주면 grace 기본 30일. grace는 단계 간 최소 간격(35일)보다 작아야 한다
 //   - stage 1..5 정수·중복 불가, days > 0, mail(문안 키 a2·b1·b2·b3 — functions/_lib/remind-mails.ts) 필수
 //   - b1 은 언제나 협약서 링크를 싣는다(mou). altDays + altWorkMonths 는 예전 규칙 호환용(지금은 쓰지 않음)
 //   - fallbackManager: 이름만 env 에 둔다(공개 저장소에 직원 이름 X). 메일은 담당 매니저 네이버웍스 계정으로 나간다
+//   - teams: 메일 서명 '이름 직급(팀)'의 팀 — managers 데이터에 팀이 없어서 env 에 둔다. 없는 사람은 괄호를 뺀다
 //
 // 규칙 요약 (계획서 "멱등 규칙"):
 //   - 오늘(KST) >= 예정일 이고 오늘 <= 예정일+grace 일 때만 발송 (첫 가동/크론 중단 시 대량 발송 방지)
@@ -47,6 +48,8 @@ export interface FollowupConfig {
   grace: number;
   /** 담당 매니저가 없거나 찾지 못한 고객을 맡을 매니저 이름 */
   fallbackManager?: string;
+  /** 매니저 이름 → 메일 서명의 팀 이름 */
+  teams?: Record<string, string>;
 }
 
 export type ParsedFollowupConfig =
@@ -193,6 +196,7 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
   let stagesRaw: unknown;
   let grace = 30;
   let fallbackManager: string | undefined;
+  let teams: Record<string, string> | undefined;
   if (Array.isArray(parsed)) {
     stagesRaw = parsed;
   } else if (parsed && typeof parsed === 'object') {
@@ -206,6 +210,13 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
     if (fm !== undefined) {
       if (typeof fm !== 'string') return { ok: false, error: 'fallbackManager must be a string' };
       fallbackManager = fm.trim() || undefined;
+    }
+    const tm = (parsed as { teams?: unknown }).teams;
+    if (tm !== undefined) {
+      if (!tm || typeof tm !== 'object' || Array.isArray(tm) || !Object.values(tm).every((v) => typeof v === 'string')) {
+        return { ok: false, error: 'teams must be an object of name → team strings' };
+      }
+      teams = Object.fromEntries(Object.entries(tm as Record<string, string>).map(([k, v]) => [k.trim(), v.trim()]).filter(([k, v]) => k && v));
     }
   }
   if (!Array.isArray(stagesRaw) || stagesRaw.length === 0) return { ok: false, error: 'stages must be a non-empty array' };
@@ -248,7 +259,7 @@ export function parseFollowupConfig(raw: string | undefined): ParsedFollowupConf
     });
   }
   stages.sort((a, b) => a.days - b.days);
-  return { ok: true, config: { stages, grace, fallbackManager } };
+  return { ok: true, config: { stages, grace, fallbackManager, teams } };
 }
 
 export function stageLabel(s: FollowupStage): string {
