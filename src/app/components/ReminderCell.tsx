@@ -2,8 +2,9 @@
 // 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송완료·예약 완료·예약발송 취소·발송 실패'를 보이고,
 // 아직 안 나간 칸을 누르면 예약발송 취소 ↔ 다시 예약. 시계 아이콘은 쓰지 않는다(무슨 뜻인지 헷갈린다는 사용자 지적, 11-15). 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels — docs/remind-mails.md
 // 손으로 보낸·예약한 메일(장부 source 'manual')도 같은 글씨로 보인다. 손 예약은 네이버웍스에 있어 여기서 취소하지 않는다.
-import { AlertCircle, CheckCircle, X, XCircle } from 'lucide-react';
-import type { RemindLedgerItem, RemindLedgerSummary, RemindStage } from '../../lib/newsletter';
+import { AlertCircle, CheckCircle, Clock, Send, X, XCircle } from 'lucide-react';
+import type { RemindBrief, RemindLedgerItem, RemindLedgerSummary, RemindStage } from '../../lib/newsletter';
+import { BADGE, TONE } from './ui-kit';
 
 /** 누르면 하는 일 — flag: 체크만 바꿈(예전 그대로), off: 예약발송 취소, on: 다시 예약, none: 누를 수 없음 */
 export type ReminderCellAction = 'flag' | 'off' | 'on' | 'none';
@@ -204,5 +205,60 @@ export function ReminderCell({ model, dueLabel, dueTitle, disabled, onClick }: {
         {model.line && <span className={`text-[10px] ${TONE_TEXT[model.tone]}`}>{model.line}</span>}
       </div>
     </td>
+  );
+}
+
+// ── 고객 목록 '리마인드 상태' 열 — 배지 한 줄 (사용자 선택 '최근 발송만 한 줄', 11-15) ──
+// 가장 최근에 나간 메일 → 없으면 다음 예약 → 보류 → 예약발송 취소 → 미발송. 값은 서버 remind-list(발송기와 같은 규칙)
+
+export interface RemindListBadgeModel {
+  text: string;
+  tone: 'emerald' | 'blue' | 'amber' | 'slate';
+  icon: 'sent' | 'reserved' | 'held' | 'cancelled' | 'none';
+  title: string;
+}
+
+const NEXT_TITLE = {
+  reserved: '네이버웍스에 손으로 예약한 메일',
+  due: '다음 자동 실행(평일 오전 9시경)에 발송',
+  scheduled: '예정일 오전 9시경 자동 발송',
+} as const;
+
+export function remindListBadgeModel(b: RemindBrief): RemindListBadgeModel {
+  if (b.last) {
+    const when = b.last.at ? stamp(b.last.at) : b.last.date;
+    return b.last.kind === 'sent'
+      ? { text: `${b.last.stage}차 발송완료 ${md(b.last.date)}`, tone: 'emerald', icon: 'sent', title: `리마인드${b.last.stage}차 발송완료 ${when} · ${b.last.manual ? '손으로 보냄' : '자동 발송'}` }
+      : { text: `${b.last.stage}차 발송 실패 ${md(b.last.date)}`, tone: 'amber', icon: 'held', title: `리마인드${b.last.stage}차 손으로 보낸 메일이 실패했습니다(${when}) — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다` };
+  }
+  if (b.next) {
+    // 손 예약은 네이버웍스에 있어 담당자 계정 연결과 상관없다
+    return b.waiting && b.next.kind !== 'reserved'
+      ? { text: `${b.next.stage}차 연결 대기`, tone: 'amber', icon: 'held', title: `리마인드${b.next.stage}차 ${b.next.date} — 보낼 담당자의 네이버웍스 계정을 연결하면 발송됩니다` }
+      : { text: `${b.next.stage}차 예약 완료 ${md(b.next.date)}`, tone: 'blue', icon: 'reserved', title: `리마인드${b.next.stage}차 ${b.next.date} — ${NEXT_TITLE[b.next.kind]}` };
+  }
+  if (b.blocked && b.blocked !== 'no-work-entry') return { text: '보류', tone: 'amber', icon: 'held', title: BLOCK_TITLE[b.blocked] || '보류 중' };
+  if (b.off) return { text: '예약발송 취소', tone: 'slate', icon: 'cancelled', title: '남은 회차를 꺼 두었습니다 — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다' };
+  return { text: '미발송', tone: 'slate', icon: 'none', title: b.blocked === 'no-work-entry' ? '작업 이력이 없어 리마인드 대상이 아닙니다' : '보낸 리마인드 메일과 예약된 회차가 없습니다' };
+}
+
+const LIST_ICON = { sent: CheckCircle, reserved: Send, held: AlertCircle, cancelled: XCircle, none: Clock } as const;
+
+/** 목록 칸의 배지 — 지금 배지 모양(BADGE·TONE·아이콘 12px) 그대로. 못 불러왔으면 '-' */
+export function RemindListBadge({ brief, loaded }: { brief: RemindBrief | undefined; loaded: boolean }) {
+  if (!brief) {
+    return (
+      <span className={`${BADGE} ${TONE.slate}`} title={loaded ? '리마인드 상태를 불러오지 못했습니다' : '리마인드 상태를 불러오는 중입니다'}>
+        -
+      </span>
+    );
+  }
+  const m = remindListBadgeModel(brief);
+  const Icon = LIST_ICON[m.icon];
+  return (
+    <span className={`${BADGE} ${TONE[m.tone]}`} title={m.title}>
+      <Icon className="w-3 h-3" />
+      {m.text}
+    </span>
   );
 }

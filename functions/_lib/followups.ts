@@ -580,6 +580,46 @@ export function remindTimeline(
   };
 }
 
+// ── 고객 목록 '리마인드 상태' 열 (src/app/components/CustomersPage.tsx) ──
+// 한 줄: 가장 최근에 나간 메일(모든 작업의 장부) → 없으면 다음 예약(최근 작업) → 보류 → 예약발송 취소 → 미발송
+
+export interface RemindBrief {
+  /** 가장 최근에 나간(또는 손메일이 실패한) 리마인드 메일 — 지난 작업의 메일도 본다 */
+  last: { stage: number; date: string; at?: string; kind: 'sent' | 'failed'; manual: boolean } | null;
+  /** 다음에 나갈 회차 — 최근 작업의 손 예약·곧 보냄·예약됨 중 가장 이른 것 */
+  next: { stage: number; date: string; kind: 'reserved' | 'due' | 'scheduled' } | null;
+  /** 고객 전체를 막는 사유 (작업일이 미래면 null) */
+  blocked: SkipReason | null;
+  /** 기한 안의 회차를 꺼 두었다 (D1 취소 또는 리마인드 체크) */
+  off: boolean;
+}
+
+export function remindBrief(c: CustomerRow, tl: RemindTimeline, cfg: FollowupConfig, today: string, now: number = Date.now()): RemindBrief {
+  let last: RemindBrief['last'] = null;
+  let lastAt = -Infinity;
+  for (const l of Array.isArray(c.emailHistory) ? c.emailHistory : []) {
+    if (!l || (l.source !== 'auto' && l.source !== 'manual') || typeof l.stage !== 'number') continue;
+    const st = ledgerState(l, now);
+    // 자동 실패는 발송기가 다시 보내므로 '최근 발송'으로 보지 않는다
+    const kind = st === 'sent' ? 'sent' : st === 'failed' && l.source === 'manual' ? 'failed' : null;
+    if (!kind) continue;
+    const t = scheduledAtMs(l);
+    if (t > lastAt || (t === lastAt && kind === 'sent')) {
+      lastAt = t;
+      last = { stage: l.stage, date: l.date, ...(l.at ? { at: l.at } : {}), kind, manual: l.source === 'manual' };
+    }
+  }
+  let next: RemindBrief['next'] = null;
+  for (const s of tl.stages) {
+    if ((s.status === 'reserved' || s.status === 'due' || s.status === 'scheduled') && s.sendDate && (!next || s.sendDate < next.date)) {
+      next = { stage: s.stage, date: s.sendDate, kind: s.status };
+    }
+  }
+  const blocked = tl.blocked && tl.blocked !== 'future-work-date' ? tl.blocked : null;
+  const off = tl.stages.some((s) => (s.status === 'cancelled' || s.status === 'checked') && today <= addDays(s.dueDate, cfg.grace));
+  return { last, next, blocked, off };
+}
+
 export interface RecipientResult {
   email: string;
   ok: boolean;

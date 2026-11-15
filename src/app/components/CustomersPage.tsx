@@ -40,7 +40,7 @@ import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './M
 import { btn, ICON_BTN_DANGER, KPI, TILE, BADGE, TONE, MODAL_CLOSE, TABLE, type Tone } from './ui-kit';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
-import { ReminderCell, reminderCellModel, type ReminderCellAction } from './ReminderCell';
+import { ReminderCell, reminderCellModel, RemindListBadge, remindListBadgeModel, type ReminderCellAction } from './ReminderCell';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
@@ -57,6 +57,8 @@ import {
   canWriteRemind,
   ledgerSummaryFor,
   ledgerStateOf,
+  fetchRemindList,
+  type RemindBrief,
   type NewsletterStatus,
   type SyncSummary,
   type FollowupConfig,
@@ -1105,6 +1107,30 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       setRemindBusy(false);
     }
   };
+  // 목록 '리마인드 상태' 열 — 서버 remind-list(발송기와 같은 규칙). 목록을 볼 때 부르고, 고객 데이터가 바뀌면 1초 묶어 다시 부른다
+  const [remindList, setRemindList] = useState<Map<number, RemindBrief> | null>(null);
+  const [remindListLoaded, setRemindListLoaded] = useState(false);
+  const remindListSeq = useRef(0);
+  const listVisible = !selectedCustomer;
+  useEffect(() => {
+    if (!listVisible) return;
+    const my = ++remindListSeq.current;
+    const t = setTimeout(() => {
+      fetchRemindList()
+        .then((r) => {
+          if (my !== remindListSeq.current) return;
+          setRemindListLoaded(true);
+          setRemindList(r.ok ? new Map(r.items.map((x) => [x.id, x])) : null);
+        })
+        .catch(() => {
+          if (my !== remindListSeq.current) return;
+          setRemindListLoaded(true);
+          setRemindList(null);
+        });
+    }, remindListLoaded ? 1000 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, listVisible]);
   const [editedCustomer, setEditedCustomer] = useState<Customer | null>(null);
   // 편집 시작 때 값 — 저장할 때 이것과 비교해 바뀐 칸·작업만 보낸다
   const editOriginalRef = useRef<{ customer: Customer; workHistory: WorkHistory[]; contacts: Contact[] } | null>(null);
@@ -1415,7 +1441,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       '총금액': formatAmount(customerTotalAmount(c)),
       '관리주기': getCycleLabel(c.managementCycle),
       '다음관리예정일': c.nextManagementDate,
-      '리마인드상태': c.reminderStatus,
+      '리마인드상태': remindList?.get(c.id) ? remindListBadgeModel(remindList.get(c.id)!).text : '',
       '고객책임자': c.accountManager,
       '전화번호': c.phone,
       '이메일': c.email,
@@ -1777,29 +1803,6 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       <span className={`${BADGE} ${TONE[tone]}`}>
         <Icon className="w-3 h-3" />
         {NEWSLETTER_STATUS_LABEL[s]}
-      </span>
-    );
-  };
-
-  const getReminderBadge = (status: string) => {
-    const config = {
-      미발송: { label: '미발송', tone: 'slate' as Tone, icon: Clock },
-      발송예약완료: { label: '발송예약 완료', tone: 'blue' as Tone, icon: Send },
-    };
-    const statusConfig = config[status as keyof typeof config];
-    if (!statusConfig) {
-      // Fallback for unknown status
-      return (
-        <span className={`${BADGE} ${TONE.slate}`}>
-          {status}
-        </span>
-      );
-    }
-    const { label, tone, icon: Icon } = statusConfig;
-    return (
-      <span className={`${BADGE} ${TONE[tone]}`}>
-        <Icon className="w-3 h-3" />
-        {label}
       </span>
     );
   };
@@ -2345,31 +2348,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   <td className="px-4 py-4">
                     <span className="text-sm text-slate-600 tabular-nums">{customer.nextManagementDate}</span>
                   </td>
-                  <td 
-                    className="px-4 py-4 relative"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingCell({ customerId: customer.id, field: 'reminderStatus' });
-                    }}
-                  >
-                    {editingCell?.customerId === customer.id && editingCell?.field === 'reminderStatus' ? (
-                      <div className="relative">
-                        <select
-                          className={`${BADGE} ${TONE[customer.reminderStatus === '발송예약완료' ? 'blue' : 'slate']} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                          value={customer.reminderStatus}
-                          onChange={(e) => updateCustomerField(customer.id, 'reminderStatus', e.target.value)}
-                          onBlur={() => setEditingCell(null)}
-                          autoFocus
-                        >
-                          <option value="미발송">미발송</option>
-                          <option value="발송예약완료">발송예약 완료</option>
-                        </select>
-                      </div>
-                    ) : (
-                      <div className="cursor-pointer hover:opacity-70 transition-opacity">
-                        {getReminderBadge(customer.reminderStatus)}
-                      </div>
-                    )}
+                  <td className="px-4 py-4">
+                    {/* 실제 장부·체크·예약에서 계산 — 최근 발송 → 다음 예약 → 보류 → 예약발송 취소 → 미발송 (docs/remind-mails.md) */}
+                    <RemindListBadge brief={remindList?.get(customer.id)} loaded={remindListLoaded} />
                   </td>
                   <td className="px-4 py-4" title={customer.stibeeSyncedAt ? `마지막 동기화: ${customer.stibeeSyncedAt}` : '스티비 주소록에 아직 등록되지 않음'}>
                     {getNewsletterBadge(customer.newsletterStatus)}
@@ -3390,17 +3371,6 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                           <span className="text-sm text-slate-600 font-medium">일</span>
                         </div>
                       )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">리마인드 상태</label>
-                      <select
-                        value={newCustomer.reminderStatus || '미발송'}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, reminderStatus: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="미발송">미발송</option>
-                        <option value="발송예약완료">발송예약 완료</option>
-                      </select>
                     </div>
                   </div>
                 </div>

@@ -32,6 +32,7 @@
 //   ?action=status  → 스티비 /auth-check + 주소록 구독자 수
 //   ?action=config  → 리마인드 단계 설정 — 프론트 예정일 표시용
 //   ?action=remind&customerId=N  → 작업 히스토리 '리마인드 1~4차' 칸 상태 (읽기만 — 토큰 갱신·협약서 발급 없음)
+//   ?action=remind-list  → 고객 목록 '리마인드 상태' 열 — 고객마다 최근 발송·다음 예약 요약 (읽기만, 이메일 주소 없음)
 //
 // 수신동의(marketingAllowed)는 보내지 않는다 (2026-11-10). 스티비에서 받은 광고 동의를 덮어쓰지 않도록 키 자체를 뺀다.
 
@@ -59,6 +60,7 @@ import {
   cancelKeyOf,
   computeDue,
   parseFollowupConfig,
+  remindBrief,
   remindTimeline,
   todayKst,
   weekdayOnOrAfter,
@@ -669,6 +671,56 @@ async function buildRemindStatus(env: Env, customerId: number): Promise<RemindBu
   };
 }
 
+// 고객 목록 '리마인드 상태' 열 — 상태 조회와 같은 규칙(remindTimeline)으로 고객마다 한 줄 요약. 읽기만 한다
+async function handleRemindList(env: Env): Promise<Response> {
+  const origin = getOrigin(env);
+  const parsed = parseFollowupConfig(env.NEWSLETTER_FOLLOWUPS);
+  if (!parsed.ok) return remindJson({ ok: false, disabled: 'disabled' in parsed, error: 'error' in parsed ? parsed.error : '리마인드 설정이 꺼져 있습니다' }, 200, origin);
+  const cfg = parsed.config;
+  const today = todayKst();
+  const now = Date.now();
+  const nextRun = nextRunDate(now);
+  const customers = await fetchCustomers();
+  const warnings: string[] = [];
+  let openDealCompanies = new Set<string>();
+  try {
+    openDealCompanies = await fetchOpenDealCompanies();
+  } catch (err) {
+    warnings.push(`진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let managers: ManagerRow[] = [];
+  let managersOk = true;
+  try {
+    managers = await fetchManagers();
+  } catch (err) {
+    managersOk = false;
+    warnings.push(`담당 매니저 목록 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let cancelled = new Set<string>();
+  if (env.AI_DB) {
+    try {
+      cancelled = await activeCancelKeys(env.AI_DB);
+    } catch (err) {
+      warnings.push(`리마인드 취소 목록 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // 연결 목록은 D1 에서 읽기만 한다 (refreshStaleTokens·accessTokenFor 를 부르지 않는다)
+  const conns = worksConfigured(env) ? await listConnections(env).catch(() => []) : [];
+  const connected = new Set(conns.filter((c) => !c.lastError).map((c) => c.email));
+  const items = customers.map((c) => {
+    const tl = remindTimeline(c, cfg, today, { openDealCompanies, cancelled, nextRun, now });
+    const brief = remindBrief(c, tl, cfg, today, now);
+    // 자동으로 나갈 회차인데 보낼 담당자 계정이 연결 전이면 '연결 대기' (손 예약은 네이버웍스에 있어 상관없다)
+    let waiting = false;
+    if (managersOk && brief.next && brief.next.kind !== 'reserved') {
+      const picked = pickSender((c.accountManager || '').trim() || DEFAULT_MANAGER, managers, cfg.fallbackManager, conns, cfg.teams);
+      waiting = !picked || !connected.has(picked.sender.email);
+    }
+    return { id: c.id, ...brief, waiting };
+  });
+  return remindJson({ ok: true, today, nextRun, items, warnings }, 200, origin);
+}
+
 async function handleRemindStatus(env: Env, rawId: string | null): Promise<Response> {
   const origin = getOrigin(env);
   const id = parseCustomerId(rawId);
@@ -781,6 +833,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const action = new URL(context.request.url).searchParams.get('action');
 
   if (action === 'config') return handleConfig(env); // 스티비 키 없이도 조회 가능
+  if (action === 'remind-list') {
+    try {
+      return await handleRemindList(env);
+    } catch (err) {
+      return remindJson({ ok: false, error: err instanceof Error ? err.message : String(err) }, 502, origin);
+    }
+  }
   if (action === 'remind') {
     const q = new URL(context.request.url).searchParams;
     try {

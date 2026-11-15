@@ -404,6 +404,30 @@ export function fetchRemindStatus(customerId: number): Promise<RemindStatus> {
   return getNewsletter<RemindStatus>({ action: 'remind', customerId });
 }
 
+/** 고객 목록 '리마인드 상태' 열 한 줄 — functions/_lib/followups.ts remindBrief + waiting */
+export interface RemindBrief {
+  id: number;
+  last: { stage: number; date: string; at?: string; kind: 'sent' | 'failed'; manual: boolean } | null;
+  next: { stage: number; date: string; kind: 'reserved' | 'due' | 'scheduled' } | null;
+  blocked: string | null;
+  off: boolean;
+  waiting: boolean;
+}
+
+export interface RemindList {
+  ok: boolean;
+  error?: string;
+  disabled?: boolean;
+  today: string;
+  nextRun: string;
+  items: RemindBrief[];
+  warnings?: string[];
+}
+
+export function fetchRemindList(): Promise<RemindList> {
+  return getNewsletter<RemindList>({ action: 'remind-list' });
+}
+
 // 보내지 않기 / 되돌리기 (4차 칸, D1) — jobKey '*' + stage 0 은 고객 전체. 응답은 새 상태표
 export function cancelRemind(x: { customerId: number; jobKey: string; stage: number; userName: string }): Promise<RemindStatus> {
   return postNewsletter<RemindStatus>({ action: 'remind-cancel', ...x });
