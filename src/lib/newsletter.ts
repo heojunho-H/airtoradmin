@@ -280,7 +280,7 @@ export async function runFollowupsDryRun(): Promise<FollowupDryRunReport> {
   return postNewsletter<FollowupDryRunReport>({ action: 'run-followups', dryRun: true });
 }
 
-// ── 고객 상세 '리마인드 메일' (functions/api/newsletter.ts action=remind…, src/app/components/RemindMailPanel.tsx) ──
+// ── 작업 히스토리 '리마인드 1~4차' 칸 (functions/api/newsletter.ts action=remind…, src/app/components/ReminderCell.tsx) ──
 
 export type RemindStageStatus = 'sent' | 'cancelled' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
 
@@ -341,17 +341,6 @@ export interface RemindStatus {
   warnings: string[];
 }
 
-export interface RemindPreview {
-  ok: boolean;
-  error?: string;
-  subject: string;
-  html: string;
-  day: string;
-  to: { name: string; email: string }[];
-  sender: string;
-  note: string | null;
-}
-
 async function getNewsletter<T extends { ok: boolean; error?: string }>(params: Record<string, string | number>): Promise<T> {
   const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
   const response = await fetch(`/api/newsletter?${qs}`, { headers: { Accept: 'application/json' } });
@@ -370,11 +359,7 @@ export function fetchRemindStatus(customerId: number): Promise<RemindStatus> {
   return getNewsletter<RemindStatus>({ action: 'remind', customerId });
 }
 
-export function fetchRemindPreview(customerId: number, stage: number): Promise<RemindPreview> {
-  return getNewsletter<RemindPreview>({ action: 'remind-preview', customerId, stage });
-}
-
-// 보내지 않기 / 되돌리기 — jobKey '*' + stage 0 은 '이 고객 리마인드 모두 끄기'. 응답은 새 상태표
+// 보내지 않기 / 되돌리기 (4차 칸, D1) — jobKey '*' + stage 0 은 고객 전체. 응답은 새 상태표
 export function cancelRemind(x: { customerId: number; jobKey: string; stage: number; userName: string }): Promise<RemindStatus> {
   return postNewsletter<RemindStatus>({ action: 'remind-cancel', ...x });
 }

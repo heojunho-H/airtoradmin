@@ -40,7 +40,7 @@ import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './M
 import { btn, ICON_BTN_DANGER, KPI, TILE, BADGE, TONE, MODAL_CLOSE, TABLE, type Tone } from './ui-kit';
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
-import { RemindMailPanel } from './RemindMailPanel';
+import { ReminderCell, reminderCellModel, type ReminderCellAction } from './ReminderCell';
 import {
   syncCustomersToStibee,
   syncOneQuietly,
@@ -51,9 +51,14 @@ import {
   jobKeyOf,
   NEWSLETTER_STATUS_LABEL,
   FOLLOWUP_SKIP_LABEL,
+  fetchRemindStatus,
+  cancelRemind,
+  restoreRemind,
+  canWriteRemind,
   type NewsletterStatus,
   type SyncSummary,
   type FollowupConfig,
+  type RemindStatus,
 } from '../../lib/newsletter';
 import {
   buildWorkHistoryPatch,
@@ -960,7 +965,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const [isCheckingFollowups, setIsCheckingFollowups] = useState(false);
 
   // 리마인드 N차 예정일 라벨: 설정된 단계면 작업일 + days(7~10월 작업 등 예외면 altDays), 아니면 '-'
-  const reminderDueLabel = (workDate: string | undefined, stage: 1 | 2 | 3): string => {
+  const reminderDueLabel = (workDate: string | undefined, stage: 1 | 2 | 3 | 4): string => {
     const s = followupConfig?.stages.find(x => x.stage === stage);
     if (!s) return '-';
     return followupDueDate(workDate, followupStageDays(s, workDate));
@@ -1026,6 +1031,77 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const [editingCell, setEditingCell] = useState<{ customerId: string; field: string } | null>(null);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // 리마인드 1~4차 칸 — 최근 작업 줄은 서버 상태(발송기와 같은 규칙, /api/newsletter?action=remind)로 발송·예약·보내지 않음을 보인다.
+  // 보내지 않음: 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels (운영 주소에서만) — docs/remind-mails.md
+  const [remindStatus, setRemindStatus] = useState<RemindStatus | null>(null);
+  const [remindBusy, setRemindBusy] = useState(false);
+  const remindSeq = useRef(0);
+  const remindId = selectedCustomer && selectedCustomer.id > 0 && selectedCustomer.id < 1_000_000_000 ? selectedCustomer.id : null;
+  const remindKey = selectedCustomer ? remindRefreshKey(selectedCustomer) : '';
+  useEffect(() => {
+    if (remindId === null) {
+      remindSeq.current++;
+      setRemindStatus(null);
+      return;
+    }
+    if (isEditing) return;
+    const my = ++remindSeq.current;
+    fetchRemindStatus(remindId)
+      .then((r) => { if (my === remindSeq.current) setRemindStatus(r.ok ? r : null); })
+      .catch(() => { if (my === remindSeq.current) setRemindStatus(null); });
+  }, [remindId, remindKey, isEditing]);
+
+  const reminderModelOf = (work: WorkHistory, n: 1 | 2 | 3 | 4) => {
+    const forThis = remindStatus && selectedCustomer && remindStatus.customer.id === selectedCustomer.id && remindStatus.job
+      && jobKeyOf(work) === remindStatus.job.jobKey;
+    const st = forThis ? remindStatus!.stages.find((s) => s.stage === n) ?? null : null;
+    const sent = selectedCustomer ? autoSentEntry(selectedCustomer, work, n) : undefined;
+    return reminderCellModel({
+      stage: n,
+      latest: st ? { st, connected: Boolean(remindStatus!.sender?.connected), blocked: remindStatus!.blocked } : null,
+      flag: n <= 3 ? Boolean(work[`reminder${n}` as 'reminder1' | 'reminder2' | 'reminder3']) : false,
+      autoSentDate: sent ? sent.date : null,
+      canWriteD1: canWriteRemind(),
+    });
+  };
+
+  // 칸 누름 — flag: 예전처럼 체크만, off: 보내지 않음, on: 다시 보냄
+  const onReminderCell = async (workIndex: number, work: WorkHistory, n: 1 | 2 | 3 | 4, action: ReminderCellAction) => {
+    if (!selectedCustomer || isEditing || remindBusy || action === 'none') return;
+    const flagKey = n <= 3 ? (`reminder${n}` as 'reminder1' | 'reminder2' | 'reminder3') : null;
+    if (action === 'flag') {
+      if (flagKey) toggleWorkFlag(workIndex, flagKey);
+      return;
+    }
+    const due = reminderDueLabel(work.workDate, n);
+    const st = remindStatus?.stages.find((s) => s.stage === n);
+    const ask = action === 'off'
+      ? `리마인드${n}차(${due}) 메일을 보내지 않습니다.\n다시 누르면 되돌릴 수 있습니다.`
+      : `리마인드${n}차(${due}) 메일을 다시 자동으로 보냅니다.\n예정일과 기한 안이면 평일 오전 9시경 나갑니다.`;
+    if (!window.confirm(ask)) return;
+    // 1~3차는 리마인드 체크로 (D1 로 끈 것이 아니면)
+    if (flagKey && !(action === 'on' && st?.status === 'cancelled')) {
+      const want = action === 'off';
+      if (Boolean(work[flagKey]) !== want) toggleWorkFlag(workIndex, flagKey);
+      return;
+    }
+    // 4차(또는 D1 로 끈 회차) — D1 remind_cancels
+    const job = remindStatus?.job;
+    if (!job) return;
+    const all = st?.cancel?.scope === 'all';
+    setRemindBusy(true);
+    const my = ++remindSeq.current;
+    try {
+      const args = { customerId: selectedCustomer.id, jobKey: all ? '*' : job.jobKey, stage: all ? 0 : n, userName };
+      const res = action === 'off' ? await cancelRemind(args) : await restoreRemind(args);
+      if (my === remindSeq.current && res.ok) setRemindStatus(res);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemindBusy(false);
+    }
+  };
   const [editedCustomer, setEditedCustomer] = useState<Customer | null>(null);
   // 편집 시작 때 값 — 저장할 때 이것과 비교해 바뀐 칸·작업만 보낸다
   const editOriginalRef = useRef<{ customer: Customer; workHistory: WorkHistory[]; contacts: Contact[] } | null>(null);
@@ -2575,14 +2651,6 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                   </div>
                 </div>
 
-                {/* 리마인드 메일 — 예약·발송 확인, 보내지 않기 (저장된 고객만) */}
-                <RemindMailPanel
-                  customerId={selectedCustomer.id}
-                  refreshKey={remindRefreshKey(selectedCustomer)}
-                  userName={userName}
-                  editing={isEditing}
-                />
-
                 {/* 하단 영역 - 작업 히스토리 */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
@@ -2892,6 +2960,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                               리마인드3차
                             </th>
                             <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
+                              리마인드4차
+                            </th>
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 whitespace-nowrap">
                               작업
                             </th>
                           </tr>
@@ -3046,78 +3117,16 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                                     )}
                                   </button>
                                 </td>
-                                <td className="px-3 py-3 text-center">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleReminderStatus(index, 'reminder1');
-                                      }}
-                                      disabled={isEditing}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      {work.reminder1 ? (
-                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                                      ) : (
-                                        <X className="w-5 h-5 text-slate-400" />
-                                      )}
-                                    </button>
-                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 1) ? '자동 발송 예정일' : '자동 발송 미설정'}>
-                                      {reminderDueLabel(work.workDate, 1)}
-                                    </span>
-                                    {autoSentEntry(selectedCustomer, work, 1) && (
-                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 1)!.date}</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3 text-center">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleReminderStatus(index, 'reminder2');
-                                      }}
-                                      disabled={isEditing}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      {work.reminder2 ? (
-                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                                      ) : (
-                                        <X className="w-5 h-5 text-slate-400" />
-                                      )}
-                                    </button>
-                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 2) ? '자동 발송 예정일' : '자동 발송 미설정'}>
-                                      {reminderDueLabel(work.workDate, 2)}
-                                    </span>
-                                    {autoSentEntry(selectedCustomer, work, 2) && (
-                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 2)!.date}</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3 text-center">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleReminderStatus(index, 'reminder3');
-                                      }}
-                                      disabled={isEditing}
-                                      className="cursor-pointer hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      {work.reminder3 ? (
-                                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                                      ) : (
-                                        <X className="w-5 h-5 text-slate-400" />
-                                      )}
-                                    </button>
-                                    <span className="text-xs text-slate-500" title={followupConfig?.stages.some(s => s.stage === 3) ? '자동 발송 예정일' : '자동 발송 미설정'}>
-                                      {reminderDueLabel(work.workDate, 3)}
-                                    </span>
-                                    {autoSentEntry(selectedCustomer, work, 3) && (
-                                      <span className="text-[10px] text-emerald-600">자동발송 {autoSentEntry(selectedCustomer, work, 3)!.date}</span>
-                                    )}
-                                  </div>
-                                </td>
+                                {([1, 2, 3, 4] as const).map((n) => (
+                                  <ReminderCell
+                                    key={n}
+                                    model={reminderModelOf(work, n)}
+                                    dueLabel={reminderDueLabel(work.workDate, n)}
+                                    dueTitle={followupConfig?.stages.some(s => s.stage === n) ? '자동 발송 예정일' : '자동 발송 미설정'}
+                                    disabled={isEditing || remindBusy}
+                                    onClick={() => void onReminderCell(index, work, n, reminderModelOf(work, n).action)}
+                                  />
+                                ))}
                                 <td className="px-3 py-3 text-center">
                                   <div className="flex items-center justify-center gap-1">
                                     {/* 손익 보기 — dealId가 있고 부모가 핸들러를 전달했을 때만 노출 */}
