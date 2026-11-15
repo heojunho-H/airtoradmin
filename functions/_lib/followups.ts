@@ -22,6 +22,7 @@
 //   - 여러 단계가 동시에 due면 가장 높은 단계만 발송, 낮은 단계는 superseded로 장부 기록
 //   - 같은 (jobKey, stage, recipient)가 sent|skipped 로 장부에 있으면 재발송 안 함
 //   - 고객 상세에서 '보내지 않기'로 취소한 회차(D1 remind_cancels — functions/_lib/remind-cancels.ts)는 보내지 않음
+//   - 손으로 보낸·예약한 메일(장부 source:'manual', sent|scheduled)이 있는 회차는 받는 주소와 상관없이 끝난 것으로 본다
 //
 // 리마인드 메일(2026-11-15 확정, 광고 표시 없음 — 사용자 결정): 1 A2 D+45 · 2 B1 D+200(협약서) · 3 B2 D+335 · 4 B3 D+395
 
@@ -76,16 +77,20 @@ export interface LedgerEntry {
   date: string;
   type: string;
   recipient: string;
-  status: 'sent' | 'opened' | 'failed' | 'skipped';
+  /** scheduled — 손으로 네이버웍스에 예약한 메일 (at 이 예약 시각) */
+  status: 'sent' | 'opened' | 'failed' | 'skipped' | 'scheduled';
   stage?: number;
   jobKey?: string;
-  source?: 'auto';
+  /** auto — 발송기, manual — 담당자가 네이버웍스에서 손으로 보낸·예약한 메일 (docs/remind-mails.md '가동') */
+  source?: 'auto' | 'manual';
   reason?: string;
   /** 보낸 담당자 계정 (네이버웍스) */
   sender?: string;
   via?: 'works';
-  /** 보낸 시각 (ISO) — 고객 상세 '리마인드 메일'에 시각을 보인다. 예전 항목은 날짜만 있다 */
+  /** 보낸 시각 (ISO) — 작업 히스토리 리마인드 칸에 시각을 보인다. 예전 항목은 날짜만 있다 */
   at?: string;
+  /** 손메일의 네이버웍스 메일 번호 — 같은 메일을 두 번 기록하지 않고, 나중에 수신확인과 다시 맞출 때 쓴다 */
+  mailSn?: number;
 }
 
 export interface ContactLike {
@@ -342,6 +347,14 @@ export function alreadyDone(ledger: LedgerEntry[] | undefined, jobKey: string, s
   );
 }
 
+// 손으로 보낸·예약한 메일이 있는 회차 — 담당자가 고른 주소로 갔으므로 CRM 담당자 주소와 달라도 그 회차는 끝났다
+export function manualDone(ledger: LedgerEntry[] | undefined, jobKey: string, stage: number): boolean {
+  if (!Array.isArray(ledger)) return false;
+  return ledger.some(
+    (l) => l && l.source === 'manual' && l.jobKey === jobKey && l.stage === stage && (l.status === 'sent' || l.status === 'scheduled'),
+  );
+}
+
 // 작업일 없이 수주된 작업(딜 연결) — 새 작업이 잡혔으니 이전 작업의 남은 단계는 멈춘다
 function hasPendingJob(workHistory: WorkEntry[] | undefined): boolean {
   if (!Array.isArray(workHistory)) return false;
@@ -381,6 +394,7 @@ export function computeDue(
       const dueDate = addDays(workDate, days);
       const flagKey = reminderKey(s.stage);
       if (flagKey && entry[flagKey] === true) { skipped.push({ ...base, stage: s.stage, reason: 'flag-set' }); continue; }
+      if (manualDone(c.emailHistory, jobKey, s.stage)) { skipped.push({ ...base, stage: s.stage, reason: 'already-sent' }); continue; }
       if (isCancelled(opts.cancelled, c.id, jobKey, s.stage)) { skipped.push({ ...base, stage: s.stage, reason: 'cancelled' }); continue; }
       if (today < dueDate) { skipped.push({ ...base, stage: s.stage, reason: 'not-due' }); continue; }
       if (today > addDays(dueDate, cfg.grace)) { skipped.push({ ...base, stage: s.stage, reason: 'out-of-grace' }); continue; }
@@ -420,11 +434,11 @@ export function computeDue(
   return { due, skipped };
 }
 
-// ── 고객 상세 '리마인드 메일' (src/app/components/RemindMailPanel.tsx) ──
-// 회차별 판단은 computeDue 를 그대로 쓰고(규칙을 따로 베끼지 않는다), 그 위에 장부·취소·체크를 얹는다.
-// 상태 우선순위: 보냄 > 취소됨 > 체크됨 > 건너뜀 > 기한 지남 > 보류(고객 전체 사유) > 곧 보냄 > 예약됨.
+// ── 작업 히스토리 '리마인드 1~4차' 칸 (src/app/components/ReminderCell.tsx) ──
+// 회차별 판단은 computeDue 를 그대로 쓰고(규칙을 따로 베끼지 않는다), 그 위에 장부(자동·손메일)·취소·체크를 얹는다.
+// 상태 우선순위: 보냄 > 손 예약 > 취소됨 > 손메일 실패(체크됐거나 기한 지남) > 체크됨 > 건너뜀 > 기한 지남 > 보류(고객 전체 사유) > 곧 보냄 > 예약됨.
 
-export type StageStatus = 'sent' | 'cancelled' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
+export type StageStatus = 'sent' | 'reserved' | 'cancelled' | 'failed' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
 
 export interface StageLedgerItem {
   recipient: string;
@@ -432,6 +446,20 @@ export interface StageLedgerItem {
   at?: string;
   sender?: string;
   reason?: string;
+  /** 손으로 보낸·예약한 메일 */
+  manual?: boolean;
+}
+
+// 손 예약 메일의 예약 시각(ms) — at 이 없으면 그날 오전 9시(KST)
+export function scheduledAtMs(l: Pick<LedgerEntry, 'at' | 'date'>): number {
+  const t = l.at ? Date.parse(l.at) : NaN;
+  return Number.isFinite(t) ? t : Date.parse(`${l.date}T00:00:00Z`);
+}
+
+// 장부 한 줄이 지금 어떤 상태인가 — 손 예약은 예약 시각이 지나면 보낸 것으로 본다(네이버웍스 예약 발송)
+export function ledgerState(l: LedgerEntry, now: number = Date.now()): 'sent' | 'reserved' | 'failed' | 'skipped' | 'opened' {
+  if (l.status === 'scheduled') return scheduledAtMs(l) <= now ? 'sent' : 'reserved';
+  return l.status;
 }
 
 export interface StageTimeline {
@@ -446,9 +474,11 @@ export interface StageTimeline {
   /** computeDue 판단 — 'due'·'superseded' 또는 회차 건너뜀 사유 (고객 전체 사유로 막혔으면 null) */
   verdict: SkipReason | 'due' | 'superseded' | null;
   sent: StageLedgerItem[];
+  /** 손으로 네이버웍스에 예약해 두었고 아직 예약 시각 전인 메일 */
+  reserved: StageLedgerItem[];
   failed: StageLedgerItem[];
   skipped: StageLedgerItem[];
-  /** 아직 이 회차를 받지 않은 담당자 — '보냄'인데 남아 있으면 일부만 보낸 것 */
+  /** 아직 이 회차를 받지 않은 담당자 — '보냄'인데 남아 있으면 일부만 보낸 것. 손메일이 있는 회차는 비운다 */
   pending: string[];
   /** 작업 히스토리의 리마인드 N차 칸 (④는 칸이 없어 false) */
   flag: boolean;
@@ -479,8 +509,9 @@ export function remindTimeline(
   c: CustomerRow,
   cfg: FollowupConfig,
   today: string,
-  opts: ComputeOptions & { nextRun?: string } = {},
+  opts: ComputeOptions & { nextRun?: string; now?: number } = {},
 ): RemindTimeline {
+  const now = opts.now ?? Date.now();
   const recipients = recipientsOf(c);
   const { due, skipped } = computeDue([c], cfg, today, opts);
   const customerSkip = skipped.find((s) => s.stage === undefined);
@@ -498,16 +529,19 @@ export function remindTimeline(
     ...(l.at ? { at: l.at } : {}),
     ...(l.sender ? { sender: l.sender } : {}),
     ...(l.reason ? { reason: l.reason } : {}),
+    ...(l.source === 'manual' ? { manual: true } : {}),
   });
 
   const stages = cfg.stages.map((s): StageTimeline => {
     const days = stageDays(s, workDate);
     const dueDate = addDays(workDate, days);
-    const mine = ledger.filter((l) => l && l.source === 'auto' && l.jobKey === jobKey && l.stage === s.stage);
-    const sent = mine.filter((l) => l.status === 'sent').map(toItem);
+    const mine = ledger.filter((l) => l && (l.source === 'auto' || l.source === 'manual') && l.jobKey === jobKey && l.stage === s.stage);
+    const sent = mine.filter((l) => ledgerState(l, now) === 'sent').map(toItem);
+    const reserved = mine.filter((l) => ledgerState(l, now) === 'reserved').map(toItem);
     const failed = mine.filter((l) => l.status === 'failed').map(toItem);
     const skippedLedger = mine.filter((l) => l.status === 'skipped').map(toItem);
-    const pending = recipients.filter((r) => !alreadyDone(ledger, jobKey, s.stage, r.email)).map((r) => r.email);
+    const manual = manualDone(ledger, jobKey, s.stage);
+    const pending = manual ? [] : recipients.filter((r) => !alreadyDone(ledger, jobKey, s.stage, r.email)).map((r) => r.email);
     const flagKey = reminderKey(s.stage);
     const flag = Boolean(flagKey && entry[flagKey] === true);
     let verdict: StageTimeline['verdict'] = null;
@@ -515,18 +549,25 @@ export function remindTimeline(
     else if (top && top.supersededStages.includes(s.stage)) verdict = 'superseded';
     else verdict = skipped.find((x) => x.stage === s.stage)?.reason ?? null;
 
+    const expired = today > addDays(dueDate, cfg.grace);
+    // 손메일 실패는 다시 보내지 않을 때(체크됐거나 기한이 지남)만 '발송 실패'로 — 체크를 풀어 다시 예약하면 예약 상태를 보인다
+    const manualFailed = failed.some((x) => x.manual) && (flag || expired);
     let status: StageStatus;
     if (sent.length > 0) status = 'sent';
+    else if (reserved.length > 0) status = 'reserved';
     else if (isCancelled(opts.cancelled, c.id, jobKey, s.stage)) status = 'cancelled';
+    else if (manualFailed) status = 'failed';
     else if (flag) status = 'checked';
     else if (skippedLedger.length > 0 || verdict === 'superseded') status = 'skipped';
-    else if (today > addDays(dueDate, cfg.grace)) status = 'expired';
+    else if (expired) status = 'expired';
     else if (blocked && blocked !== 'future-work-date') status = 'blocked';
     else if (verdict === 'due' || today >= dueDate) status = 'due';
     else status = 'scheduled';
 
-    const sendDate = status === 'scheduled' ? weekdayOnOrAfter(dueDate) : status === 'due' ? (opts.nextRun ?? weekdayOnOrAfter(today)) : null;
-    return { stage: s.stage, mail: s.mail, label: stageLabel(s), days, dueDate, sendDate, status, verdict, sent, failed, skipped: skippedLedger, pending, flag };
+    const sendDate = status === 'scheduled' ? weekdayOnOrAfter(dueDate)
+      : status === 'due' ? (opts.nextRun ?? weekdayOnOrAfter(today))
+      : status === 'reserved' ? reserved[0].date : null;
+    return { stage: s.stage, mail: s.mail, label: stageLabel(s), days, dueDate, sendDate, status, verdict, sent, reserved, failed, skipped: skippedLedger, pending, flag };
   });
 
   return {

@@ -55,6 +55,8 @@ import {
   cancelRemind,
   restoreRemind,
   canWriteRemind,
+  ledgerSummaryFor,
+  ledgerStateOf,
   type NewsletterStatus,
   type SyncSummary,
   type FollowupConfig,
@@ -99,12 +101,16 @@ interface EmailHistory {
   date: string;
   type: string;
   recipient: string;
-  status: 'sent' | 'opened' | 'failed' | 'skipped';
-  // 팔로업 자동 발송 장부 (functions/_lib/followups.ts 가 기록)
+  status: 'sent' | 'opened' | 'failed' | 'skipped' | 'scheduled';
+  // 리마인드 장부 — auto: 발송기(functions/_lib/followups.ts), manual: 담당자가 네이버웍스에서 손으로 보낸·예약한 메일
   stage?: number;
   jobKey?: string;
-  source?: 'auto';
+  source?: 'auto' | 'manual';
   reason?: string;
+  sender?: string;
+  via?: 'works';
+  at?: string;
+  mailSn?: number;
 }
 
 interface InternalNote {
@@ -971,11 +977,9 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     return followupDueDate(workDate, followupStageDays(s, workDate));
   };
 
-  // 해당 작업·단계의 자동 발송 장부 항목 (있으면 "자동발송 날짜" 캡션)
-  const autoSentEntry = (customer: Customer, work: WorkHistory, stage: number): EmailHistory | undefined => {
-    const key = jobKeyOf(work);
-    return (customer.emailHistory || []).find(e => e.source === 'auto' && e.jobKey === key && e.stage === stage && e.status === 'sent');
-  };
+  // 해당 작업·단계의 장부 요약 (자동·손메일) — 지난 작업 줄 칸의 '발송완료·예약 완료·발송 실패 MM.DD'
+  const ledgerSummaryOf = (customer: Customer, work: WorkHistory, stage: number) =>
+    ledgerSummaryFor(customer.emailHistory, jobKeyOf(work), stage);
 
   // 팔로업 점검 — 발송하지 않고 오늘 발송 대상만 미리보기 (실제 발송은 GitHub Actions 크론)
   const handleCheckFollowups = async () => {
@@ -1056,12 +1060,11 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
     const forThis = remindStatus && selectedCustomer && remindStatus.customer.id === selectedCustomer.id && remindStatus.job
       && jobKeyOf(work) === remindStatus.job.jobKey;
     const st = forThis ? remindStatus!.stages.find((s) => s.stage === n) ?? null : null;
-    const sent = selectedCustomer ? autoSentEntry(selectedCustomer, work, n) : undefined;
     return reminderCellModel({
       stage: n,
       latest: st ? { st, connected: Boolean(remindStatus!.sender?.connected), blocked: remindStatus!.blocked } : null,
       flag: n <= 3 ? Boolean(work[`reminder${n}` as 'reminder1' | 'reminder2' | 'reminder3']) : false,
-      autoSentDate: sent ? sent.date : null,
+      ledger: selectedCustomer ? ledgerSummaryOf(selectedCustomer, work, n) : null,
       canWriteD1: canWriteRemind(),
     });
   };
@@ -2626,16 +2629,20 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
                             <span className="text-sm font-semibold text-slate-700">이메일 발송 이력</span>
                           </div>
                           <ul className="space-y-1 max-h-40 overflow-y-auto">
-                            {[...selectedCustomer.emailHistory].reverse().slice(0, 10).map((e, i) => (
-                              <li key={i} className="text-xs text-slate-600 flex items-center gap-2">
-                                <span className="text-slate-400 shrink-0">{e.date}</span>
-                                <span className="truncate">{e.type}</span>
-                                <span className="text-slate-400 truncate">{e.recipient}</span>
-                                <span className={`shrink-0 ${e.status === 'sent' ? 'text-emerald-600' : e.status === 'failed' ? 'text-red-600' : 'text-slate-500'}`}>
-                                  {e.status === 'sent' ? '발송' : e.status === 'failed' ? '실패' : e.status === 'opened' ? '열람' : '건너뜀'}
-                                </span>
-                              </li>
-                            ))}
+                            {[...selectedCustomer.emailHistory].reverse().slice(0, 10).map((e, i) => {
+                              // 손 예약(scheduled)은 예약 시각 전이면 '예약', 지나면 '발송'
+                              const st = ledgerStateOf(e);
+                              return (
+                                <li key={i} className="text-xs text-slate-600 flex items-center gap-2">
+                                  <span className="text-slate-400 shrink-0">{e.date}</span>
+                                  <span className="truncate">{e.type}</span>
+                                  <span className="text-slate-400 truncate">{e.recipient}</span>
+                                  <span className={`shrink-0 ${st === 'sent' ? 'text-emerald-600' : st === 'failed' ? 'text-red-600' : st === 'reserved' ? 'text-blue-600' : 'text-slate-500'}`}>
+                                    {st === 'sent' ? '발송' : st === 'failed' ? '실패' : st === 'reserved' ? '예약' : st === 'opened' ? '열람' : '건너뜀'}
+                                  </span>
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}

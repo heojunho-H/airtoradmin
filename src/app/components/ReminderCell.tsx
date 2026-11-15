@@ -1,8 +1,9 @@
 // 작업 히스토리 표의 '리마인드 1~4차' 칸 — 지금 칸 모양 그대로(아이콘 + 예정일 + 작은 글씨 한 줄).
-// 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송완료·예약 완료·예약발송 취소'를 보이고,
+// 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송완료·예약 완료·예약발송 취소·발송 실패'를 보이고,
 // 아직 안 나간 칸을 누르면 예약발송 취소 ↔ 다시 예약. 시계 아이콘은 쓰지 않는다(무슨 뜻인지 헷갈린다는 사용자 지적, 11-15). 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels — docs/remind-mails.md
+// 손으로 보낸·예약한 메일(장부 source 'manual')도 같은 글씨로 보인다. 손 예약은 네이버웍스에 있어 여기서 취소하지 않는다.
 import { AlertCircle, CheckCircle, X, XCircle } from 'lucide-react';
-import type { RemindStage } from '../../lib/newsletter';
+import type { RemindLedgerItem, RemindLedgerSummary, RemindStage } from '../../lib/newsletter';
 
 /** 누르면 하는 일 — flag: 체크만 바꿈(예전 그대로), off: 예약발송 취소, on: 다시 예약, none: 누를 수 없음 */
 export type ReminderCellAction = 'flag' | 'off' | 'on' | 'none';
@@ -35,30 +36,48 @@ const BLOCK_TITLE: Record<string, string> = {
   'pending-job': '작업일 없는 수주 작업이 있어 멈췄습니다',
 };
 
+// 장부 항목 → '보낸 계정 → 받는 주소'
+const whoOf = (items: RemindLedgerItem[]) => items.map((s) => `${s.sender || '담당자'} → ${s.recipient}`).join(', ');
+
+// 지난 작업 줄의 장부 요약 → 작은 글씨 한 줄
+const SUMMARY_LINE = { sent: '발송완료', reserved: '예약 완료', failed: '발송 실패' } as const;
+const SUMMARY_TONE = { sent: 'emerald', reserved: 'blue', failed: 'amber' } as const;
+function summaryTitle(l: RemindLedgerSummary): string {
+  const when = l.at ? stamp(l.at) : l.date;
+  const how = l.manual ? ' (손으로 보냄)' : '';
+  return l.kind === 'reserved' ? `예약 완료 ${when} — 네이버웍스에 손으로 예약` : `${SUMMARY_LINE[l.kind]} ${when}${how}`;
+}
+
 /**
  * 칸 하나의 모양과 누름.
- * latest: 최근 작업 줄의 서버 상태(없으면 예전 모양) · flag: reminderN(4차는 없음) · autoSentDate: 예전 모양의 '자동발송 날짜'
+ * latest: 최근 작업 줄의 서버 상태(없으면 예전 모양) · flag: reminderN(4차는 없음) · ledger: 그 작업·회차의 장부 요약(자동·손메일)
  */
 export function reminderCellModel(x: {
   stage: number;
   latest: { st: RemindStage; connected: boolean; blocked: string | null } | null;
   flag: boolean;
-  autoSentDate: string | null;
+  ledger: RemindLedgerSummary | null;
   canWriteD1: boolean;
 }): ReminderCellModel {
   const hasFlag = x.stage <= 3;
   if (!x.latest) {
-    // 지난 작업 줄 또는 상태를 못 불러온 때 — 예전 모양 그대로
+    // 지난 작업 줄 또는 상태를 못 불러온 때 — 예전 모양 그대로(아이콘은 체크, 글씨는 장부)
+    const l = x.ledger;
     if (!hasFlag) {
-      return x.autoSentDate
-        ? { icon: 'sent', line: `발송완료 ${md(x.autoSentDate)}`, tone: 'emerald', title: `발송완료 ${x.autoSentDate}`, action: 'none' }
-        : { icon: 'unchecked', line: '', tone: 'slate', title: '지난 작업 — 자동 발송은 최근 작업만 합니다', action: 'none' };
+      if (!l) return { icon: 'unchecked', line: '', tone: 'slate', title: '지난 작업 — 자동 발송은 최근 작업만 합니다', action: 'none' };
+      return {
+        icon: l.kind === 'sent' ? 'sent' : l.kind === 'reserved' ? 'reserved' : 'held',
+        line: `${SUMMARY_LINE[l.kind]} ${md(l.date)}`,
+        tone: SUMMARY_TONE[l.kind],
+        title: summaryTitle(l),
+        action: 'none',
+      };
     }
     return {
       icon: x.flag ? 'checked' : 'unchecked',
-      line: x.autoSentDate ? `발송완료 ${md(x.autoSentDate)}` : '',
-      tone: 'emerald',
-      title: x.flag ? '체크됨' : '체크 안 됨',
+      line: l ? `${SUMMARY_LINE[l.kind]} ${md(l.date)}` : '',
+      tone: l ? SUMMARY_TONE[l.kind] : 'emerald',
+      title: `${x.flag ? '체크됨' : '체크 안 됨'}${l ? ` · ${summaryTitle(l)}` : ''}`,
       action: 'flag',
     };
   }
@@ -69,14 +88,36 @@ export function reminderCellModel(x: {
     case 'sent': {
       const first = st.sent[0];
       const when = first?.at ? stamp(first.at) : md(first?.date);
-      const who = st.sent.map((s) => `${s.sender || '담당자'} → ${s.recipient}`).join(', ');
+      const manual = st.sent.some((s) => s.manual);
       const partial = st.pending.length > 0;
       return {
         icon: 'sent',
         line: `${partial ? '일부 발송완료' : '발송완료'} ${when}`,
         tone: 'emerald',
-        title: `발송완료 (네이버웍스 접수) · ${who}${partial ? ` · 아직 안 받은 담당자: ${st.pending.join(', ')}` : ''}`,
+        title: `발송완료 (${manual ? '손으로 보냄' : '네이버웍스 접수'}) · ${whoOf(st.sent)}${partial ? ` · 아직 안 받은 담당자: ${st.pending.join(', ')}` : ''}`,
         action: 'none',
+      };
+    }
+    case 'reserved': {
+      const first = st.reserved[0];
+      return {
+        icon: 'reserved',
+        line: `예약 완료 ${md(first?.date)}`,
+        tone: 'blue',
+        title: `예약 완료 — 네이버웍스에 손으로 예약, ${first?.at ? stamp(first.at) : first?.date} 발송 · ${whoOf(st.reserved)} · 취소는 네이버웍스 수신확인에서 합니다`,
+        action: 'none',
+      };
+    }
+    case 'failed': {
+      const f = st.failed.filter((s) => s.manual);
+      const last = f[f.length - 1];
+      const reason = f.map((s) => s.reason).filter(Boolean).join(', ');
+      return {
+        icon: 'held',
+        line: `발송 실패 ${md(last?.date)}`,
+        tone: 'amber',
+        title: `발송 실패 (손으로 보냄${reason ? ` · ${reason}` : ''}) · ${whoOf(f)}${x.flag && hasFlag ? ' — 받는 주소를 확인한 뒤 누르면 다시 예약합니다' : ''}`,
+        action: x.flag && hasFlag ? 'on' : hasFlag ? 'flag' : 'none',
       };
     }
     case 'cancelled':

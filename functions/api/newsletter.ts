@@ -655,6 +655,8 @@ async function buildRemindStatus(env: Env, customerId: number): Promise<RemindBu
         return {
           ...s,
           sent: s.sent.map((x) => ({ ...x, sender: nameOf(x.sender) })),
+          reserved: s.reserved.map((x) => ({ ...x, sender: nameOf(x.sender) })),
+          failed: s.failed.map((x) => ({ ...x, sender: nameOf(x.sender) })),
           cancel: c ? { setBy: c.setBy, setAt: c.setAt, scope: c.jobKey === '*' && c.stage === 0 ? 'all' : 'stage' } : null,
         };
       }),

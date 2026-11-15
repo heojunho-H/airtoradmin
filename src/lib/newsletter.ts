@@ -282,7 +282,8 @@ export async function runFollowupsDryRun(): Promise<FollowupDryRunReport> {
 
 // ── 작업 히스토리 '리마인드 1~4차' 칸 (functions/api/newsletter.ts action=remind…, src/app/components/ReminderCell.tsx) ──
 
-export type RemindStageStatus = 'sent' | 'cancelled' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
+// reserved — 손으로 네이버웍스에 예약(시각 전), failed — 손메일 실패(다시 보내지 않는 회차)
+export type RemindStageStatus = 'sent' | 'reserved' | 'cancelled' | 'failed' | 'checked' | 'skipped' | 'expired' | 'blocked' | 'due' | 'scheduled';
 
 export interface RemindLedgerItem {
   recipient: string;
@@ -290,6 +291,49 @@ export interface RemindLedgerItem {
   at?: string;
   sender?: string;
   reason?: string;
+  /** 손으로 보낸·예약한 메일 */
+  manual?: boolean;
+}
+
+/** 고객 장부(emailHistory) 한 줄 — functions/_lib/followups.ts LedgerEntry */
+export interface RemindLedgerLike {
+  date: string;
+  status: string;
+  recipient?: string;
+  stage?: number;
+  jobKey?: string;
+  source?: string;
+  at?: string;
+  reason?: string;
+}
+
+// 손 예약의 예약 시각(ms) — at 이 없으면 그날 오전 9시(KST). 백엔드 scheduledAtMs 와 동일
+export function scheduledAtMs(l: { at?: string; date: string }): number {
+  const t = l.at ? Date.parse(l.at) : NaN;
+  return Number.isFinite(t) ? t : Date.parse(`${l.date}T00:00:00Z`);
+}
+
+// 장부 한 줄의 지금 상태 — 손 예약은 예약 시각이 지나면 보낸 것으로 본다 (백엔드 ledgerState 와 동일)
+export function ledgerStateOf(l: RemindLedgerLike, now: number = Date.now()): string {
+  if (l.status === 'scheduled') return scheduledAtMs(l) <= now ? 'sent' : 'reserved';
+  return l.status;
+}
+
+export interface RemindLedgerSummary {
+  kind: 'sent' | 'reserved' | 'failed';
+  date: string;
+  at?: string;
+  manual: boolean;
+}
+
+// 작업 한 줄·회차의 장부 요약 (지난 작업 줄 칸용) — 보냄 > 손 예약 > 실패
+export function ledgerSummaryFor(history: RemindLedgerLike[] | undefined, jobKey: string, stage: number, now: number = Date.now()): RemindLedgerSummary | null {
+  const mine = (history || []).filter((e) => e && (e.source === 'auto' || e.source === 'manual') && e.jobKey === jobKey && e.stage === stage);
+  const pick = (kind: RemindLedgerSummary['kind']): RemindLedgerSummary | null => {
+    const e = mine.find((x) => ledgerStateOf(x, now) === kind);
+    return e ? { kind, date: e.date, ...(e.at ? { at: e.at } : {}), manual: e.source === 'manual' } : null;
+  };
+  return pick('sent') ?? pick('reserved') ?? pick('failed');
 }
 
 export interface RemindStage {
@@ -302,6 +346,7 @@ export interface RemindStage {
   status: RemindStageStatus;
   verdict: string | null;
   sent: RemindLedgerItem[];
+  reserved: RemindLedgerItem[];
   failed: RemindLedgerItem[];
   skipped: RemindLedgerItem[];
   pending: string[];
