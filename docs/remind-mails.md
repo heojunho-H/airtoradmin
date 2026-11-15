@@ -52,6 +52,8 @@
    - `WORKS_CLIENT_SECRET`(Secret): `npx wrangler pages secret put WORKS_CLIENT_SECRET --project-name airtoradmin`
    - 넣은 뒤 다시 배포한다.
 3. 담당자마다 `https://airtoradmin.co.kr/api/works/connect`를 열어 네이버웍스로 로그인하고 권한을 허용한다. @airtor.co.kr 계정만 받는다.
+   - 연결 화면은 오래 열어 두어도 된다. 보안값(state·쿠키)은 [연결하기] 버튼을 누를 때 만들고(`/api/works/start`), 그때부터 15분 안에 로그인·허용을 마치면 된다.
+   - 15분을 넘기면 실패 화면이 나오고, 그 화면의 [다시 연결하기]로 처음부터 한다. 2026-11-15 첫 연결 때 화면을 연 지 81분 뒤에 눌러 실패해서 이렇게 바꿨다.
 4. 연결 상태는 `https://airtoradmin.co.kr/api/works/status`에서 본다. 메일은 가려서 보이고, 토큰은 보이지 않는다.
    - 토큰은 D1 `works_tokens`에 AES-GCM으로 암호화해 둔다. 키는 Client Secret에서 뽑는다.
    - 매일 실행 때 하루 넘게 갱신하지 않은 토큰을 새로 받는다(Refresh Token 90일 만료 방지).

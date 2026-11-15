@@ -1,5 +1,6 @@
 // Cloudflare Pages Function — /api/works/* (담당 매니저 네이버웍스 계정 연결)
-//   GET /api/works/connect   담당자용 안내 화면 → 네이버웍스 로그인·허용으로 넘긴다 (state 서명 + 쿠키 nonce)
+//   GET /api/works/connect   담당자용 안내 화면 (오래 열어 두어도 된다 — state 는 버튼을 누를 때 만든다)
+//   GET /api/works/start     state 서명 + 쿠키 nonce 를 만들고 네이버웍스 로그인·허용으로 넘긴다 (15분 유효)
 //   GET /api/works/callback  code → 토큰, /users/me 로 실제 메일 확인(@airtor.co.kr 만), D1 에 암호화해 저장
 //   GET /api/works/status    연결된 계정 목록 (메일은 가림, 토큰은 내지 않음)
 // 리마인드 메일은 연결된 담당자 계정으로만 나간다 — functions/_lib/works.ts, docs/remind-mails.md
@@ -53,35 +54,46 @@ function cookieValue(request: Request, name: string): string | null {
 }
 
 const CLEAR_COOKIE = `${COOKIE}=; Path=/api/works; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+const NOT_READY = '<p>네이버웍스 연동 설정(관리자)이 끝나지 않았습니다. 설정이 끝나면 이 주소를 다시 열어 주세요.</p>';
+const RETRY = '<p><a class="btn" href="/api/works/start">다시 연결하기</a></p>';
 
-async function connect(env: Env): Promise<Response> {
-  if (!worksConfigured(env)) {
-    return page('아직 준비 중입니다', '<p>네이버웍스 연동 설정(관리자)이 끝나지 않았습니다. 설정이 끝나면 이 주소를 다시 열어 주세요.</p>', 503);
-  }
-  const { state, nonce } = await makeState(env.WORKS_CLIENT_SECRET as string);
-  const link = authorizeUrl(env, state);
+function connect(env: Env): Response {
+  if (!worksConfigured(env)) return page('아직 준비 중입니다', NOT_READY, 503);
   return page(
     '리마인드 메일 — 내 네이버웍스 메일 연결',
     `<p>세척 고객에게 가는 리마인드 메일(작업 후 45·200·335·395일)을 <b>담당자님 메일 계정으로</b> 보내기 위한 연결입니다.
 보낸 메일은 담당자님 보낸메일함에 남고, 고객 회신도 담당자님께 바로 갑니다.</p>
-<p><a class="btn" href="${escapeHtml(link)}">네이버웍스로 로그인해 연결하기</a></p>
+<p><a class="btn" href="/api/works/start">네이버웍스로 로그인해 연결하기</a></p>
 <p><small>로그인 뒤 나오는 화면에서 '메일'과 '프로필 정보 조회' 권한을 허용해 주세요. 에어터 계정(@${WORKS_DOMAIN})만 연결됩니다.
 연결을 끊고 싶으시면 관리자에게 말씀해 주세요.</small></p>`,
-    200,
-    { 'Set-Cookie': `${COOKIE}=${nonce}; Path=/api/works; Max-Age=900; HttpOnly; Secure; SameSite=Lax` },
   );
+}
+
+async function start(env: Env): Promise<Response> {
+  if (!worksConfigured(env)) return page('아직 준비 중입니다', NOT_READY, 503);
+  const { state, nonce } = await makeState(env.WORKS_CLIENT_SECRET as string);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: authorizeUrl(env, state),
+      'Set-Cookie': `${COOKIE}=${nonce}; Path=/api/works; Max-Age=900; HttpOnly; Secure; SameSite=Lax`,
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  });
 }
 
 async function callback(request: Request, env: Env): Promise<Response> {
   if (!worksConfigured(env)) return page('아직 준비 중입니다', '<p>네이버웍스 연동 설정이 끝나지 않았습니다.</p>', 503);
   const q = new URL(request.url).searchParams;
   if (q.get('error')) {
-    return page('연결하지 않았습니다', '<p>권한 허용이 취소되었습니다. 다시 하시려면 연결 주소를 처음부터 열어 주세요.</p>', 400, { 'Set-Cookie': CLEAR_COOKIE });
+    return page('연결하지 않았습니다', `<p>권한 허용이 취소되었습니다. 다시 하시려면 아래 버튼을 눌러 주세요.</p>${RETRY}`, 400, { 'Set-Cookie': CLEAR_COOKIE });
   }
   const code = q.get('code');
   const state = q.get('state') || '';
   if (!code || !(await checkState(env.WORKS_CLIENT_SECRET as string, state, cookieValue(request, COOKIE)))) {
-    return page('연결을 마치지 못했습니다', '<p>연결 화면을 연 브라우저에서 15분 안에 다시 시도해 주세요.</p>', 400, { 'Set-Cookie': CLEAR_COOKIE });
+    return page('연결을 마치지 못했습니다', `<p>연결 버튼을 누른 뒤 15분이 지났거나, 다른 브라우저에서 열렸습니다. 아래 버튼으로 다시 연결해 주세요.</p>${RETRY}`, 400, { 'Set-Cookie': CLEAR_COOKIE });
   }
   try {
     const tokens = await exchangeCode(env, code);
@@ -100,7 +112,7 @@ async function callback(request: Request, env: Env): Promise<Response> {
   } catch (err) {
     // 토큰·코드는 화면·로그에 남기지 않는다
     console.log(`works callback failed: ${err instanceof Error ? err.message.slice(0, 120) : 'error'}`);
-    return page('연결을 마치지 못했습니다', '<p>잠시 뒤 연결 주소를 처음부터 다시 열어 주세요. 계속 안 되면 관리자에게 알려 주세요.</p>', 502, { 'Set-Cookie': CLEAR_COOKIE });
+    return page('연결을 마치지 못했습니다', `<p>잠시 뒤 다시 연결해 주세요. 계속 안 되면 관리자에게 알려 주세요.</p>${RETRY}`, 502, { 'Set-Cookie': CLEAR_COOKIE });
   }
 }
 
@@ -120,6 +132,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   const seg = params.path;
   const path = Array.isArray(seg) ? seg.join('/') : String(seg || '');
   if (path === 'connect') return connect(env);
+  if (path === 'start') return start(env);
   if (path === 'callback') return callback(request, env);
   if (path === 'status') return status(env);
   return page('찾을 수 없습니다', '<p>주소를 확인해 주세요.</p>', 404);
