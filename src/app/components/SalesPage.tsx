@@ -54,7 +54,7 @@ function InflowBadge({ requirements, className = '' }: { requirements?: string; 
   );
 }
 
-// 상세 '문의 등록일' 타일 아래 — 배지 + 검색어 + 들어온 날
+// 상세 '문의 등록일' 타일 아래 — 배지 + 검색어 + 들어온 날 + 문의 전에 읽은 매거진 글(11-16~)
 function InflowDetail({ requirements }: { requirements?: string }) {
   const inflow = parseInflow(requirements);
   if (!inflow) return null;
@@ -63,6 +63,7 @@ function InflowDetail({ requirements }: { requirements?: string }) {
       <span className={`${BADGE} ${TONE.slate}`}>{inflow.label}</span>
       {inflow.keyword && <span className="text-[13px] text-slate-600">{inflow.keyword}</span>}
       {inflow.date && <span className="text-[12px] text-slate-400">{inflow.date} 방문</span>}
+      {inflow.article && <span className="text-[13px] text-slate-600">읽은 글 {inflow.article}</span>}
     </div>
   );
 }

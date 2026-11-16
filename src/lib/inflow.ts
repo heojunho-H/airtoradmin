@@ -2,6 +2,7 @@
 // '[유입: 네이버 광고 · 시스템에어컨 청소 · 11-12 방문]' 표시를 읽는다. 2026-11-12 적용 뒤 문의부터 있다.
 // 표시 종류: 구글 광고 · 구글 검색 · 네이버 광고 · 네이버 검색 · 네이버 블로그/카페/지도/기타 · 다음 검색 · 빙 검색 ·
 // UTM … · 다른 사이트(도메인) · 직접/알 수 없음. 검색어·도메인은 홈페이지가 영문을 대문자로 바꿔 보낸다(방화벽 때문).
+// 2026-11-16~: 문의 전에 홈페이지 매거진 글을 읽었으면 끝에 '글 <제목 30자>'가 붙는다(90일 안 마지막 글) — '읽은 글'.
 
 export interface Inflow {
   /** 구글 광고, 네이버 검색 … 직접/알 수 없음 */
@@ -10,6 +11,8 @@ export interface Inflow {
   keyword?: string;
   /** 들어온 날 MM-DD */
   date?: string;
+  /** 문의 전에 읽은 매거진 글 제목(앞 30자, 영문은 대문자) */
+  article?: string;
 }
 
 const MARK_RE = /\s*\[유입: ([^\]]*)\]/;
@@ -24,6 +27,7 @@ export function parseInflow(text: unknown): Inflow | null {
   for (const p of parts.slice(1)) {
     const d = /^(\d{2}-\d{2}) 방문$/.exec(p);
     if (d) out.date = d[1];
+    else if (p.startsWith('글 ')) out.article = p.slice(2).trim();
     else if (!out.keyword) out.keyword = out.label === '다른 사이트' ? p.toLowerCase() : p;
   }
   return out;
@@ -37,5 +41,7 @@ export function stripInflow(text: unknown): string {
 /** 한 줄 글 — 엑셀·툴팁용 */
 export function inflowText(inflow: Inflow | null): string {
   if (!inflow) return '';
-  return [inflow.label, inflow.keyword, inflow.date ? `${inflow.date} 방문` : ''].filter(Boolean).join(' · ');
+  return [inflow.label, inflow.keyword, inflow.date ? `${inflow.date} 방문` : '', inflow.article ? `읽은 글 ${inflow.article}` : '']
+    .filter(Boolean)
+    .join(' · ');
 }
