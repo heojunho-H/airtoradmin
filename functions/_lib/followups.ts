@@ -23,11 +23,15 @@
 //   - 같은 (jobKey, stage, recipient)가 sent|skipped 로 장부에 있으면 재발송 안 함
 //   - 고객 상세에서 '보내지 않기'로 취소한 회차(D1 remind_cancels — functions/_lib/remind-cancels.ts)는 보내지 않음
 //   - 손으로 보낸·예약한 메일(장부 source:'manual', sent|scheduled)이 있는 회차는 받는 주소와 상관없이 끝난 것으로 본다
+//   - 수주 취소(딜이 실패·미견적 등 수주가 아님)·딜 삭제된 작업은 리마인드 대상이 아니다 — 그 작업의 남은 회차는 저절로 취소되고,
+//     '최근 작업'은 그 앞의 살아 있는 작업이 된다. 작업일 없는 수주(pending-job)로도 보지 않는다 (2026-11-25 사용자 지시)
+//     딜 목록(opts.dealStates)이 없으면 예전처럼 모든 작업을 본다 — 실제 발송은 딜 목록을 못 읽으면 아예 멈춘다
 //
 // 리마인드 메일(2026-11-15 확정, 광고 표시 없음 — 사용자 결정): 1 A2 D+45 · 2 B1 D+200(협약서) · 3 B2 D+335 · 4 B3 D+395
 
 import { formatDetailedQuantity } from '../../src/lib/quantity';
 import { normalizeCompanyName } from '../../src/lib/company';
+import { dealLinkState, type DealStateMap } from '../../src/lib/dealSync';
 import { isRemindMailKey, type RemindMailKey } from './remind-mails';
 
 export type StageNo = 1 | 2 | 3 | 4 | 5;
@@ -167,6 +171,8 @@ export type SkipReason =
 export interface ComputeOptions {
   /** 진행 중 딜이 있는 회사 — normalizeCompanyName 결과 */
   openDealCompanies?: Set<string>;
+  /** 딜 번호 → 수주(won)·아님(lost). 있으면 수주 취소·삭제된 딜에 연결된 작업을 리마인드에서 뺀다 (isCancelledWork) */
+  dealStates?: DealStateMap | null;
   /** 보내지 않기로 한 회차 — cancelKeyOf 키 (D1 remind_cancels, functions/_lib/remind-cancels.ts) */
   cancelled?: Set<string>;
 }
@@ -310,12 +316,22 @@ export function jobKeyOf(entry: WorkEntry): string {
   return `wd:${entry.workDate || ''}|${entry.projectName || ''}|${entry.inquiryDate || ''}`;
 }
 
-// 유효한 workDate 중 최대인 항목
-export function latestEntry(workHistory: WorkEntry[] | undefined): WorkEntry | null {
+// 수주 취소·딜 삭제된 작업인가 — 고객 화면의 '수주 취소'·'딜 삭제됨' 표시와 같은 판단(dealLinkState). 딜 목록이 없으면 false
+export function isCancelledWork(e: WorkEntry | null | undefined, states: DealStateMap | null | undefined): boolean {
+  if (!e || !states) return false;
+  const id = Number(e.dealId);
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const st = dealLinkState(id, states);
+  return st === 'lost' || st === 'deleted';
+}
+
+// 유효한 workDate 중 최대인 항목 — 수주 취소·딜 삭제된 작업은 뺀다(states 가 있을 때)
+export function latestEntry(workHistory: WorkEntry[] | undefined, states?: DealStateMap | null): WorkEntry | null {
   if (!Array.isArray(workHistory)) return null;
   let best: WorkEntry | null = null;
   for (const e of workHistory) {
     if (!e || !isYmd(e.workDate)) continue;
+    if (isCancelledWork(e, states)) continue;
     if (!best || (e.workDate as string) > (best.workDate as string)) best = e;
   }
   return best;
@@ -355,10 +371,12 @@ export function manualDone(ledger: LedgerEntry[] | undefined, jobKey: string, st
   );
 }
 
-// 작업일 없이 수주된 작업(딜 연결) — 새 작업이 잡혔으니 이전 작업의 남은 단계는 멈춘다
-function hasPendingJob(workHistory: WorkEntry[] | undefined): boolean {
+// 작업일 없이 수주된 작업(딜 연결) — 새 작업이 잡혔으니 이전 작업의 남은 단계는 멈춘다. 수주 취소된 작업은 세지 않는다
+function hasPendingJob(workHistory: WorkEntry[] | undefined, states?: DealStateMap | null): boolean {
   if (!Array.isArray(workHistory)) return false;
-  return workHistory.some((e) => e && e.dealId !== undefined && e.dealId !== null && e.dealId !== 0 && !isYmd(e.workDate));
+  return workHistory.some(
+    (e) => e && e.dealId !== undefined && e.dealId !== null && e.dealId !== 0 && !isYmd(e.workDate) && !isCancelledWork(e, states),
+  );
 }
 
 export function computeDue(
@@ -379,13 +397,13 @@ export function computeDue(
     const recipients = recipientsOf(c);
     if (recipients.length === 0) { skipped.push({ ...base, reason: 'no-email' }); continue; }
 
-    const entry = latestEntry(c.workHistory);
+    const entry = latestEntry(c.workHistory, opts.dealStates);
     if (!entry) { skipped.push({ ...base, reason: 'no-work-entry' }); continue; }
     const workDate = entry.workDate as string;
     if (workDate > today) { skipped.push({ ...base, reason: 'future-work-date' }); continue; }
     const companyKey = normalizeCompanyName(company);
     if (companyKey && opts.openDealCompanies?.has(companyKey)) { skipped.push({ ...base, reason: 'open-deal' }); continue; }
-    if (hasPendingJob(c.workHistory)) { skipped.push({ ...base, reason: 'pending-job' }); continue; }
+    if (hasPendingJob(c.workHistory, opts.dealStates)) { skipped.push({ ...base, reason: 'pending-job' }); continue; }
 
     const jobKey = jobKeyOf(entry);
     const candidates: DueItem[] = [];
@@ -516,7 +534,7 @@ export function remindTimeline(
   const { due, skipped } = computeDue([c], cfg, today, opts);
   const customerSkip = skipped.find((s) => s.stage === undefined);
   const blocked = customerSkip ? customerSkip.reason : null;
-  const entry = latestEntry(c.workHistory);
+  const entry = latestEntry(c.workHistory, opts.dealStates);
   if (!entry) return { customerId: c.id, company: c.company || '', blocked, job: null, recipients, stages: [] };
 
   const workDate = entry.workDate as string;

@@ -2,6 +2,7 @@
 // 최근 작업 줄은 서버 상태(GET /api/newsletter?action=remind — 발송기와 같은 규칙)로 '발송완료·예약 완료·예약발송 취소·발송 실패'를 보이고,
 // 아직 안 나간 칸을 누르면 예약발송 취소 ↔ 다시 예약. 시계 아이콘은 쓰지 않는다(무슨 뜻인지 헷갈린다는 사용자 지적, 11-15). 1~3차는 리마인드 체크(reminderN), 4차는 D1 remind_cancels — docs/remind-mails.md
 // 손으로 보낸·예약한 메일(장부 source 'manual')도 같은 글씨로 보인다. 손 예약은 네이버웍스에 있어 여기서 취소하지 않는다.
+// 수주 취소·딜 삭제된 작업 줄은 발송기가 빼므로(functions/_lib/followups.ts isCancelledWork) 남은 칸이 '예약발송 취소'로 보인다(자동, 누를 수 없음).
 import { AlertCircle, CheckCircle, Clock, Send, X, XCircle } from 'lucide-react';
 import type { RemindBrief, RemindLedgerItem, RemindLedgerSummary, RemindStage } from '../../lib/newsletter';
 import { BADGE, TONE } from './ui-kit';
@@ -52,6 +53,7 @@ function summaryTitle(l: RemindLedgerSummary): string {
 /**
  * 칸 하나의 모양과 누름.
  * latest: 최근 작업 줄의 서버 상태(없으면 예전 모양) · flag: reminderN(4차는 없음) · ledger: 그 작업·회차의 장부 요약(자동·손메일)
+ * cancelledJob: 이 작업의 딜이 수주 취소(lost)·삭제(deleted)됨 — 자동 발송에서 빠진다
  */
 export function reminderCellModel(x: {
   stage: number;
@@ -59,8 +61,33 @@ export function reminderCellModel(x: {
   flag: boolean;
   ledger: RemindLedgerSummary | null;
   canWriteD1: boolean;
+  cancelledJob?: 'lost' | 'deleted' | null;
 }): ReminderCellModel {
   const hasFlag = x.stage <= 3;
+  if (x.cancelledJob) {
+    // 수주 취소·딜 삭제된 작업 — 이미 나간 메일은 그대로 보이고, 남은 회차는 자동으로 취소된다
+    const why = x.cancelledJob === 'deleted' ? '딜이 삭제된 작업' : '수주 취소된 작업';
+    const l = x.ledger;
+    if (l && l.kind === 'sent') {
+      return { icon: 'sent', line: `발송완료 ${md(l.date)}`, tone: 'emerald', title: `${summaryTitle(l)} · ${why}이라 남은 회차는 보내지 않습니다`, action: 'none' };
+    }
+    if (l && l.kind === 'reserved') {
+      return {
+        icon: 'held',
+        line: `예약 완료 ${md(l.date)}`,
+        tone: 'amber',
+        title: `${summaryTitle(l)} — ${why}입니다. 손으로 한 예약은 여기서 취소되지 않으니 네이버웍스 수신확인에서 예약을 취소해 주세요`,
+        action: 'none',
+      };
+    }
+    return {
+      icon: 'cancelled',
+      line: '예약발송 취소',
+      tone: 'slate',
+      title: `${why}이라 리마인드를 보내지 않습니다(자동 취소).${x.cancelledJob === 'lost' ? ' 영업관리에서 다시 수주로 바꾸면 다시 예약됩니다' : ''}`,
+      action: 'none',
+    };
+  }
   if (!x.latest) {
     // 지난 작업 줄 또는 상태를 못 불러온 때 — 예전 모양 그대로(아이콘은 체크, 글씨는 장부)
     const l = x.ledger;

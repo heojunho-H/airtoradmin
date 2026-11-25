@@ -37,6 +37,7 @@
 // 수신동의(marketingAllowed)는 보내지 않는다 (2026-11-10). 스티비에서 받은 광고 동의를 덮어쓰지 않도록 키 자체를 뺀다.
 
 import { normalizeCompanyName } from '../../src/lib/company';
+import { buildDealStateMap, type DealStateMap } from '../../src/lib/dealSync';
 import {
   BATCH_MAX,
   CUSTOMERS_API,
@@ -134,23 +135,31 @@ function maskEmail(email: string): string {
 // 진행 중 딜(성공여부 '진행중' + 신규~일정조율)이 있는 회사 — 그 회사에는 팔로업을 보내지 않는다
 const OPEN_DEAL_STATUSES = new Set(['new', 'call', 'quote-sent', 'quote-call', 'price-negotiation', 'schedule']);
 
-async function fetchOpenDealCompanies(): Promise<Set<string>> {
+interface DealFacts {
+  openDealCompanies: Set<string>;
+  /** 딜 번호 → 수주(won)·아님(lost) — 수주 취소·삭제된 딜에 연결된 작업은 리마인드에서 뺀다 (followups isCancelledWork) */
+  dealStates: DealStateMap;
+}
+
+// 딜 목록 한 번으로 진행 중 딜 회사와 수주 여부를 함께 만든다
+async function fetchDealFacts(): Promise<DealFacts> {
   const res = await fetch(DEALS_API, { headers: { Accept: 'application/json' } });
   const text = await res.text();
-  let json: { data?: { company?: string; status?: string; successStatus?: string }[] };
+  let json: { data?: { id?: number; company?: string; status?: string; successStatus?: string }[] };
   try {
     json = JSON.parse(text);
   } catch {
     throw new Error(`deals_api 응답이 JSON이 아닙니다 (HTTP ${res.status})`);
   }
   if (!res.ok || !Array.isArray(json.data)) throw new Error(`deals_api 조회 실패 (HTTP ${res.status})`);
-  const out = new Set<string>();
+  const openDealCompanies = new Set<string>();
   for (const d of json.data) {
     if (d?.successStatus !== 'in-progress' || !OPEN_DEAL_STATUSES.has(String(d.status))) continue;
     const key = normalizeCompanyName(d.company);
-    if (key) out.add(key);
+    if (key) openDealCompanies.add(key);
   }
-  return out;
+  const deals = json.data.filter((d): d is { id: number; status?: string; successStatus?: string } => Number.isInteger(Number(d?.id)) && Number(d?.id) > 0);
+  return { openDealCompanies, dealStates: buildDealStateMap(deals.map((d) => ({ ...d, id: Number(d.id) }))) };
 }
 
 // 구독자 대량 추가/갱신 — 수동 동기화(sync)와 팔로업 러너가 공용으로 사용
@@ -346,11 +355,12 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
   const configOut = { stages: cfg.stages.map((s) => ({ stage: s.stage, days: s.days, label: s.label, mail: s.mail, mou: s.mou })), grace: cfg.grace };
 
   const customers = await fetchCustomers();
-  // 진행 중 딜 목록 — 실제 실행에서 못 읽으면 보내지 않는다(상담 중인 회사에 엉뚱한 메일이 가지 않게)
+  // 딜 목록(진행 중 딜·수주 취소) — 실제 실행에서 못 읽으면 보내지 않는다(상담 중인 회사나 수주 취소된 작업에 엉뚱한 메일이 가지 않게)
   let openDealCompanies = new Set<string>();
+  let dealStates: DealStateMap | null = null;
   const warnings: string[] = [];
   try {
-    openDealCompanies = await fetchOpenDealCompanies();
+    ({ openDealCompanies, dealStates } = await fetchDealFacts());
   } catch (err) {
     const msg = `진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`;
     if (!opts.dryRun) return jsonResponse({ ok: false, error: `${msg} — 발송하지 않음` }, 502, origin);
@@ -367,7 +377,7 @@ async function handleRunFollowups(env: Env, opts: RunOptions): Promise<Response>
       warnings.push(msg);
     }
   }
-  const { due, skipped } = computeDue(customers, cfg, today, { openDealCompanies, cancelled });
+  const { due, skipped } = computeDue(customers, cfg, today, { openDealCompanies, cancelled, dealStates });
 
   // 보낼 사람(담당 매니저 계정) — 목록을 못 읽으면 실제 실행은 멈춘다
   let managers: ManagerRow[] = [];
@@ -597,8 +607,9 @@ async function buildRemindStatus(env: Env, customerId: number): Promise<RemindBu
 
   const warnings: string[] = [];
   let openDealCompanies = new Set<string>();
+  let dealStates: DealStateMap | null = null;
   try {
-    openDealCompanies = await fetchOpenDealCompanies();
+    ({ openDealCompanies, dealStates } = await fetchDealFacts());
   } catch (err) {
     warnings.push(`진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -622,7 +633,7 @@ async function buildRemindStatus(env: Env, customerId: number): Promise<RemindBu
   }
   const active = cancels.filter((r) => !r.restoredAt);
   const cancelled = new Set(active.map((r) => cancelKeyOf(r.customerId, r.jobKey, r.stage)));
-  const tl = remindTimeline(customer, cfg, today, { openDealCompanies, cancelled, nextRun: nextRunDate() });
+  const tl = remindTimeline(customer, cfg, today, { openDealCompanies, cancelled, dealStates, nextRun: nextRunDate() });
 
   const picked = pickSender((customer.accountManager || '').trim() || DEFAULT_MANAGER, managers, cfg.fallbackManager, conns, cfg.teams);
   const conn = picked ? conns.find((c) => c.email === picked.sender.email) : undefined;
@@ -683,8 +694,9 @@ async function handleRemindList(env: Env): Promise<Response> {
   const customers = await fetchCustomers();
   const warnings: string[] = [];
   let openDealCompanies = new Set<string>();
+  let dealStates: DealStateMap | null = null;
   try {
-    openDealCompanies = await fetchOpenDealCompanies();
+    ({ openDealCompanies, dealStates } = await fetchDealFacts());
   } catch (err) {
     warnings.push(`진행 중 딜 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -708,7 +720,7 @@ async function handleRemindList(env: Env): Promise<Response> {
   const conns = worksConfigured(env) ? await listConnections(env).catch(() => []) : [];
   const connected = new Set(conns.filter((c) => !c.lastError).map((c) => c.email));
   const items = customers.map((c) => {
-    const tl = remindTimeline(c, cfg, today, { openDealCompanies, cancelled, nextRun, now });
+    const tl = remindTimeline(c, cfg, today, { openDealCompanies, cancelled, dealStates, nextRun, now });
     const brief = remindBrief(c, tl, cfg, today, now);
     // 자동으로 나갈 회차인데 보낼 담당자 계정이 연결 전이면 '연결 대기' (손 예약은 네이버웍스에 있어 상관없다)
     let waiting = false;

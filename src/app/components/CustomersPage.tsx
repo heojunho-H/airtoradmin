@@ -867,8 +867,9 @@ interface CustomersPageProps {
   userName?: string;
 }
 
-// 고객 상세 '리마인드 메일'을 다시 불러올 때 — 메모처럼 상관없는 칸이 바뀔 때는 다시 부르지 않는다
-function remindRefreshKey(c: Customer): string {
+// 고객 상세 '리마인드 메일'을 다시 불러올 때 — 메모처럼 상관없는 칸이 바뀔 때는 다시 부르지 않는다.
+// 연결 딜의 수주 여부도 넣는다 — 영업에서 수주 취소·다시 수주하면 최근 작업(발송 대상)이 바뀐다
+function remindRefreshKey(c: Customer, states: DealStateMap | null): string {
   let latest: Customer['workHistory'][number] | null = null;
   for (const w of c.workHistory || []) {
     if (w?.workDate && /^\d{4}-\d{2}-\d{2}$/.test(w.workDate) && (!latest || w.workDate > (latest.workDate || ''))) latest = w;
@@ -881,6 +882,10 @@ function remindRefreshKey(c: Customer): string {
     c.newsletterStatus || '',
     c.accountManager || '',
     (c.emailHistory || []).length,
+    (c.workHistory || []).map((w) => {
+      const id = linkedDealId(w);
+      return id ? `${id}:${dealLinkState(id, states) ?? ''}` : '';
+    }).filter(Boolean).join(','),
   ].join('|');
 }
 
@@ -1056,7 +1061,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   const [remindBusy, setRemindBusy] = useState(false);
   const remindSeq = useRef(0);
   const remindId = selectedCustomer && selectedCustomer.id > 0 && selectedCustomer.id < 1_000_000_000 ? selectedCustomer.id : null;
-  const remindKey = selectedCustomer ? remindRefreshKey(selectedCustomer) : '';
+  const remindKey = selectedCustomer ? remindRefreshKey(selectedCustomer, dealStates) : '';
   useEffect(() => {
     if (remindId === null) {
       remindSeq.current++;
@@ -1071,7 +1076,10 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
   }, [remindId, remindKey, isEditing]);
 
   const reminderModelOf = (work: WorkHistory, n: 1 | 2 | 3 | 4) => {
-    const forThis = remindStatus && selectedCustomer && remindStatus.customer.id === selectedCustomer.id && remindStatus.job
+    // 수주 취소·딜 삭제된 작업은 발송기가 뺀다 — 남은 칸은 '예약발송 취소'(자동)
+    const link = dealLinkState(linkedDealId(work), dealStates);
+    const cancelledJob = link === 'lost' || link === 'deleted' ? link : null;
+    const forThis = !cancelledJob && remindStatus && selectedCustomer && remindStatus.customer.id === selectedCustomer.id && remindStatus.job
       && jobKeyOf(work) === remindStatus.job.jobKey;
     const st = forThis ? remindStatus!.stages.find((s) => s.stage === n) ?? null : null;
     return reminderCellModel({
@@ -1080,6 +1088,7 @@ export function CustomersPage({ externalCustomersState, subcontractorNames = [],
       flag: n <= 3 ? Boolean(work[`reminder${n}` as 'reminder1' | 'reminder2' | 'reminder3']) : false,
       ledger: selectedCustomer ? ledgerSummaryOf(selectedCustomer, work, n) : null,
       canWriteD1: canWriteRemind(),
+      cancelledJob,
     });
   };
 
