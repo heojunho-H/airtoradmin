@@ -40,7 +40,7 @@ import { MobileCard, MobileCardField, MobileCardRow, MobileCardBadge } from './M
 import { AiCompanyInfoButton } from './AiCompanyInfo';
 import { CompanyFiles } from './CompanyFiles';
 import { btn, ICON_BTN_DANGER, KPI, TABLE, TILE, BADGE, TONE, STAGE_COLORS, INPUT, MODAL_CLOSE, type Tone } from './ui-kit';
-import { diffDeal, isValidYmd, isWonDeal, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
+import { applyOrderCancel, diffDeal, isValidYmd, isWonDeal, ORDER_CANCEL_CONFIRM, patchDeal, postDeal, SyncError, syncWarningText, type SyncResult } from '../../lib/dealSync';
 import { inflowText, parseInflow, stripInflow } from '../../lib/inflow';
 
 // 문의 유입 경로 배지 — 요청사항 끝 '[유입: …]'(홈페이지가 붙임, 2026-11-12 이후 문의). 뜻 없는 정보라 중립색.
@@ -728,12 +728,19 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
     newStatus: Deal['status'],
     workDate: string,
   ) => {
-    const updatedDeal: Deal = {
+    const chosen: Deal = {
       ...targetDeal,
       status: newStatus,
       confirmedWorkDate: workDate,
       successStatus: newStatus === 'confirmed' ? 'success' as const : targetDeal.successStatus,
     };
+    // 수주였던 딜이 수주가 아니게 되면 수주 취소 — 성공여부를 '실패'로 (확인을 받는다)
+    const updatedDeal = applyOrderCancel(targetDeal, chosen);
+    const cancelled = updatedDeal !== chosen;
+    if (cancelled && !window.confirm(ORDER_CANCEL_CONFIRM)) {
+      setEditingStatusId(null);
+      return;
+    }
 
     setDealsData((prevDeals) =>
       prevDeals.map((deal) => (deal.id === targetDeal.id ? updatedDeal : deal))
@@ -744,7 +751,7 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
       setSelectedDeal(updatedDeal);
     }
 
-    onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다`);
+    onNotification?.(`[${targetDeal.company}] 진행상태가 "${getStatusLabel(newStatus)}"(으)로 변경되었습니다${cancelled ? ' — 수주 취소로 성공여부 "실패"' : ''}`);
 
     const r = await saveDealFields(targetDeal, diffDeal(targetDeal as unknown as Record<string, unknown>, updatedDeal as unknown as Record<string, unknown>), '진행상태');
     if (r?.transition === 'won') onDealSuccess?.(updatedDeal);
@@ -777,7 +784,14 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
     newSuccessStatus: Deal['successStatus'],
     workDate: string,
   ) => {
-    const updatedDeal: Deal = { ...targetDeal, successStatus: newSuccessStatus, confirmedWorkDate: workDate };
+    const chosen: Deal = { ...targetDeal, successStatus: newSuccessStatus, confirmedWorkDate: workDate };
+    // 수주였던 딜을 미견적·진행중(수주 아님)으로 바꾸면 수주 취소 — 성공여부를 '실패'로 (확인을 받는다)
+    const updatedDeal = applyOrderCancel(targetDeal, chosen);
+    const cancelled = updatedDeal !== chosen;
+    if (cancelled && !window.confirm(ORDER_CANCEL_CONFIRM)) {
+      setEditingSuccessStatusId(null);
+      return;
+    }
 
     setDealsData((prevDeals) =>
       prevDeals.map((deal) => (deal.id === targetDeal.id ? updatedDeal : deal))
@@ -788,8 +802,9 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
       setSelectedDeal(updatedDeal);
     }
 
-    const successLabel = newSuccessStatus === 'success' ? '성공' : newSuccessStatus === 'failed' ? '실패' : newSuccessStatus === 'no-quote' ? '미견적' : '진행중';
-    onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다`);
+    const finalStatus = updatedDeal.successStatus;
+    const successLabel = finalStatus === 'success' ? '성공' : finalStatus === 'failed' ? '실패' : finalStatus === 'no-quote' ? '미견적' : '진행중';
+    onNotification?.(`[${targetDeal.company}] 성공여부가 "${successLabel}"(으)로 변경되었습니다${cancelled ? ' (수주 취소)' : ''}`);
 
     const r = await saveDealFields(targetDeal, diffDeal(targetDeal as unknown as Record<string, unknown>, updatedDeal as unknown as Record<string, unknown>), '성공여부');
     if (r?.transition === 'won') onDealSuccess?.(updatedDeal);
@@ -851,7 +866,14 @@ export function SalesPage({ onDealSuccess, onSynced, linkedDealIds, dealCustomer
     void performSaveEdit(editedDeal);
   };
 
-  const performSaveEdit = async (dealToSave: Deal) => {
+  const performSaveEdit = async (edited: Deal) => {
+    let dealToSave = edited;
+    if (!isAddingNewDeal) {
+      // 수주였던 딜이 이 저장으로 수주가 아니게 되면 수주 취소 — 성공여부를 '실패'로 (확인을 받는다)
+      const original = selectedDeal && selectedDeal.id === edited.id ? selectedDeal : edited;
+      dealToSave = applyOrderCancel(original, edited);
+      if (dealToSave !== edited && !window.confirm(ORDER_CANCEL_CONFIRM)) return;
+    }
     if (isAddingNewDeal) {
       if (!dealToSave.company.trim()) {
         alert('기업명은 필수 입력 항목입니다.');

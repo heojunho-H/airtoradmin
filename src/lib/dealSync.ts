@@ -59,6 +59,20 @@ export function isWonDeal(d: { status?: string; successStatus?: string } | null 
   return d.status === 'confirmed' && d.successStatus === 'in-progress';
 }
 
+/**
+ * 수주 취소 — 수주였던 딜이 이 변경으로 수주가 아니게 되면 성공여부를 '실패'로 바꾼 딜을 돌려준다 (2026-11-25 사용자 지시).
+ * 고객 작업·프로젝트의 '수주 취소' 표시와 영업관리 성공여부를 맞춘다(미견적·진행중으로 남지 않게).
+ * 바꿀 것이 없으면 after 를 그대로(같은 객체) 돌려주므로, 돌려받은 값이 after 와 다르면 화면이 확인을 받는다.
+ */
+export function applyOrderCancel<T extends { status?: string; successStatus?: string }>(before: T, after: T): T {
+  if (isWonDeal(before) && !isWonDeal(after) && after.successStatus !== 'failed') return { ...after, successStatus: 'failed' };
+  return after;
+}
+
+export const ORDER_CANCEL_CONFIRM =
+  "수주된 거래를 수주가 아닌 상태로 바꿉니다.\n수주 취소로 보고 성공여부를 '실패'로 저장합니다.\n" +
+  "연결된 고객 작업·프로젝트에는 '수주 취소'가 표시되고, 리마인드 메일은 자동으로 취소됩니다.\n\n계속할까요?";
+
 /** 서버(sl_is_ymd)와 같은 날짜 검사 — YYYY-MM-DD, 2000~2099년, 실제 있는 날짜 */
 export function isValidYmd(s: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
