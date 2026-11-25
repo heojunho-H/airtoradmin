@@ -159,6 +159,8 @@ export type SkipReason =
   | 'bounced'
   | 'no-email'
   | 'no-work-entry'
+  /** 작업일 있는 작업이 모두 수주 취소·딜 삭제된 작업 — 리마인드가 저절로 취소된 고객 */
+  | 'cancelled-work'
   | 'future-work-date'
   | 'open-deal'
   | 'pending-job'
@@ -398,7 +400,11 @@ export function computeDue(
     if (recipients.length === 0) { skipped.push({ ...base, reason: 'no-email' }); continue; }
 
     const entry = latestEntry(c.workHistory, opts.dealStates);
-    if (!entry) { skipped.push({ ...base, reason: 'no-work-entry' }); continue; }
+    if (!entry) {
+      const onlyCancelled = Array.isArray(c.workHistory) && c.workHistory.some((e) => e && isYmd(e.workDate) && isCancelledWork(e, opts.dealStates));
+      skipped.push({ ...base, reason: onlyCancelled ? 'cancelled-work' : 'no-work-entry' });
+      continue;
+    }
     const workDate = entry.workDate as string;
     if (workDate > today) { skipped.push({ ...base, reason: 'future-work-date' }); continue; }
     const companyKey = normalizeCompanyName(company);

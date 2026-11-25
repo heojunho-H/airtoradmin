@@ -253,6 +253,7 @@ export const FOLLOWUP_SKIP_LABEL: Record<string, string> = {
   bounced: '반송',
   'no-email': '이메일 없음',
   'no-work-entry': '작업 이력 없음',
+  'cancelled-work': '수주 취소된 작업만 있음',
   'future-work-date': '작업일 미도래',
   'open-deal': '진행 중 딜',
   'pending-job': '작업일 미정 수주',

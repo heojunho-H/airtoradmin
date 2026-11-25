@@ -36,6 +36,7 @@ const BLOCK_TITLE: Record<string, string> = {
   'no-email': '담당자 메일 주소가 없어 보내지 못합니다',
   'open-deal': '진행 중인 딜이 있어 멈췄습니다 — 딜이 끝나면 보냅니다',
   'pending-job': '작업일 없는 수주 작업이 있어 멈췄습니다',
+  'cancelled-work': '수주 취소·딜 삭제된 작업만 있어 보내지 않습니다(자동 취소)',
 };
 
 // 장부 항목 → '보낸 계정 → 받는 주소'
@@ -265,6 +266,8 @@ export function remindListBadgeModel(b: RemindBrief): RemindListBadgeModel {
       ? { text: `${b.next.stage}차 연결 대기`, icon: 'held', title: `리마인드${b.next.stage}차 ${b.next.date} — 보낼 담당자의 네이버웍스 계정을 연결하면 발송됩니다` }
       : { text: `${b.next.stage}차 예약 완료`, icon: 'reserved', title: `리마인드${b.next.stage}차 ${b.next.date} — ${NEXT_TITLE[b.next.kind]}` };
   }
+  // 작업이 모두 수주 취소·딜 삭제된 고객 — 남은 리마인드가 저절로 취소됐다
+  if (b.blocked === 'cancelled-work') return { text: '예약발송 취소', icon: 'cancelled', title: BLOCK_TITLE['cancelled-work'] };
   if (b.blocked && b.blocked !== 'no-work-entry') return { text: '보류', icon: 'held', title: BLOCK_TITLE[b.blocked] || '보류 중' };
   if (b.off) return { text: '예약발송 취소', icon: 'cancelled', title: '남은 회차를 꺼 두었습니다 — 고객 상세의 리마인드 칸에서 다시 예약할 수 있습니다' };
   return { text: '미발송', icon: 'none', title: b.blocked === 'no-work-entry' ? '작업 이력이 없어 리마인드 대상이 아닙니다' : '보낸 리마인드 메일과 예약된 회차가 없습니다' };
